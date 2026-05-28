@@ -100,6 +100,10 @@ interface AgentSession {
   messages: AgentMessage[];
   isStreaming: boolean;
 
+  // In-memory subagents
+  listSubagents(scope?: SubagentScope): Promise<SubagentDefinition[]>;
+  runSubagents(request: SubagentRunRequest, options?: { signal?: AbortSignal }): Promise<SubagentRunResult>;
+
   // In-place tree navigation within the current session file
   navigateTree(targetId: string, options?: { summarize?: boolean; customInstructions?: string; replaceInstructions?: boolean; label?: string }): Promise<{ editorText?: string; cancelled: boolean }>;
 
@@ -116,6 +120,21 @@ interface AgentSession {
 ```
 
 Session replacement APIs such as new-session, resume, fork, and import live on `AgentSessionRuntime`, not on `AgentSession`.
+
+### Subagents
+
+Subagents run focused child `AgentSession` instances in memory and return ordered results.
+
+```typescript
+const result = await session.runSubagents({
+  tasks: [
+    { agent: "scout", task: "Find settings-related code", tools: ["read", "grep", "find"] },
+    { agent: "reviewer", task: "Review the current diff", thinking: "high" },
+  ],
+});
+```
+
+`createAgentSession()` registers the built-in `subagent` tool by default. Pass `enableSubagents: false` to omit the tool while keeping `listSubagents()` and `runSubagents()` available.
 
 ### createAgentSessionRuntime() and AgentSessionRuntime
 

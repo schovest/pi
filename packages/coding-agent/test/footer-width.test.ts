@@ -20,6 +20,7 @@ function createSession(options: {
 	reasoning?: boolean;
 	thinkingLevel?: string;
 	usage?: AssistantUsage;
+	runningSubagents?: number;
 }): AgentSession {
 	const usage = options.usage;
 	const entries =
@@ -51,6 +52,7 @@ function createSession(options: {
 			getCwd: () => "/tmp/project",
 		},
 		getContextUsage: () => ({ contextWindow: 200_000, percent: 12.3 }),
+		getRunningSubagentCount: () => options.runningSubagents ?? 0,
 		modelRegistry: {
 			isUsingOAuth: () => false,
 		},
@@ -122,5 +124,11 @@ describe("FooterComponent width handling", () => {
 		for (const line of lines) {
 			expect(visibleWidth(line)).toBeLessThanOrEqual(width);
 		}
+	});
+
+	it("shows running subagent count in the footer", () => {
+		const footer = new FooterComponent(createSession({ sessionName: "", runningSubagents: 3 }), createFooterData(1));
+		const rendered = footer.render(120).join("\n");
+		expect(rendered).toContain("agents:3");
 	});
 });

@@ -67,6 +67,8 @@ export interface CreateAgentSessionOptions {
 	tools?: string[];
 	/** Custom tools to register (in addition to built-in tools). */
 	customTools?: ToolDefinition[];
+	/** Register the built-in subagent tool. Default: true. */
+	enableSubagents?: boolean;
 
 	/** Resource loader. When omitted, DefaultResourceLoader is used. */
 	resourceLoader?: ResourceLoader;
@@ -410,9 +412,11 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		sessionManager,
 		settingsManager,
 		cwd,
+		agentDir,
 		scopedModels: options.scopedModels,
 		resourceLoader,
 		customTools: options.customTools,
+		enableSubagents: options.enableSubagents,
 		modelRegistry,
 		initialActiveToolNames,
 		allowedToolNames,

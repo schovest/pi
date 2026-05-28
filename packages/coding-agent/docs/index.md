@@ -45,6 +45,7 @@ For the full first-run flow, see [Quickstart](quickstart.md).
 - [Keybindings](keybindings.md) - default shortcuts and custom keybindings.
 - [Sessions](sessions.md) - session management, branching, and tree navigation.
 - [Compaction](compaction.md) - context compaction and branch summarization.
+- [Subagents](subagents.md) - in-memory focused agents for scouting, planning, reviewing, and work.
 
 ## Customization
 
@@ -63,6 +64,7 @@ For the full first-run flow, see [Quickstart](quickstart.md).
 - [RPC mode](rpc.md) - integrate over stdin/stdout JSONL.
 - [JSON event stream mode](json.md) - print mode with structured events.
 - [TUI components](tui.md) - build custom terminal UI for extensions.
+- [Subagents](subagents.md) - call `session.runSubagents()` or use the built-in `subagent` tool.
 
 ## Reference
 

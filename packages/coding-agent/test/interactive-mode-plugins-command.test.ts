@@ -26,6 +26,10 @@ describe("InteractiveMode /plugins", () => {
 		expect(BUILTIN_SLASH_COMMANDS.some((command) => command.name === "plugins")).toBe(true);
 	});
 
+	it("registers /running-agents as a built-in slash command", () => {
+		expect(BUILTIN_SLASH_COMMANDS.some((command) => command.name === "running-agents")).toBe(true);
+	});
+
 	it("opens the plugin manager and clears the editor", () => {
 		const setText = vi.fn();
 		const showPluginsManager = vi.fn();

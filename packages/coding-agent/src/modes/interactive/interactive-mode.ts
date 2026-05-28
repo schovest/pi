@@ -119,6 +119,11 @@ import { ScopedModelsSelectorComponent } from "./components/scoped-models-select
 import { SessionSelectorComponent } from "./components/session-selector.ts";
 import { SettingsSelectorComponent } from "./components/settings-selector.ts";
 import { SkillInvocationMessageComponent } from "./components/skill-invocation-message.ts";
+import {
+	type SubagentDetailsData,
+	SubagentPickerComponent,
+	SubagentRunViewComponent,
+} from "./components/subagent-details.ts";
 import { ToolExecutionComponent } from "./components/tool-execution.ts";
 import { TreeSelectorComponent } from "./components/tree-selector.ts";
 import { UserMessageComponent } from "./components/user-message.ts";
@@ -147,6 +152,20 @@ interface Expandable {
 
 function isExpandable(obj: unknown): obj is Expandable {
 	return typeof obj === "object" && obj !== null && "setExpanded" in obj && typeof obj.setExpanded === "function";
+}
+
+function isSubagentDetailsData(value: unknown): value is SubagentDetailsData {
+	if (!value || typeof value !== "object") {
+		return false;
+	}
+	const candidate = value as { events?: unknown; result?: unknown };
+	return (
+		Array.isArray(candidate.events) &&
+		(candidate.result === undefined ||
+			(typeof candidate.result === "object" &&
+				candidate.result !== null &&
+				Array.isArray((candidate.result as { results?: unknown }).results)))
+	);
 }
 
 class ExpandableText extends Text implements Expandable {
@@ -280,6 +299,10 @@ export class InteractiveMode {
 
 	// Tool execution tracking: toolCallId -> component
 	private pendingTools = new Map<string, ToolExecutionComponent>();
+	private latestSubagentDetails: SubagentDetailsData | undefined;
+	private subagentPickerComponent: SubagentPickerComponent | undefined;
+	private subagentRunViewComponent: SubagentRunViewComponent | undefined;
+	private readonly subagentFooterStatusKey = "subagent-view";
 
 	// Tool output expansion state
 	private toolOutputExpanded = false;
@@ -2519,6 +2542,11 @@ export class InteractiveMode {
 				this.editor.setText("");
 				return;
 			}
+			if (text === "/running-agents") {
+				this.showSubagentDetails();
+				this.editor.setText("");
+				return;
+			}
 			if (text === "/changelog") {
 				this.handleChangelogCommand();
 				this.editor.setText("");
@@ -2829,6 +2857,7 @@ export class InteractiveMode {
 				const component = this.pendingTools.get(event.toolCallId);
 				if (component) {
 					component.updateResult({ ...event.partialResult, isError: false }, true);
+					this.updateSubagentDetails(event.toolName, event.partialResult.details);
 					this.ui.requestRender();
 				}
 				break;
@@ -2838,6 +2867,7 @@ export class InteractiveMode {
 				const component = this.pendingTools.get(event.toolCallId);
 				if (component) {
 					component.updateResult({ ...event.result, isError: event.isError });
+					this.updateSubagentDetails(event.toolName, event.result.details);
 					this.pendingTools.delete(event.toolCallId);
 					this.ui.requestRender();
 				}
@@ -3028,6 +3058,16 @@ export class InteractiveMode {
 		this.ui.requestRender();
 	}
 
+	private updateSubagentDetails(toolName: string, details: unknown): void {
+		if (toolName !== "subagent" || !isSubagentDetailsData(details)) {
+			return;
+		}
+		this.latestSubagentDetails = details;
+		this.subagentPickerComponent?.update(details);
+		this.subagentRunViewComponent?.update(details);
+		this.updateSubagentFooterStatus();
+	}
+
 	private addMessageToChat(message: AgentMessage, options?: { populateHistory?: boolean }): void {
 		switch (message.role) {
 			case "bashExecution": {
@@ -3182,6 +3222,7 @@ export class InteractiveMode {
 				const component = renderedPendingTools.get(message.toolCallId);
 				if (component) {
 					component.updateResult(message);
+					this.updateSubagentDetails(message.toolName, message.details);
 					renderedPendingTools.delete(message.toolCallId);
 				}
 			} else {
@@ -3494,6 +3535,104 @@ export class InteractiveMode {
 				child.setExpanded(expanded);
 			}
 		}
+		this.ui.requestRender();
+	}
+
+	private showSubagentDetails(): void {
+		if (!this.latestSubagentDetails) {
+			this.showStatus("No subagent details available");
+			return;
+		}
+
+		this.showSelector((done) => {
+			const component = new SubagentPickerComponent(
+				this.latestSubagentDetails!,
+				(index) => {
+					this.subagentPickerComponent = undefined;
+					done();
+					this.enterSubagentRunView(index);
+				},
+				() => {
+					this.subagentPickerComponent = undefined;
+					done();
+					this.ui.requestRender();
+				},
+			);
+			this.subagentPickerComponent = component;
+			return { component, focus: component };
+		});
+	}
+
+	private getCurrentFooterComponent(): Component {
+		return this.customFooter ?? this.footer;
+	}
+
+	private enterSubagentRunView(index: number): void {
+		if (!this.latestSubagentDetails) {
+			this.showStatus("No subagent details available");
+			return;
+		}
+
+		if (this.subagentRunViewComponent) {
+			this.subagentRunViewComponent.update(this.latestSubagentDetails);
+			this.ui.setFocus(this.subagentRunViewComponent);
+			this.updateSubagentFooterStatus();
+			this.ui.requestRender();
+			return;
+		}
+
+		const component = new SubagentRunViewComponent(this.latestSubagentDetails, index, () => {
+			this.exitSubagentRunView();
+		});
+		this.subagentRunViewComponent = component;
+
+		const footer = this.getCurrentFooterComponent();
+		this.ui.removeChild(footer);
+		this.ui.removeChild(this.chatContainer);
+		this.ui.removeChild(this.pendingMessagesContainer);
+		this.ui.removeChild(this.statusContainer);
+		this.ui.removeChild(this.widgetContainerAbove);
+		this.ui.removeChild(this.editorContainer);
+		this.ui.removeChild(this.widgetContainerBelow);
+		this.ui.addChild(component);
+		this.ui.addChild(footer);
+		this.ui.setFocus(component);
+		this.updateSubagentFooterStatus();
+		this.ui.requestRender();
+	}
+
+	private exitSubagentRunView(): void {
+		const component = this.subagentRunViewComponent;
+		if (!component) {
+			return;
+		}
+
+		const footer = this.getCurrentFooterComponent();
+		this.ui.removeChild(footer);
+		this.ui.removeChild(component);
+		this.subagentRunViewComponent = undefined;
+		this.footerDataProvider.setExtensionStatus(this.subagentFooterStatusKey, undefined);
+		this.ui.addChild(this.chatContainer);
+		this.ui.addChild(this.pendingMessagesContainer);
+		this.ui.addChild(this.statusContainer);
+		this.ui.addChild(this.widgetContainerAbove);
+		this.ui.addChild(this.editorContainer);
+		this.ui.addChild(this.widgetContainerBelow);
+		this.ui.addChild(footer);
+		this.ui.setFocus(this.editor);
+		this.ui.requestRender();
+	}
+
+	private updateSubagentFooterStatus(): void {
+		const component = this.subagentRunViewComponent;
+		if (!component) {
+			return;
+		}
+		const agent = component.getAgentName() ?? "unknown";
+		this.footerDataProvider.setExtensionStatus(
+			this.subagentFooterStatusKey,
+			theme.fg("warning", `Subagent: ${agent} · Esc 返回主 Agent`),
+		);
 		this.ui.requestRender();
 	}
 

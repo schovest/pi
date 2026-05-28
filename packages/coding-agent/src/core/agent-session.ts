@@ -15,13 +15,13 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
-import type {
+import {
 	Agent,
-	AgentEvent,
-	AgentMessage,
-	AgentState,
-	AgentTool,
-	ThinkingLevel,
+	type AgentEvent,
+	type AgentMessage,
+	type AgentState,
+	type AgentTool,
+	type ThinkingLevel,
 } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, ImageContent, Message, Model, TextContent } from "@earendil-works/pi-ai";
 import {
@@ -82,11 +82,25 @@ import type { BashExecutionMessage, CustomMessage } from "./messages.ts";
 import type { ModelRegistry } from "./model-registry.ts";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.ts";
 import type { ResourceExtensionPaths, ResourceLoader } from "./resource-loader.ts";
-import type { BranchSummaryEntry, CompactionEntry, SessionManager } from "./session-manager.ts";
-import { CURRENT_SESSION_VERSION, getLatestCompactionEntry, type SessionHeader } from "./session-manager.ts";
+import type { BranchSummaryEntry, CompactionEntry } from "./session-manager.ts";
+import {
+	CURRENT_SESSION_VERSION,
+	getLatestCompactionEntry,
+	type SessionHeader,
+	SessionManager,
+} from "./session-manager.ts";
 import type { SettingsManager } from "./settings-manager.ts";
 import type { SlashCommandInfo } from "./slash-commands.ts";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.ts";
+import type {
+	SubagentDefinition,
+	SubagentRunEvent,
+	SubagentRunOptions,
+	SubagentRunRequest,
+	SubagentRunResult,
+	SubagentScope,
+} from "./subagents/index.ts";
+import { createSubagentToolDefinition, discoverSubagents, runSubagents } from "./subagents/index.ts";
 import { type BuildSystemPromptOptions, buildSystemPrompt } from "./system-prompt.ts";
 import { type BashOperations, createLocalBashOperations } from "./tools/bash.ts";
 import { createAllToolDefinitions } from "./tools/index.ts";
@@ -158,12 +172,16 @@ export interface AgentSessionConfig {
 	sessionManager: SessionManager;
 	settingsManager: SettingsManager;
 	cwd: string;
+	/** Global config directory for subagent discovery. */
+	agentDir?: string;
 	/** Models to cycle through with Ctrl+P (from --models flag) */
 	scopedModels?: Array<{ model: Model<any>; thinkingLevel?: ThinkingLevel }>;
 	/** Resource loader for skills, prompts, themes, context files, system prompt */
 	resourceLoader: ResourceLoader;
 	/** SDK custom tools registered outside extensions */
 	customTools?: ToolDefinition[];
+	/** Register the built-in subagent tool. Default: true. */
+	enableSubagents?: boolean;
 	/** Model registry for API key resolution and model discovery */
 	modelRegistry: ModelRegistry;
 	/** Initial active built-in tool names. Default: [read, bash, edit, write] */
@@ -278,6 +296,7 @@ export class AgentSession {
 	// Retry state
 	private _retryAbortController: AbortController | undefined = undefined;
 	private _retryAttempt = 0;
+	private _runningSubagents = new Map<string, SubagentRunEvent>();
 
 	// Bash execution state
 	private _bashAbortController: AbortController | undefined = undefined;
@@ -291,6 +310,7 @@ export class AgentSession {
 	private _customTools: ToolDefinition[];
 	private _baseToolDefinitions: Map<string, ToolDefinition> = new Map();
 	private _cwd: string;
+	private _agentDir: string;
 	private _extensionRunnerRef?: { current?: ExtensionRunner };
 	private _initialActiveToolNames?: string[];
 	private _allowedToolNames?: Set<string>;
@@ -322,8 +342,12 @@ export class AgentSession {
 		this.settingsManager = config.settingsManager;
 		this._scopedModels = config.scopedModels ?? [];
 		this._resourceLoader = config.resourceLoader;
-		this._customTools = config.customTools ?? [];
 		this._cwd = config.cwd;
+		this._agentDir = config.agentDir ?? dirname(config.cwd);
+		this._customTools =
+			config.enableSubagents === false
+				? (config.customTools ?? [])
+				: [createSubagentToolDefinition(this), ...(config.customTools ?? [])];
 		this._modelRegistry = config.modelRegistry;
 		this._extensionRunnerRef = config.extensionRunnerRef;
 		this._initialActiveToolNames = config.initialActiveToolNames;
@@ -730,6 +754,16 @@ export class AgentSession {
 		return this.agent.state.model;
 	}
 
+	/** Working directory used for project-local resources. */
+	get cwd(): string {
+		return this._cwd;
+	}
+
+	/** Global agent configuration directory used for user subagent discovery. */
+	get agentDir(): string {
+		return this._agentDir;
+	}
+
 	/** Current thinking level */
 	get thinkingLevel(): ThinkingLevel {
 		return this.agent.state.thinkingLevel;
@@ -849,6 +883,73 @@ export class AgentSession {
 	/** File-based prompt templates */
 	get promptTemplates(): ReadonlyArray<PromptTemplate> {
 		return this._resourceLoader.getPrompts().prompts;
+	}
+
+	/** List configured subagents. Defaults to built-in plus user agents. */
+	async listSubagents(scope: SubagentScope = "user"): Promise<SubagentDefinition[]> {
+		return discoverSubagents({ cwd: this._cwd, agentDir: this._agentDir, scope });
+	}
+
+	/** Run one or more in-memory subagents without spawning child processes. */
+	async runSubagents(request: SubagentRunRequest, options?: SubagentRunOptions): Promise<SubagentRunResult> {
+		return runSubagents(this, request, options);
+	}
+
+	recordSubagentRunEvent(event: SubagentRunEvent): void {
+		const key = `${event.runId}:${event.index}`;
+		if (event.status === "running" || event.status === "pending") {
+			this._runningSubagents.set(key, event);
+		} else {
+			this._runningSubagents.delete(key);
+		}
+	}
+
+	getRunningSubagentCount(): number {
+		return this._runningSubagents.size;
+	}
+
+	/** @internal Create an isolated in-memory child session for a subagent task. */
+	createSubagentChildSession(options: {
+		model: Model<any>;
+		thinkingLevel: ThinkingLevel;
+		tools: string[];
+	}): AgentSession {
+		const agent = new Agent({
+			initialState: {
+				systemPrompt: "",
+				model: options.model,
+				thinkingLevel: options.thinkingLevel,
+				tools: [],
+			},
+			convertToLlm: this.agent.convertToLlm,
+			streamFn: this.agent.streamFn,
+			onPayload: this.agent.onPayload,
+			onResponse: this.agent.onResponse,
+			transformContext: this.agent.transformContext,
+			steeringMode: this.agent.steeringMode,
+			followUpMode: this.agent.followUpMode,
+			transport: this.agent.transport,
+			thinkingBudgets: this.agent.thinkingBudgets,
+			maxRetryDelayMs: this.agent.maxRetryDelayMs,
+			toolExecution: this.agent.toolExecution,
+			sessionId: this.sessionManager.getSessionId(),
+		});
+
+		return new AgentSession({
+			agent,
+			sessionManager: SessionManager.inMemory(),
+			settingsManager: this.settingsManager,
+			cwd: this._cwd,
+			agentDir: this._agentDir,
+			scopedModels: this._scopedModels,
+			resourceLoader: this._resourceLoader,
+			customTools: this._customTools.filter((tool) => tool.name !== "subagent"),
+			modelRegistry: this._modelRegistry,
+			initialActiveToolNames: options.tools,
+			allowedToolNames: options.tools,
+			baseToolsOverride: this._baseToolsOverride,
+			enableSubagents: false,
+		});
 	}
 
 	private _normalizePromptSnippet(text: string | undefined): string | undefined {
