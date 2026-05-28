@@ -83,6 +83,7 @@ import { formatMissingSessionCwdPrompt, MissingSessionCwdError } from "../../cor
 import { type SessionContext, SessionManager } from "../../core/session-manager.ts";
 import { BUILTIN_SLASH_COMMANDS } from "../../core/slash-commands.ts";
 import type { SourceInfo } from "../../core/source-info.ts";
+import { discoverSubagentsSync } from "../../core/subagents/index.ts";
 import { isInstallTelemetryEnabled } from "../../core/telemetry.ts";
 import type { TruncationResult } from "../../core/tools/truncate.ts";
 import { getChangelogPath, getNewEntries, parseChangelog } from "../../utils/changelog.ts";
@@ -94,6 +95,7 @@ import { getPiUserAgent } from "../../utils/pi-user-agent.ts";
 import { killTrackedDetachedChildren } from "../../utils/shell.ts";
 import { ensureTool } from "../../utils/tools-manager.ts";
 import { checkForNewPiVersion, type LatestPiRelease } from "../../utils/version-check.ts";
+import { AgentsPanelComponent } from "./components/agents-panel.ts";
 import { ArminComponent } from "./components/armin.ts";
 import { AssistantMessageComponent } from "./components/assistant-message.ts";
 import { BashExecutionComponent } from "./components/bash-execution.ts";
@@ -300,6 +302,7 @@ export class InteractiveMode {
 	// Tool execution tracking: toolCallId -> component
 	private pendingTools = new Map<string, ToolExecutionComponent>();
 	private latestSubagentDetails: SubagentDetailsData | undefined;
+	private agentsPanelComponent: AgentsPanelComponent | undefined;
 	private subagentPickerComponent: SubagentPickerComponent | undefined;
 	private subagentRunViewComponent: SubagentRunViewComponent | undefined;
 	private readonly subagentFooterStatusKey = "subagent-view";
@@ -2542,6 +2545,10 @@ export class InteractiveMode {
 				this.editor.setText("");
 				return;
 			}
+			if (text === "/agents") {
+				this.handleAgentsCommand();
+				return;
+			}
 			if (text === "/running-agents") {
 				this.showSubagentDetails();
 				this.editor.setText("");
@@ -3063,6 +3070,7 @@ export class InteractiveMode {
 			return;
 		}
 		this.latestSubagentDetails = details;
+		this.agentsPanelComponent?.updateSubagentDetails(details);
 		this.subagentPickerComponent?.update(details);
 		this.subagentRunViewComponent?.update(details);
 		this.updateSubagentFooterStatus();
@@ -4161,6 +4169,27 @@ export class InteractiveMode {
 		});
 	}
 
+	private showAgentsPanel(): void {
+		this.showSelector((done) => {
+			const agents = discoverSubagentsSync({
+				cwd: this.session.cwd,
+				agentDir: this.session.agentDir,
+				scope: "both",
+			});
+			const panel = new AgentsPanelComponent({
+				agents,
+				subagentDetails: this.latestSubagentDetails,
+				onClose: () => {
+					this.agentsPanelComponent = undefined;
+					done();
+					this.ui.requestRender();
+				},
+			});
+			this.agentsPanelComponent = panel;
+			return { component: panel, focus: panel };
+		});
+	}
+
 	private async reloadPluginResources(): Promise<void> {
 		await this.session.reload();
 		configureHttpDispatcher(this.settingsManager.getHttpIdleTimeoutMs());
@@ -5045,6 +5074,11 @@ export class InteractiveMode {
 	private handlePluginsCommand(): void {
 		this.editor.setText("");
 		this.showPluginsManager();
+	}
+
+	private handleAgentsCommand(): void {
+		this.editor.setText("");
+		this.showAgentsPanel();
 	}
 
 	private async handleReloadCommand(): Promise<void> {

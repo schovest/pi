@@ -11,8 +11,14 @@ type PluginsCommandContext = {
 	showPluginsManager: () => void;
 };
 
+type AgentsCommandContext = {
+	editor: { setText: (text: string) => void };
+	showAgentsPanel: () => void;
+};
+
 type InteractiveModePrototype = {
 	handlePluginsCommand(this: PluginsCommandContext): void;
+	handleAgentsCommand(this: AgentsCommandContext): void;
 };
 
 const interactiveModePrototype = InteractiveMode.prototype as unknown as InteractiveModePrototype;
@@ -30,6 +36,10 @@ describe("InteractiveMode /plugins", () => {
 		expect(BUILTIN_SLASH_COMMANDS.some((command) => command.name === "running-agents")).toBe(true);
 	});
 
+	it("registers /agents as a built-in slash command", () => {
+		expect(BUILTIN_SLASH_COMMANDS.some((command) => command.name === "agents")).toBe(true);
+	});
+
 	it("opens the plugin manager and clears the editor", () => {
 		const setText = vi.fn();
 		const showPluginsManager = vi.fn();
@@ -41,6 +51,19 @@ describe("InteractiveMode /plugins", () => {
 
 		expect(setText).toHaveBeenCalledWith("");
 		expect(showPluginsManager).toHaveBeenCalledTimes(1);
+	});
+
+	it("opens the agents panel and clears the editor", () => {
+		const setText = vi.fn();
+		const showAgentsPanel = vi.fn();
+
+		interactiveModePrototype.handleAgentsCommand.call({
+			editor: { setText },
+			showAgentsPanel,
+		});
+
+		expect(setText).toHaveBeenCalledWith("");
+		expect(showAgentsPanel).toHaveBeenCalledTimes(1);
 	});
 });
 

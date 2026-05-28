@@ -1,0 +1,146 @@
+import { describe, expect, it } from "vitest";
+import type { SubagentDefinition } from "../src/core/subagents/types.ts";
+import { AgentsPanelComponent } from "../src/modes/interactive/components/agents-panel.ts";
+import { initTheme } from "../src/modes/interactive/theme/theme.ts";
+import { stripAnsi } from "../src/utils/ansi.ts";
+
+function render(component: AgentsPanelComponent): string {
+	return stripAnsi(component.render(160).join("\n"));
+}
+
+const agents: SubagentDefinition[] = [
+	{
+		name: "scout",
+		description: "Builtin scout",
+		prompt: "Gather context before implementation. Keep the report short.",
+		scope: "builtin",
+		tools: ["read", "grep"],
+	},
+	{
+		name: "architect",
+		description: "User architect",
+		prompt: "Design the implementation plan.",
+		scope: "user",
+		sourcePath: "/home/test/.pi/agent/agents/architect.md",
+		model: "openai/gpt-5",
+		thinking: "high",
+		tools: ["read", "write"],
+	},
+	{
+		name: "reviewer",
+		description: "Project reviewer",
+		prompt: "Review the patch for regressions.",
+		scope: "project",
+		sourcePath: "/repo/.pi/agents/reviewer.md",
+		tools: ["read"],
+	},
+];
+
+describe("AgentsPanelComponent", () => {
+	it("renders builtin, user, and project agent definitions with locations", () => {
+		initTheme("dark");
+		const component = new AgentsPanelComponent({
+			agents,
+			onClose: () => {},
+		});
+
+		const text = render(component);
+
+		expect(text).toContain("Agents");
+		expect(text).toContain("scout");
+		expect(text).toContain("builtin");
+		expect(text).toContain("Builtin definitions are compiled into this Pi distribution.");
+		expect(text).toContain("architect");
+		expect(text).toContain("user");
+		expect(text).toContain("/home/test/.pi/agent/agents/architect.md");
+		expect(text).toContain("reviewer");
+		expect(text).toContain("project");
+		expect(text).toContain("/repo/.pi/agents/reviewer.md");
+	});
+
+	it("shows lifecycle status, task, tool, tokens, error, and recent events", () => {
+		initTheme("dark");
+		const component = new AgentsPanelComponent({
+			agents,
+			subagentDetails: {
+				events: [
+					{
+						runId: "run",
+						index: 0,
+						agent: "scout",
+						task: "inspect files",
+						status: "pending",
+						timestamp: 1,
+					},
+					{
+						runId: "run",
+						index: 0,
+						agent: "scout",
+						task: "inspect files",
+						status: "running",
+						currentTool: "grep",
+						currentToolArgs: '{"pattern":"TODO"}',
+						timestamp: 2,
+					},
+					{
+						runId: "run",
+						index: 0,
+						agent: "scout",
+						task: "inspect files",
+						status: "failed",
+						currentTool: "grep",
+						usage: {
+							input: 10,
+							output: 20,
+							cacheRead: 0,
+							cacheWrite: 0,
+							totalTokens: 30,
+							cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+						},
+						error: "grep failed",
+						timestamp: 3,
+					},
+				],
+			},
+			onClose: () => {},
+		});
+
+		const text = render(component);
+
+		expect(text).toContain("Status failed");
+		expect(text).toContain("Task inspect files");
+		expect(text).toContain('Tool grep {"pattern":"TODO"}');
+		expect(text).toContain("Tokens 30");
+		expect(text).toContain("Error grep failed");
+		expect(text).toContain("pending");
+		expect(text).toContain("running tool=grep");
+		expect(text).toContain("failed tool=grep error=grep failed tokens=30");
+	});
+
+	it("shows a clear empty run state when no run exists for the selected agent", () => {
+		initTheme("dark");
+		const component = new AgentsPanelComponent({
+			agents,
+			onClose: () => {},
+		});
+
+		expect(render(component)).toContain("No subagent run captured for scout.");
+	});
+
+	it("updates details when navigating between agents", () => {
+		initTheme("dark");
+		const component = new AgentsPanelComponent({
+			agents,
+			onClose: () => {},
+		});
+
+		expect(render(component)).toContain("Gather context before implementation.");
+
+		component.handleInput("j");
+		const text = render(component);
+
+		expect(text).toContain("Design the implementation plan.");
+		expect(text).toContain("Model openai/gpt-5");
+		expect(text).toContain("Thinking high");
+	});
+});
