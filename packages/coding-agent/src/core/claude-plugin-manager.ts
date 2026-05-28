@@ -73,6 +73,14 @@ export interface ConfiguredPlugin {
 	installedPath?: string;
 }
 
+export interface PluginSearchResult {
+	name: string;
+	marketplace: string;
+	source: string;
+	ref?: string;
+	installed: boolean;
+}
+
 export interface PluginResourcePaths {
 	skills: Array<{ path: string; metadata: PathMetadata }>;
 	prompts: Array<{ path: string; metadata: PathMetadata }>;
@@ -321,6 +329,40 @@ export class PluginManager {
 			name,
 			source: value.source,
 		}));
+	}
+
+	async searchMarketplaces(query?: string, options?: { marketplace?: string }): Promise<PluginSearchResult[]> {
+		const marketplaces = this.settingsManager.getPluginMarketplaces();
+		const normalizedQuery = query?.trim().toLowerCase();
+		const installedPlugins = this.listConfiguredPlugins();
+		const results: PluginSearchResult[] = [];
+
+		for (const [marketplaceName, marketplace] of Object.entries(marketplaces)) {
+			if (options?.marketplace && marketplaceName !== options.marketplace) {
+				continue;
+			}
+			const marketplaceRoot = await this.prepareMarketplaceRoot(marketplaceName, marketplace);
+			const catalog = readMarketplaceCatalog(marketplaceRoot);
+			for (const entry of catalog.plugins) {
+				const haystack = [entry.name, entry.source.url, marketplaceName].join(" ").toLowerCase();
+				if (normalizedQuery && !haystack.includes(normalizedQuery)) {
+					continue;
+				}
+				results.push({
+					name: entry.name,
+					marketplace: marketplaceName,
+					source: entry.source.url,
+					...(entry.source.ref ? { ref: entry.source.ref } : {}),
+					installed: installedPlugins.some(
+						(plugin) =>
+							(plugin.marketplace === marketplaceName && plugin.name === entry.name) ||
+							plugin.source === entry.source.url,
+					),
+				});
+			}
+		}
+
+		return results;
 	}
 
 	async install(spec: string, options?: PluginInstallOptions): Promise<ConfiguredPlugin> {

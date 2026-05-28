@@ -417,6 +417,7 @@ function printPluginCommandHelp(): void {
   ${APP_NAME} plugins marketplace add <name> <repo-or-url>
   ${APP_NAME} plugins marketplace list
   ${APP_NAME} plugins marketplace remove <name>
+  ${APP_NAME} plugins search [query] [--marketplace <name>]
   ${APP_NAME} plugins install <name@marketplace|git-url|https-url> [-l]
   ${APP_NAME} plugins list
   ${APP_NAME} plugins remove <plugin> [-l]
@@ -476,6 +477,54 @@ export async function handlePluginCommand(args: string[]): Promise<boolean> {
 			}
 			printPluginCommandHelp();
 			process.exitCode = 1;
+			return true;
+		}
+
+		if (command === "search") {
+			let marketplace: string | undefined;
+			const positional: string[] = [];
+			for (let i = 0; i < rest.length; i++) {
+				const arg = rest[i];
+				if (arg === "-m" || arg === "--marketplace") {
+					const value = rest[i + 1];
+					if (!value) {
+						printPluginCommandHelp();
+						process.exitCode = 1;
+						return true;
+					}
+					marketplace = value;
+					i++;
+				} else if (arg?.startsWith("-")) {
+					printPluginCommandHelp();
+					process.exitCode = 1;
+					return true;
+				} else if (arg) {
+					positional.push(arg);
+				}
+			}
+			if (positional.length > 1) {
+				printPluginCommandHelp();
+				process.exitCode = 1;
+				return true;
+			}
+
+			if (pluginManager.listMarketplaces().length === 0) {
+				console.log(chalk.dim("No plugin marketplaces configured."));
+				return true;
+			}
+
+			const results = await pluginManager.searchMarketplaces(positional[0], { marketplace });
+			if (results.length === 0) {
+				console.log(chalk.dim("No matching plugins found."));
+				return true;
+			}
+			for (const result of results) {
+				const ref = result.ref ?? "-";
+				const installed = result.installed ? " installed" : "";
+				console.log(
+					`${result.name}@${result.marketplace}  ${chalk.dim(result.source)}  ${chalk.dim(ref)}${chalk.green(installed)}`,
+				);
+			}
 			return true;
 		}
 

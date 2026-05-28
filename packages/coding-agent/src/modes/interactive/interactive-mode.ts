@@ -60,6 +60,7 @@ import {
 } from "../../config.ts";
 import { type AgentSession, type AgentSessionEvent, parseSkillBlock } from "../../core/agent-session.ts";
 import { type AgentSessionRuntime, SessionImportFileNotFoundError } from "../../core/agent-session-runtime.ts";
+import { PluginManager } from "../../core/claude-plugin-manager.ts";
 import type {
 	AutocompleteProviderFactory,
 	EditorFactory,
@@ -113,6 +114,7 @@ import { formatKeyText, keyDisplayText, keyHint, keyText, rawKeyHint } from "./c
 import { LoginDialogComponent } from "./components/login-dialog.ts";
 import { ModelSelectorComponent } from "./components/model-selector.ts";
 import { type AuthSelectorProvider, OAuthSelectorComponent } from "./components/oauth-selector.ts";
+import { PluginManagerComponent } from "./components/plugin-manager.ts";
 import { ScopedModelsSelectorComponent } from "./components/scoped-models-selector.ts";
 import { SessionSelectorComponent } from "./components/session-selector.ts";
 import { SettingsSelectorComponent } from "./components/settings-selector.ts";
@@ -2472,6 +2474,10 @@ export class InteractiveMode {
 				this.editor.setText("");
 				return;
 			}
+			if (text === "/plugins") {
+				this.handlePluginsCommand();
+				return;
+			}
 			if (text === "/scoped-models") {
 				this.editor.setText("");
 				await this.showModelsSelector();
@@ -3996,6 +4002,40 @@ export class InteractiveMode {
 		});
 	}
 
+	private showPluginsManager(): void {
+		this.showSelector((done) => {
+			const pluginManager = new PluginManager({
+				cwd: this.sessionManager.getCwd(),
+				agentDir: getAgentDir(),
+				settingsManager: this.settingsManager,
+			});
+			const manager = new PluginManagerComponent({
+				pluginManager,
+				settingsManager: this.settingsManager,
+				onReload: () => this.reloadPluginResources(),
+				onClose: done,
+				onStatus: (message) => this.showStatus(message),
+				onError: (message) => this.showError(message),
+				tui: this.ui,
+			});
+			return { component: manager, focus: manager };
+		});
+	}
+
+	private async reloadPluginResources(): Promise<void> {
+		await this.session.reload();
+		configureHttpDispatcher(this.settingsManager.getHttpIdleTimeoutMs());
+		this.keybindings.reload();
+		setRegisteredThemes(this.session.resourceLoader.getThemes().themes);
+		this.setupAutocompleteProvider();
+		this.setupExtensionShortcuts(this.session.extensionRunner);
+		this.rebuildChatFromMessages();
+		this.showLoadedResources({
+			force: false,
+			showDiagnosticsWhenQuiet: true,
+		});
+	}
+
 	private async handleModelCommand(searchTerm?: string): Promise<void> {
 		if (!searchTerm) {
 			this.showModelSelector();
@@ -4862,6 +4902,11 @@ export class InteractiveMode {
 	// =========================================================================
 	// Command handlers
 	// =========================================================================
+
+	private handlePluginsCommand(): void {
+		this.editor.setText("");
+		this.showPluginsManager();
+	}
 
 	private async handleReloadCommand(): Promise<void> {
 		if (this.session.isStreaming) {

@@ -11,6 +11,10 @@ pi plugins marketplace add claude https://github.com/example/marketplace
 pi plugins marketplace list
 pi plugins marketplace remove claude
 
+pi plugins search
+pi plugins search super
+pi plugins search super --marketplace claude
+
 pi plugins install superpowers@claude
 pi plugins install https://github.com/user/claude-plugin
 pi plugins install ./local/plugin -l
@@ -22,6 +26,10 @@ pi plugins update superpowers
 ```
 
 By default, plugin settings are written to `~/.pi/agent/settings.json` and plugin clones are stored in `~/.pi/agent/plugins/`. Use `-l` with `install` or `remove` to use project scope: `.pi/settings.json` and `.pi/plugins/`.
+
+`pi plugins search [query]` searches the catalogs from configured `pluginMarketplaces`. With no query it lists all catalog entries. Use `--marketplace <name>` or `-m <name>` to search one configured marketplace.
+
+In interactive mode, `/plugins` opens the plugin manager. It can search marketplace catalogs, install a selected plugin to user or project scope, list installed user/project plugins, update or remove installed plugins, and list/add/remove configured marketplaces. Marketplace add/remove writes user settings by default, matching the CLI behavior.
 
 ## Supported Claude Fields
 

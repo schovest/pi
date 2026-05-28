@@ -115,6 +115,105 @@ describe("Claude PluginManager", () => {
 		});
 	});
 
+	it("searches configured marketplaces by query across name, source, and marketplace", async () => {
+		const firstMarketplace = join(tempDir, "first-marketplace");
+		const secondMarketplace = join(tempDir, "second-marketplace");
+		for (const marketplaceRoot of [firstMarketplace, secondMarketplace]) {
+			mkdirSync(join(marketplaceRoot, ".claude-plugin"), { recursive: true });
+		}
+		writeFileSync(
+			join(firstMarketplace, ".claude-plugin", "marketplace.json"),
+			JSON.stringify({
+				plugins: [
+					{ name: "superpowers", source: { url: "https://github.com/example/superpowers", ref: "v1" } },
+					{ name: "browser-tools", source: { url: "https://github.com/example/browser-tools" } },
+				],
+			}),
+		);
+		writeFileSync(
+			join(secondMarketplace, ".claude-plugin", "marketplace.json"),
+			JSON.stringify({
+				plugins: [{ name: "docs", source: { url: "https://github.com/example/context-helper" } }],
+			}),
+		);
+		manager.addMarketplace("claude", firstMarketplace);
+		manager.addMarketplace("context", secondMarketplace);
+
+		const byName = await manager.searchMarketplaces("super");
+		const bySource = await manager.searchMarketplaces("context-helper");
+		const byMarketplace = await manager.searchMarketplaces("context");
+
+		expect(byName).toEqual([
+			{
+				name: "superpowers",
+				marketplace: "claude",
+				source: "https://github.com/example/superpowers",
+				ref: "v1",
+				installed: false,
+			},
+		]);
+		expect(bySource.map((result) => result.name)).toEqual(["docs"]);
+		expect(byMarketplace.map((result) => `${result.name}@${result.marketplace}`)).toEqual(["docs@context"]);
+	});
+
+	it("returns all catalog entries when marketplace search has no query", async () => {
+		const marketplaceRoot = join(tempDir, "marketplace");
+		mkdirSync(join(marketplaceRoot, ".claude-plugin"), { recursive: true });
+		writeFileSync(
+			join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+			JSON.stringify({
+				plugins: [
+					{ name: "alpha", source: { url: "https://github.com/example/alpha" } },
+					{ name: "beta", source: { url: "https://github.com/example/beta" } },
+				],
+			}),
+		);
+		manager.addMarketplace("claude", marketplaceRoot);
+
+		const results = await manager.searchMarketplaces();
+
+		expect(results.map((result) => `${result.name}@${result.marketplace}`)).toEqual(["alpha@claude", "beta@claude"]);
+	});
+
+	it("marks marketplace search results as installed when a configured plugin uses the same source", async () => {
+		const marketplaceRoot = join(tempDir, "marketplace");
+		const pluginRoot = join(tempDir, "plugin");
+		writePlugin(pluginRoot);
+		mkdirSync(join(marketplaceRoot, ".claude-plugin"), { recursive: true });
+		writeFileSync(
+			join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+			JSON.stringify({
+				plugins: [{ name: "superpowers", source: { url: pluginRoot } }],
+			}),
+		);
+		manager.addMarketplace("claude", marketplaceRoot);
+		await manager.install("superpowers@claude");
+
+		const results = await manager.searchMarketplaces("superpowers");
+
+		expect(results[0]?.installed).toBe(true);
+	});
+
+	it("searches only the selected marketplace when requested", async () => {
+		const firstMarketplace = join(tempDir, "first-marketplace");
+		const secondMarketplace = join(tempDir, "second-marketplace");
+		for (const marketplaceRoot of [firstMarketplace, secondMarketplace]) {
+			mkdirSync(join(marketplaceRoot, ".claude-plugin"), { recursive: true });
+			writeFileSync(
+				join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+				JSON.stringify({
+					plugins: [{ name: "superpowers", source: { url: `https://example.com/${marketplaceRoot}` } }],
+				}),
+			);
+		}
+		manager.addMarketplace("claude", firstMarketplace);
+		manager.addMarketplace("internal", secondMarketplace);
+
+		const results = await manager.searchMarketplaces("super", { marketplace: "internal" });
+
+		expect(results.map((result) => result.marketplace)).toEqual(["internal"]);
+	});
+
 	it("reads manifest resources and unsupported diagnostics", () => {
 		const pluginRoot = join(tempDir, "plugin");
 		writePlugin(pluginRoot, { unsupported: true });

@@ -45,6 +45,7 @@
 - 打包到二进制的功能必须避免运行时依赖未安装的 npm package。
 - 新增或调整内置插件时，同时更新 `packages/plugins/README.md`、插件 registry、相关 build/binary copy 流程，以及必要的 resource-loader 测试。
 - Claude-compatible plugins 使用独立 `plugins` / `pluginMarketplaces` settings，不要复用或污染 Pi 原生 `packages`；安装、移除或更新插件时同步验证 skills/prompts 发现和 Pi-owned MCP config 写入/清理。
+- 修改 Claude-compatible plugins 的 CLI 或交互式管理能力时，同步更新 `packages/coding-agent/docs/plugins.md`，并覆盖 `PluginManager`、CLI handler 和 interactive command/component 的单测。
 
 ## 命令
 
