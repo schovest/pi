@@ -216,8 +216,9 @@ ${chalk.bold("Commands:")}
   ${APP_NAME} uninstall <source> [-l]   Alias for remove
   ${APP_NAME} update [source|self|pi]   Update pi and installed extensions
   ${APP_NAME} list                      List installed extensions from settings
+  ${APP_NAME} plugins <command>         Manage Claude-compatible plugins
   ${APP_NAME} config                    Open TUI to enable/disable package resources
-  ${APP_NAME} <command> --help          Show help for install/remove/uninstall/update/list
+  ${APP_NAME} <command> --help          Show help for install/remove/uninstall/update/list/plugins
 
 ${chalk.bold("Options:")}
   --provider <name>              Provider name (default: google)

@@ -61,6 +61,10 @@
           "path": "packages.md"
         },
         {
+          "title": "Claude-Compatible Plugins",
+          "path": "plugins.md"
+        },
+        {
           "title": "Custom Models",
           "path": "models.md"
         },

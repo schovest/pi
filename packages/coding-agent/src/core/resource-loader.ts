@@ -9,6 +9,7 @@ import type { ResourceDiagnostic } from "./diagnostics.ts";
 export type { ResourceCollision, ResourceDiagnostic } from "./diagnostics.ts";
 
 import { canonicalizePath, isLocalPath, resolvePath } from "../utils/paths.ts";
+import { PluginManager } from "./claude-plugin-manager.ts";
 import { createEventBus, type EventBus } from "./event-bus.ts";
 import { createExtensionRuntime, loadExtensionFromFactory, loadExtensions } from "./extensions/loader.ts";
 import type { Extension, ExtensionFactory, ExtensionRuntime, LoadExtensionsResult } from "./extensions/types.ts";
@@ -157,6 +158,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 	private settingsManager: SettingsManager;
 	private eventBus: EventBus;
 	private packageManager: DefaultPackageManager;
+	private pluginManager: PluginManager;
 	private additionalExtensionPaths: string[];
 	private additionalSkillPaths: string[];
 	private additionalPromptTemplatePaths: string[];
@@ -212,6 +214,11 @@ export class DefaultResourceLoader implements ResourceLoader {
 		this.settingsManager = options.settingsManager ?? SettingsManager.create(this.cwd, this.agentDir);
 		this.eventBus = options.eventBus ?? createEventBus();
 		this.packageManager = new DefaultPackageManager({
+			cwd: this.cwd,
+			agentDir: this.agentDir,
+			settingsManager: this.settingsManager,
+		});
+		this.pluginManager = new PluginManager({
 			cwd: this.cwd,
 			agentDir: this.agentDir,
 			settingsManager: this.settingsManager,
@@ -377,6 +384,12 @@ export class DefaultResourceLoader implements ResourceLoader {
 		};
 
 		const enabledSkills = enabledSkillResources.map(mapSkillPath);
+		const pluginResources = this.pluginManager.resolveEnabledPluginResources();
+		for (const entry of [...pluginResources.skills, ...pluginResources.prompts]) {
+			if (!metadataByPath.has(entry.path)) {
+				metadataByPath.set(entry.path, entry.metadata);
+			}
+		}
 
 		// Add CLI paths metadata
 		for (const r of cliExtensionPaths.extensions) {
@@ -424,10 +437,20 @@ export class DefaultResourceLoader implements ResourceLoader {
 
 		const skillPaths = this.noSkills
 			? this.mergePaths(cliEnabledSkills, this.additionalSkillPaths)
-			: this.mergePaths([...cliEnabledSkills, ...enabledSkills], this.additionalSkillPaths);
+			: this.mergePaths(
+					[...cliEnabledSkills, ...enabledSkills, ...pluginResources.skills.map((entry) => entry.path)],
+					this.additionalSkillPaths,
+				);
 
 		this.lastSkillPaths = skillPaths;
 		this.updateSkillsFromPaths(skillPaths, metadataByPath);
+		this.skillDiagnostics.push(
+			...pluginResources.diagnostics.map((diagnostic) => ({
+				type: "warning" as const,
+				message: diagnostic.message,
+				path: diagnostic.path,
+			})),
+		);
 		for (const p of this.additionalSkillPaths) {
 			if (isLocalPath(p)) {
 				const resolved = this.resolveResourcePath(p);
@@ -439,7 +462,10 @@ export class DefaultResourceLoader implements ResourceLoader {
 
 		const promptPaths = this.noPromptTemplates
 			? this.mergePaths(cliEnabledPrompts, this.additionalPromptTemplatePaths)
-			: this.mergePaths([...cliEnabledPrompts, ...enabledPrompts], this.additionalPromptTemplatePaths);
+			: this.mergePaths(
+					[...cliEnabledPrompts, ...enabledPrompts, ...pluginResources.prompts.map((entry) => entry.path)],
+					this.additionalPromptTemplatePaths,
+				);
 
 		this.lastPromptPaths = promptPaths;
 		this.updatePromptsFromPaths(promptPaths, metadataByPath);

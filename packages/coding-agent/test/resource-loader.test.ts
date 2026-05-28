@@ -97,6 +97,39 @@ Prompt content.`,
 			expect(prompts.some((p) => p.name === "test-prompt")).toBe(true);
 		});
 
+		it("should discover enabled Claude plugin skills and commands", async () => {
+			const pluginRoot = join(agentDir, "plugins", "superpowers-chrome");
+			mkdirSync(join(pluginRoot, ".claude-plugin"), { recursive: true });
+			mkdirSync(join(pluginRoot, "skills", "planner"), { recursive: true });
+			mkdirSync(join(pluginRoot, "commands"), { recursive: true });
+			writeFileSync(
+				join(pluginRoot, ".claude-plugin", "plugin.json"),
+				JSON.stringify({
+					name: "superpowers-chrome",
+					skills: ["skills/planner"],
+					commands: ["commands/review.md"],
+				}),
+			);
+			writeFileSync(
+				join(pluginRoot, "skills", "planner", "SKILL.md"),
+				`---
+name: planner
+description: Planning support
+---
+Skill content`,
+			);
+			writeFileSync(join(pluginRoot, "commands", "review.md"), "Review prompt");
+
+			const settingsManager = SettingsManager.inMemory({
+				plugins: [{ name: "superpowers-chrome", source: "https://example.com/plugin", enabled: true }],
+			});
+			const loader = new DefaultResourceLoader({ cwd, agentDir, settingsManager });
+			await loader.reload();
+
+			expect(loader.getSkills().skills.some((skill) => skill.name === "planner")).toBe(true);
+			expect(loader.getPrompts().prompts.some((prompt) => prompt.name === "review")).toBe(true);
+		});
+
 		it("should prefer project resources over user on name collisions", async () => {
 			const userPromptsDir = join(agentDir, "prompts");
 			const projectPromptsDir = join(cwd, ".pi", "prompts");

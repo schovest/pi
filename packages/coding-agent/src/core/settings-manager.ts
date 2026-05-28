@@ -74,6 +74,18 @@ export type PackageSource =
 			themes?: string[];
 	  };
 
+export interface PluginMarketplaceSettings {
+	source: string;
+}
+
+export interface InstalledPluginSettings {
+	name: string;
+	source: string;
+	marketplace?: string;
+	enabled?: boolean;
+	ref?: string;
+}
+
 export interface Settings {
 	lastChangelogVersion?: string;
 	defaultProvider?: string;
@@ -94,6 +106,8 @@ export interface Settings {
 	collapseChangelog?: boolean; // Show condensed changelog after update (use /changelog for full)
 	enableInstallTelemetry?: boolean; // default: true - anonymous version/update ping after changelog-detected updates
 	packages?: PackageSource[]; // Array of npm/git package sources (string or object with filtering)
+	pluginMarketplaces?: Record<string, PluginMarketplaceSettings>; // Claude-compatible plugin marketplace aliases
+	plugins?: InstalledPluginSettings[]; // Claude-compatible plugins, independent from Pi packages
 	extensions?: string[]; // Array of local extension file paths or directories
 	skills?: string[]; // Array of local skill file paths or directories
 	prompts?: string[]; // Array of local prompt template paths or directories
@@ -842,6 +856,40 @@ export class SettingsManager {
 		const projectSettings = structuredClone(this.projectSettings);
 		projectSettings.packages = packages;
 		this.markProjectModified("packages");
+		this.saveProjectSettings(projectSettings);
+	}
+
+	getPluginMarketplaces(): Record<string, PluginMarketplaceSettings> {
+		return structuredClone(this.settings.pluginMarketplaces ?? {});
+	}
+
+	setPluginMarketplaces(marketplaces: Record<string, PluginMarketplaceSettings>): void {
+		this.globalSettings.pluginMarketplaces = structuredClone(marketplaces);
+		this.markModified("pluginMarketplaces");
+		this.save();
+	}
+
+	setProjectPluginMarketplaces(marketplaces: Record<string, PluginMarketplaceSettings>): void {
+		const projectSettings = structuredClone(this.projectSettings);
+		projectSettings.pluginMarketplaces = structuredClone(marketplaces);
+		this.markProjectModified("pluginMarketplaces");
+		this.saveProjectSettings(projectSettings);
+	}
+
+	getPlugins(): InstalledPluginSettings[] {
+		return structuredClone(this.settings.plugins ?? []);
+	}
+
+	setPlugins(plugins: InstalledPluginSettings[]): void {
+		this.globalSettings.plugins = structuredClone(plugins);
+		this.markModified("plugins");
+		this.save();
+	}
+
+	setProjectPlugins(plugins: InstalledPluginSettings[]): void {
+		const projectSettings = structuredClone(this.projectSettings);
+		projectSettings.plugins = structuredClone(plugins);
+		this.markProjectModified("plugins");
 		this.saveProjectSettings(projectSettings);
 	}
 

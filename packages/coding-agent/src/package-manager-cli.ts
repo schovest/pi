@@ -12,6 +12,7 @@ import {
 	type SelfUpdateCommand,
 	VERSION,
 } from "./config.ts";
+import { PluginManager } from "./core/claude-plugin-manager.ts";
 import { DefaultPackageManager } from "./core/package-manager.ts";
 import { SettingsManager } from "./core/settings-manager.ts";
 import { spawnProcess } from "./utils/child-process.ts";
@@ -409,6 +410,155 @@ export async function handleConfigCommand(args: string[]): Promise<boolean> {
 	});
 
 	process.exit(0);
+}
+
+function printPluginCommandHelp(): void {
+	console.log(`${chalk.bold("Usage:")}
+  ${APP_NAME} plugins marketplace add <name> <repo-or-url>
+  ${APP_NAME} plugins marketplace list
+  ${APP_NAME} plugins marketplace remove <name>
+  ${APP_NAME} plugins install <name@marketplace|git-url|https-url> [-l]
+  ${APP_NAME} plugins list
+  ${APP_NAME} plugins remove <plugin> [-l]
+  ${APP_NAME} plugins update [plugin]
+
+Claude-compatible plugins are managed separately from Pi packages. Use ${APP_NAME} install/list for native packages.
+`);
+}
+
+export async function handlePluginCommand(args: string[]): Promise<boolean> {
+	if (args[0] !== "plugins") {
+		return false;
+	}
+
+	const [, command, ...rest] = args;
+	if (!command || command === "-h" || command === "--help") {
+		printPluginCommandHelp();
+		return true;
+	}
+
+	const cwd = process.cwd();
+	const agentDir = getAgentDir();
+	const settingsManager = SettingsManager.create(cwd, agentDir);
+	reportSettingsErrors(settingsManager, "plugin command");
+	const pluginManager = new PluginManager({ cwd, agentDir, settingsManager });
+
+	try {
+		if (command === "marketplace") {
+			const [action, name, source] = rest;
+			if (action === "add" && name && source) {
+				pluginManager.addMarketplace(name, source);
+				await settingsManager.flush();
+				console.log(chalk.green(`Added plugin marketplace ${name}`));
+				return true;
+			}
+			if (action === "list") {
+				const marketplaces = pluginManager.listMarketplaces();
+				if (marketplaces.length === 0) {
+					console.log(chalk.dim("No plugin marketplaces configured."));
+					return true;
+				}
+				for (const marketplace of marketplaces) {
+					console.log(`${marketplace.name}  ${chalk.dim(marketplace.source)}`);
+				}
+				return true;
+			}
+			if (action === "remove" && name) {
+				const removed = pluginManager.removeMarketplace(name);
+				await settingsManager.flush();
+				if (!removed) {
+					console.error(chalk.red(`No matching plugin marketplace found for ${name}`));
+					process.exitCode = 1;
+				} else {
+					console.log(chalk.green(`Removed plugin marketplace ${name}`));
+				}
+				return true;
+			}
+			printPluginCommandHelp();
+			process.exitCode = 1;
+			return true;
+		}
+
+		let local = false;
+		const positional: string[] = [];
+		for (const arg of rest) {
+			if (arg === "-l" || arg === "--local") {
+				local = true;
+			} else {
+				positional.push(arg);
+			}
+		}
+
+		if (command === "install") {
+			const source = positional[0];
+			if (!source || positional.length > 1) {
+				printPluginCommandHelp();
+				process.exitCode = 1;
+				return true;
+			}
+			const installed = await pluginManager.install(source, { local });
+			await settingsManager.flush();
+			console.log(chalk.green(`Installed plugin ${installed.name}`));
+			return true;
+		}
+
+		if (command === "list") {
+			const plugins = pluginManager.listConfiguredPlugins();
+			if (plugins.length === 0) {
+				console.log(chalk.dim("No Claude-compatible plugins installed."));
+				return true;
+			}
+			for (const plugin of plugins) {
+				const scope = plugin.scope === "project" ? "project" : "user";
+				const disabled = plugin.enabled ? "" : " disabled";
+				console.log(`${plugin.name}  ${chalk.dim(`${scope}${disabled} ${plugin.source}`)}`);
+				if (plugin.installedPath) {
+					console.log(chalk.dim(`  ${plugin.installedPath}`));
+				}
+			}
+			return true;
+		}
+
+		if (command === "remove") {
+			const name = positional[0];
+			if (!name || positional.length > 1) {
+				printPluginCommandHelp();
+				process.exitCode = 1;
+				return true;
+			}
+			const removed = pluginManager.remove(name, { local });
+			await settingsManager.flush();
+			if (!removed) {
+				console.error(chalk.red(`No matching plugin found for ${name}`));
+				process.exitCode = 1;
+			} else {
+				console.log(chalk.green(`Removed plugin ${name}`));
+			}
+			return true;
+		}
+
+		if (command === "update") {
+			const name = positional[0];
+			if (positional.length > 1) {
+				printPluginCommandHelp();
+				process.exitCode = 1;
+				return true;
+			}
+			await pluginManager.update(name);
+			await settingsManager.flush();
+			console.log(chalk.green(name ? `Updated plugin ${name}` : "Updated plugins"));
+			return true;
+		}
+
+		printPluginCommandHelp();
+		process.exitCode = 1;
+		return true;
+	} catch (error: unknown) {
+		const message = error instanceof Error ? error.message : "Unknown plugin command error";
+		console.error(chalk.red(`Error: ${message}`));
+		process.exitCode = 1;
+		return true;
+	}
 }
 
 export async function handlePackageCommand(args: string[]): Promise<boolean> {

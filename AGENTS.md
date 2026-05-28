@@ -37,10 +37,14 @@
 
 - 新 agent 能力优先做成可测试、可禁用的模块。
 - 内置扩展应有清晰开关，例如 CLI flag 或 settings 配置。
+- 内置插件统一放在 `packages/plugins`，通过插件 registry 暴露 manifest/factory；不要再把插件源码散落到 `packages/coding-agent/src/core/builtin`。
+- `packages/plugins` 是本发行版的内置插件集合，不作为独立 npm 包发布；`coding-agent` 需要使用本地 bundled dependency 或二进制打包方式携带它。
 - 扩展注册 tool、command、shortcut、provider 时，要考虑名称冲突、来源信息和 reload 行为。
 - MCP 能力默认通过 adapter/proxy 控制上下文占用；只有少量高频工具适合 direct tools。
 - 涉及第三方源码 vendor 时，保留许可证和来源信息，并尽量减少本地改动面。
 - 打包到二进制的功能必须避免运行时依赖未安装的 npm package。
+- 新增或调整内置插件时，同时更新 `packages/plugins/README.md`、插件 registry、相关 build/binary copy 流程，以及必要的 resource-loader 测试。
+- Claude-compatible plugins 使用独立 `plugins` / `pluginMarketplaces` settings，不要复用或污染 Pi 原生 `packages`；安装、移除或更新插件时同步验证 skills/prompts 发现和 Pi-owned MCP config 写入/清理。
 
 ## 命令
 
@@ -86,6 +90,7 @@
   node scripts/generate-coding-agent-shrinkwrap.mjs
   ```
   并用 `--check` 或 `npm run check` 验证。
+- 如果内置插件通过 `bundledDependencies` 接入 `coding-agent`，`scripts/generate-coding-agent-shrinkwrap.mjs` 必须保留 bundled internal workspace 语义，不能把这类插件改成需要 registry tarball 的独立包。
 - 新依赖带 lifecycle scripts 时，需要显式审查并更新 allowlist，不能静默放行。
 
 ## Git
