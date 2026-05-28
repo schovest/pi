@@ -1,173 +1,155 @@
-# Development Rules
+# 自定义 Agents 开发规则
 
-## Conversational Style
+本仓库基于 Pi 开发自己的 agents、工具链和发行版。默认目标不是维护上游 `pi-mono`，而是在保留 Pi 核心能力的基础上，迭代适合本地工作流的 agent 运行时、内置扩展、MCP 能力、技能和二进制分发。
 
-- Keep answers short and concise
-- No emojis in commits, issues, PR comments, or code
-- No fluff or cheerful filler text (e.g., "Thanks @user" not "Thanks so much @user!")
-- Technical prose only, be direct
-- When the user asks a question, answer it first before making edits or running implementation commands.
-- When responding to user feedback or an analysis, explicitly say whether you agree or disagree before saying what you changed.
+## 交流风格
 
-## Code Quality
+- 使用中文回复。
+- 回答要短、直接、技术化。
+- 用户问问题时先回答问题，再执行实现命令。
+- 不使用表情符号、夸张语气或客套填充。
+- 反馈分析时先明确说“同意”或“不同意”，再说明改动。
+- 不要默认按上游贡献流程处理问题；除非用户明确要求，不创建上游 issue、PR 或 release。
 
-- Read files in full before wide-ranging changes, before editing files you have not fully inspected, and when asked to investigate or audit. Do not rely on search snippets for broad changes.
-- No `any` unless absolutely necessary.
-- Inline single-line helpers that have only one call site.
-- Check node_modules for external API types; don't guess.
-- **No inline imports** (`await import()`, `import("pkg").Type`, dynamic type imports). Top-level imports only.
-- Never remove or downgrade code to fix type errors from outdated deps; upgrade the dep instead.
-- Use only erasable TypeScript syntax (Node strip-only mode) in code checked by the root config (`packages/*/src`, `packages/*/test`, `packages/coding-agent/examples`): no parameter properties, `enum`, `namespace`/`module`, `import =`, `export =`, or other constructs needing JS emit. Use explicit fields with constructor assignments.
-- Always ask before removing functionality or code that appears intentional.
-- Do not preserve backward compatibility unless the user asks for it.
-- Never hardcode key checks (e.g. `matchesKey(keyData, "ctrl+x")`). Add defaults to `DEFAULT_EDITOR_KEYBINDINGS` or `DEFAULT_APP_KEYBINDINGS` so they stay configurable.
-- Never modify `packages/ai/src/models.generated.ts` directly; update `packages/ai/scripts/generate-models.ts` instead.
+## 项目目标
 
-## Commands
+- 将 Pi 作为 agent 平台底座，而不是只作为原版 CLI 使用。
+- 优先通过内置扩展、Pi package、skills、prompt templates、MCP server 和配置层扩展能力。
+- 能使用成熟插件或现有生态包时，优先使用已有实现；只有当现成方案不满足二进制内置、权限、安全或体验要求时，才进行本地集成或 vendor。
+- 二进制发行应尽量自带关键能力，避免首次运行依赖网络安装插件。
+- 新增 agent 能力时，明确它属于哪一层：核心运行时、内置扩展、项目配置、用户配置、skill、prompt template 或 MCP server。
 
-- After code changes (not docs): `npm run check` (full output, no tail). Fix all errors, warnings, and infos before committing. Does not run tests.
-- Never run `npm run build` or `npm test` unless requested by the user.
-- Never run the full vitest suite directly: it includes e2e tests that activate when endpoint/auth env vars are present. For all non-e2e tests, run `./test.sh` from the repo root. Otherwise run specific tests from the package root: `node ../../node_modules/vitest/dist/cli.js --run test/specific.test.ts`.
-- If you create or modify a test file, run it and iterate on test or implementation until it passes.
-- For `packages/coding-agent/test/suite/`, use `test/suite/harness.ts` + the faux provider. No real provider APIs, keys, or paid tokens.
-- Put issue-specific regressions under `packages/coding-agent/test/suite/regressions/` named `<issue-number>-<short-slug>.test.ts`.
-- For ad-hoc scripts, `write` them to a temp file (e.g. `/tmp`), run, edit if needed, remove when done. Don't embed multi-line scripts in `bash` commands.
-- Never commit unless the user asks.
+## 代码质量
 
-## Dependency and Install Security
+- 大范围修改前必须完整阅读相关文件，不要只依赖搜索片段。
+- 不使用 `any`，除非没有可行的类型表达方式；必须局部化并说明原因。
+- 单一调用点的单行 helper 直接内联。
+- 外部 API 类型以 `node_modules` 或官方文档为准，不猜测。
+- 不使用 inline import：禁止 `await import()`、`import("pkg").Type`、动态 type import。使用顶层 import。
+- 不通过删除或降级功能来修复类型错误；依赖过旧时优先升级依赖。
+- 根配置检查的 TypeScript 代码必须使用 erasable syntax：禁止参数属性、`enum`、`namespace`/`module`、`import =`、`export =` 等需要 JS emit 的语法。
+- 删除看起来有意存在的功能或代码前，先询问用户。
+- 不为了兼容旧行为而额外保留复杂分支，除非用户要求。
+- 不硬编码快捷键判断；默认快捷键应放入对应默认 keybindings 配置。
+- 不直接手改 `packages/ai/src/models.generated.ts`；需要更新模型时改生成脚本或运行既有生成流程。
 
-- Treat npm dep and lockfile changes as reviewed code. Direct external deps stay pinned to exact versions.
-- Hydrate/update locally with `npm install --ignore-scripts`; clean/CI-style with `npm ci --ignore-scripts`. Don't run lifecycle scripts unless the user asks.
-- If dep metadata changes, refresh `package-lock.json` with `npm install --package-lock-only --ignore-scripts`.
-- If `packages/coding-agent/npm-shrinkwrap.json` needs regen, run `node scripts/generate-coding-agent-shrinkwrap.mjs` (verify with `--check` or `npm run check`). New deps with lifecycle scripts require review and an explicit allowlist entry in that script; never add one silently.
-- Pre-commit blocks lockfile commits unless `PI_ALLOW_LOCKFILE_CHANGE=1`. Don't bypass unless the user wants the lockfile change committed.
+## Agents 与扩展开发
+
+- 新 agent 能力优先做成可测试、可禁用的模块。
+- 内置扩展应有清晰开关，例如 CLI flag 或 settings 配置。
+- 扩展注册 tool、command、shortcut、provider 时，要考虑名称冲突、来源信息和 reload 行为。
+- MCP 能力默认通过 adapter/proxy 控制上下文占用；只有少量高频工具适合 direct tools。
+- 涉及第三方源码 vendor 时，保留许可证和来源信息，并尽量减少本地改动面。
+- 打包到二进制的功能必须避免运行时依赖未安装的 npm package。
+
+## 命令
+
+- 代码改动后运行：
+  ```bash
+  npm run check
+  ```
+  需要完整输出，不要 `tail`。修复所有 errors、warnings 和 infos。
+- 文档或纯说明文件改动通常不需要跑 `npm run check`，除非改动影响脚本、包配置或生成文件。
+- 不要主动运行 `npm test` 或完整 vitest suite；它可能触发 e2e 和真实 provider。
+- 非 e2e 测试用：
+  ```bash
+  ./test.sh
+  ```
+- 单个测试文件从对应 package 目录运行：
+  ```bash
+  node ../../node_modules/vitest/dist/cli.js --run test/specific.test.ts
+  ```
+- `packages/coding-agent/test/suite/` 下测试使用 `test/suite/harness.ts` 和 faux provider，不调用真实 provider、API key 或付费 token。
+- 修改测试文件后，必须运行对应测试并迭代到通过。
+- 临时脚本写到 `/tmp`，运行后删除；不要把多行脚本塞进 bash 命令。
+- 除非用户要求，不提交 commit。
+
+## 依赖与安装安全
+
+- npm 依赖和 lockfile 变更视为代码变更，需要审查。
+- 直接外部依赖必须固定精确版本。
+- 本地安装/更新使用：
+  ```bash
+  npm install --ignore-scripts
+  ```
+- 干净安装使用：
+  ```bash
+  npm ci --ignore-scripts
+  ```
+- 不运行 lifecycle scripts，除非用户明确要求。
+- 仅刷新 lockfile 时使用：
+  ```bash
+  npm install --package-lock-only --ignore-scripts
+  ```
+- 如果 `packages/coding-agent/npm-shrinkwrap.json` 需要更新，运行：
+  ```bash
+  node scripts/generate-coding-agent-shrinkwrap.mjs
+  ```
+  并用 `--check` 或 `npm run check` 验证。
+- 新依赖带 lifecycle scripts 时，需要显式审查并更新 allowlist，不能静默放行。
 
 ## Git
 
-Multiple pi sessions may be running in this cwd at the same time, each modifying different files. Git operations that touch unstaged, staged, or untracked files outside your own changes will stomp on other sessions' work. Follow these rules:
+本目录可能有多个 agent 会话并行修改不同文件。任何会影响未暂存、已暂存或未跟踪文件的 Git 操作都可能破坏别人的工作。
 
-Committing:
+提交规则：
 
-- Only commit files YOU changed in THIS session.
-- Stage explicit paths (`git add <path1> <path2>`); never `git add -A` / `git add .`.
-- Before committing, run `git status` and verify you are only staging your files.
-- `packages/ai/src/models.generated.ts` may always be included alongside your files.
+- 只提交当前会话自己修改的文件。
+- 使用显式路径 stage：
+  ```bash
+  git add path1 path2
+  ```
+- 禁止 `git add -A`、`git add .`。
+- 提交前运行 `git status`，确认只 stage 自己的文件。
+- 除非用户要求，不 commit。
 
-Never run (destroys other agents' work or bypasses checks):
+禁止命令：
 
-- `git reset --hard`, `git checkout .`, `git clean -fd`, `git stash`, `git add -A`, `git add .`, `git commit --no-verify`.
+- `git reset --hard`
+- `git checkout .`
+- `git clean -fd`
+- `git stash`
+- `git add -A`
+- `git add .`
+- `git commit --no-verify`
 
-If rebase conflicts occur:
+冲突处理：
 
-- Resolve conflicts only in files you modified.
-- If a conflict is in a file you did not modify, abort and ask the user.
-- Never force push.
+- 只解决自己修改过的文件里的冲突。
+- 冲突发生在自己没改过的文件时，停止并询问用户。
+- 不 force push。
 
-## Issues and PRs
+## 二进制与交互模式测试
 
-See `CONTRIBUTING.md` for the contributor gate (auto-close workflows, `lgtm`/`lgtmi`, quality bar).
-
-When creating issues:
-
-- Add `pkg:*` labels for affected packages (`pkg:agent`, `pkg:ai`, `pkg:coding-agent`, `pkg:tui`); use all that apply.
-
-When posting issue/PR comments:
-
-- Write the comment to a temp file and post with `gh issue/pr comment --body-file` (never multi-line markdown via `--body`).
-- Keep comments concise, technical, in the user's tone.
-- End every AI-posted comment with the AI-generated disclaimer line specified by the originating prompt (e.g. `This comment is AI-generated by `/wr``).
-
-When closing issues via commit:
-
-- Include `fixes #<number>` or `closes #<number>` in the message so merging auto-closes the issue. For multiple issues, repeat the keyword per issue (`closes #1, closes #2`); a shared keyword (`closes #1, #2`) only closes the first.
-
-## Testing pi Interactive Mode with tmux
-
-Run the TUI in a controlled terminal (from the repo root):
+测试 TUI 时使用受控 tmux 会话：
 
 ```bash
 tmux new-session -d -s pi-test -x 80 -y 24
 tmux send-keys -t pi-test "./pi-test.sh" Enter
-sleep 3 && tmux capture-pane -t pi-test -p     # capture after startup
+sleep 3 && tmux capture-pane -t pi-test -p
 tmux send-keys -t pi-test "your prompt here" Enter
-tmux send-keys -t pi-test Escape               # special keys (also C-o for ctrl+o, etc.)
+tmux send-keys -t pi-test Escape
 tmux kill-session -t pi-test
+```
+
+需要构建 Node dist 时运行：
+
+```bash
+npm run build
+```
+
+需要构建 Bun 单文件二进制时，从 `packages/coding-agent` 使用已有脚本：
+
+```bash
+npm run build:binary
 ```
 
 ## Changelog
 
-Location: `packages/*/CHANGELOG.md` (one per package).
+- 只有用户明确要求准备发布、提交 changelog 或整理 release notes 时，才修改 `packages/*/CHANGELOG.md`。
+- 新条目放入 `## [Unreleased]`。
+- 不修改已发布版本段落。
 
-Sections under `## [Unreleased]`: `### Breaking Changes` (API changes requiring migration), `### Added`, `### Changed`, `### Fixed`, `### Removed`.
+## 用户覆盖
 
-Rules:
-
-- All new entries go under `## [Unreleased]`. Read the full section first and append to existing subsections; never duplicate them.
-- Released version sections (e.g. `## [0.12.2]`) are immutable; never modify them.
-
-Attribution:
-
-- Internal (from issues): `Fixed foo bar ([#123](https://github.com/earendil-works/pi-mono/issues/123))`
-- External contributions: `Added feature X ([#456](https://github.com/earendil-works/pi-mono/pull/456) by [@username](https://github.com/username))`
-
-## Releasing
-
-**Lockstep versioning**: all packages share one version; every release updates all together. `patch` = fixes + additions, `minor` = breaking changes. No major releases.
-
-1. **Update CHANGELOGs**: ask the user whether they ran the `/cl` prompt on the latest commit on `main`. If not, they must run `/cl` first to audit and update each package's `[Unreleased]` section before releasing.
-
-2. **Local smoke test**: build an unpublished release and smoke test from outside the repo (so it can't resolve workspace files):
-   ```bash
-   npm run release:local -- --out /tmp/pi-local-release --force
-   cd /tmp
-
-   # Node package install smoke tests
-   /tmp/pi-local-release/node/pi --help
-   /tmp/pi-local-release/node/pi --version
-   /tmp/pi-local-release/node/pi --list-models
-   /tmp/pi-local-release/node/pi -p "Say exactly: ok"
-   /tmp/pi-local-release/node/pi
-
-   # Bun binary smoke tests
-   /tmp/pi-local-release/bun/pi --help
-   /tmp/pi-local-release/bun/pi --version
-   /tmp/pi-local-release/bun/pi --list-models
-   /tmp/pi-local-release/bun/pi -p "Say exactly: ok"
-   /tmp/pi-local-release/bun/pi
-   ```
-   Verify both Node and Bun startup, model/account listing, interactive startup, and at least one real prompt with the intended default provider. The bare commands `/tmp/pi-local-release/node/pi` and `/tmp/pi-local-release/bun/pi` start interactive mode; run each in tmux, submit a prompt, and wait for the model reply before considering the interactive smoke test passed. Failures are release blockers unless the user explicitly accepts the risk.
-
-3. **Verify npm authentication**: run `npm whoami` before starting the release script. If it fails, stop and tell the user to run `npm login` manually first, then retry after they confirm `npm whoami` succeeds.
-
-4. **Brief the user on the WebAuthn flow before running anything**. Print exactly the following message and then stop and wait for the user to confirm in their next message:
-
-   ```
-   Before the release publish step, read this carefully:
-
-   - `npm publish` uses WebAuthn 2FA.
-   - The safest flow is for you to run the publish command yourself, because you can see and open the npm authentication URL immediately.
-   - I will tell you the exact command to run.
-   - When npm prints an auth URL, cmd/ctrl-click it, log in in the browser, and select the "don't ask again for N minutes" option if available.
-   - This may happen more than once during publish.
-   - Do not rerun `npm run release:patch` or `npm run release:minor` after a failed publish; only rerun the publish command I give you.
-
-   Reply "ready" once you have read this and are ready to run the command locally.
-   ```
-
-   Do not proceed to step 5 until the user explicitly confirms.
-
-5. **Run the release script**:
-   ```bash
-   npm run release:patch    # fixes + additions
-   npm run release:minor    # breaking changes
-   ```
-   Do not pass a `timeout` to the bash tool for this call. If publish fails during the WebAuthn/OTP step after version bump, stop and tell the user to run `npm run publish` themselves from the repo root. Never rerun the version bump on your own. After the user reports publish success, continue with the post-publish steps.
-
-6. **After publish succeeds**:
-   - Add fresh `## [Unreleased]` sections to package changelogs.
-   - Commit with `Add [Unreleased] section for next cycle`.
-   - Push `main` and the release tag.
-
-## User Override
-
-If the user's instructions conflict with any rule in this document, ask for explicit confirmation before overriding. Only then execute their instructions.
+如果用户明确要求与本文件冲突，先说明冲突点并请求确认。用户确认后按用户要求执行。

@@ -79,19 +79,41 @@ function getAliases(): Record<string, string> {
 	const typeboxValueEntry = require.resolve("typebox/value");
 
 	const packagesRoot = path.resolve(__dirname, "../../../../");
-	const resolveWorkspaceOrImport = (workspaceRelativePath: string, specifier: string): string => {
+	const resolveWorkspaceOrImport = (
+		workspaceRelativePath: string,
+		specifier: string,
+		sourceRelativePath?: string,
+	): string => {
 		const workspacePath = path.join(packagesRoot, workspaceRelativePath);
 		if (fs.existsSync(workspacePath)) {
 			return workspacePath;
 		}
-		return fileURLToPath(import.meta.resolve(specifier));
+		if (sourceRelativePath) {
+			const sourcePath = path.join(packagesRoot, sourceRelativePath);
+			if (fs.existsSync(sourcePath)) {
+				return sourcePath;
+			}
+		}
+		const resolveImport = (import.meta as ImportMeta & { resolve?: (specifier: string) => string }).resolve;
+		if (resolveImport) {
+			return fileURLToPath(resolveImport(specifier));
+		}
+		return require.resolve(specifier);
 	};
 
 	const piCodingAgentEntry = packageIndex;
-	const piAgentCoreEntry = resolveWorkspaceOrImport("agent/dist/index.js", "@earendil-works/pi-agent-core");
-	const piTuiEntry = resolveWorkspaceOrImport("tui/dist/index.js", "@earendil-works/pi-tui");
-	const piAiEntry = resolveWorkspaceOrImport("ai/dist/index.js", "@earendil-works/pi-ai");
-	const piAiOauthEntry = resolveWorkspaceOrImport("ai/dist/oauth.js", "@earendil-works/pi-ai/oauth");
+	const piAgentCoreEntry = resolveWorkspaceOrImport(
+		"agent/dist/index.js",
+		"@earendil-works/pi-agent-core",
+		"agent/src/index.ts",
+	);
+	const piTuiEntry = resolveWorkspaceOrImport("tui/dist/index.js", "@earendil-works/pi-tui", "tui/src/index.ts");
+	const piAiEntry = resolveWorkspaceOrImport("ai/dist/index.js", "@earendil-works/pi-ai", "ai/src/index.ts");
+	const piAiOauthEntry = resolveWorkspaceOrImport(
+		"ai/dist/oauth.js",
+		"@earendil-works/pi-ai/oauth",
+		"ai/src/oauth.ts",
+	);
 
 	_aliases = {
 		"@earendil-works/pi-coding-agent": piCodingAgentEntry,

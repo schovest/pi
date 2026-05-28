@@ -194,6 +194,13 @@ describe("parseArgs", () => {
 		});
 	});
 
+	describe("--no-mcp flag", () => {
+		test("parses --no-mcp flag", () => {
+			const result = parseArgs(["--no-mcp"]);
+			expect(result.noMcp).toBe(true);
+		});
+	});
+
 	describe("--skill flag", () => {
 		test("parses single --skill", () => {
 			const result = parseArgs(["--skill", "./skill-dir"]);

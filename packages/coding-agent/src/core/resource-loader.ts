@@ -8,6 +8,7 @@ import type { ResourceDiagnostic } from "./diagnostics.ts";
 export type { ResourceCollision, ResourceDiagnostic } from "./diagnostics.ts";
 
 import { canonicalizePath, isLocalPath, resolvePath } from "../utils/paths.ts";
+import { builtinMcpExtensionFactory } from "./builtin/mcp.ts";
 import { createEventBus, type EventBus } from "./event-bus.ts";
 import { createExtensionRuntime, loadExtensionFromFactory, loadExtensions } from "./extensions/loader.ts";
 import type { Extension, ExtensionFactory, ExtensionRuntime, LoadExtensionsResult } from "./extensions/types.ts";
@@ -122,6 +123,7 @@ export interface DefaultResourceLoaderOptions {
 	additionalPromptTemplatePaths?: string[];
 	additionalThemePaths?: string[];
 	extensionFactories?: ExtensionFactory[];
+	includeBuiltinMcp?: boolean;
 	noExtensions?: boolean;
 	noSkills?: boolean;
 	noPromptTemplates?: boolean;
@@ -160,6 +162,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 	private additionalPromptTemplatePaths: string[];
 	private additionalThemePaths: string[];
 	private extensionFactories: ExtensionFactory[];
+	private includeBuiltinMcp: boolean;
 	private noExtensions: boolean;
 	private noSkills: boolean;
 	private noPromptTemplates: boolean;
@@ -218,6 +221,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 		this.additionalPromptTemplatePaths = options.additionalPromptTemplatePaths ?? [];
 		this.additionalThemePaths = options.additionalThemePaths ?? [];
 		this.extensionFactories = options.extensionFactories ?? [];
+		this.includeBuiltinMcp = options.includeBuiltinMcp ?? false;
 		this.noExtensions = options.noExtensions ?? false;
 		this.noSkills = options.noSkills ?? false;
 		this.noPromptTemplates = options.noPromptTemplates ?? false;
@@ -782,6 +786,23 @@ export class DefaultResourceLoader implements ResourceLoader {
 	}> {
 		const extensions: Extension[] = [];
 		const errors: Array<{ path: string; error: string }> = [];
+
+		if (this.includeBuiltinMcp && !this.noExtensions) {
+			try {
+				extensions.push(
+					await loadExtensionFromFactory(
+						builtinMcpExtensionFactory,
+						this.cwd,
+						this.eventBus,
+						runtime,
+						"<builtin:mcp>",
+					),
+				);
+			} catch (error) {
+				const message = error instanceof Error ? error.message : "failed to load extension";
+				errors.push({ path: "<builtin:mcp>", error: message });
+			}
+		}
 
 		for (const [index, factory] of this.extensionFactories.entries()) {
 			const extensionPath = `<inline:${index + 1}>`;
