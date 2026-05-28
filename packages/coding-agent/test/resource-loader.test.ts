@@ -97,33 +97,6 @@ Prompt content.`,
 			expect(prompts.some((p) => p.name === "test-prompt")).toBe(true);
 		});
 
-		it("should load the built-in MCP extension when enabled", async () => {
-			const loader = new DefaultResourceLoader({ cwd, agentDir, includeBuiltinMcp: true });
-			await loader.reload();
-
-			const { extensions } = loader.getExtensions();
-			const mcpExtension = extensions.find((extension) => extension.path === "<builtin:mcp>");
-
-			expect(mcpExtension).toBeDefined();
-			expect(mcpExtension?.sourceInfo).toMatchObject({
-				path: "<builtin:mcp>",
-				source: "builtin",
-				scope: "temporary",
-				origin: "top-level",
-			});
-			expect(mcpExtension?.tools.has("mcp")).toBe(true);
-			expect(mcpExtension?.commands.has("mcp")).toBe(true);
-			expect(mcpExtension?.commands.has("mcp-auth")).toBe(true);
-			expect(mcpExtension?.flags.has("mcp-config")).toBe(true);
-		});
-
-		it("should not load the built-in MCP extension when extensions are disabled", async () => {
-			const loader = new DefaultResourceLoader({ cwd, agentDir, includeBuiltinMcp: true, noExtensions: true });
-			await loader.reload();
-
-			expect(loader.getExtensions().extensions.some((extension) => extension.path === "<builtin:mcp>")).toBe(false);
-		});
-
 		it("should prefer project resources over user on name collisions", async () => {
 			const userPromptsDir = join(agentDir, "prompts");
 			const projectPromptsDir = join(cwd, ".pi", "prompts");
@@ -212,6 +185,28 @@ Project skill`,
 			// mergePaths processes project paths before user paths, so the project
 			// alias is the canonical survivor.
 			expect(extensionsResult.extensions[0].path).toBe(join(cwd, ".pi", "extensions", "shared.ts"));
+		});
+
+		it("should load enabled built-in plugins from the plugin registry", async () => {
+			const loader = new DefaultResourceLoader({ cwd, agentDir, enabledBuiltinPlugins: ["mcp"] });
+			await loader.reload();
+
+			const extensionsResult = loader.getExtensions();
+			expect(extensionsResult.errors).toEqual([]);
+			expect(extensionsResult.extensions.some((extension) => extension.path === "<builtin:mcp>")).toBe(true);
+		});
+
+		it("should skip built-in plugins when extensions are disabled", async () => {
+			const loader = new DefaultResourceLoader({
+				cwd,
+				agentDir,
+				enabledBuiltinPlugins: ["mcp"],
+				noExtensions: true,
+			});
+			await loader.reload();
+
+			const extensionsResult = loader.getExtensions();
+			expect(extensionsResult.extensions.some((extension) => extension.path === "<builtin:mcp>")).toBe(false);
 		});
 
 		it("should keep both extensions loaded when command names collide", async () => {

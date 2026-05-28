@@ -1,4 +1,5 @@
-import type { AgentToolResult, AgentToolUpdateCallback, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type { AgentToolResult, AgentToolUpdateCallback, ExtensionContext } from "../../pi-types.ts";
 import { getFailureAgeSeconds, lazyConnect } from "./init.ts";
 import { authenticate, supportsOAuth } from "./mcp-auth-flow.ts";
 import type { MetadataCache } from "./metadata-cache.ts";
@@ -372,7 +373,7 @@ export function createDirectToolExecutor(
 			});
 
 			const result = await resultPromise;
-			uiSession?.sendToolResult(result as unknown as import("@modelcontextprotocol/sdk/types.js").CallToolResult);
+			uiSession?.sendToolResult(result as unknown as CallToolResult);
 
 			const mcpContent = (result.content ?? []) as McpContent[];
 			const content = transformMcpContent(mcpContent);

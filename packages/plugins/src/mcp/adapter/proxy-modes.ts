@@ -1,5 +1,6 @@
-import type { AgentToolResult, ToolInfo } from "@earendil-works/pi-coding-agent";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { checkSync } from "recheck";
+import type { AgentToolResult, ToolInfo } from "../../pi-types.ts";
 import {
 	getFailureAgeSeconds,
 	lazyConnect,
@@ -811,7 +812,7 @@ export async function executeCall(
 
 		if (toolMeta.uiResourceUri) {
 			const result = await resultPromise;
-			uiSession?.sendToolResult(result as unknown as import("@modelcontextprotocol/sdk/types.js").CallToolResult);
+			uiSession?.sendToolResult(result as unknown as CallToolResult);
 			const mcpContent = (result.content ?? []) as McpContent[];
 			const content = transformMcpContent(mcpContent);
 

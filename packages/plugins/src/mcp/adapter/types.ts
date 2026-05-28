@@ -4,6 +4,7 @@ import type { ImageContent, TextContent } from "@earendil-works/pi-ai";
 import type { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import type { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import type { ServerCacheEntry } from "./metadata-cache.ts";
 import type { UiStreamMode } from "./ui-stream-types.ts";
 
 // Transport type (stdio + HTTP)
@@ -377,7 +378,7 @@ export interface McpPanelCallbacks {
 	canAuthenticate: (serverName: string) => boolean;
 	authenticate: (serverName: string) => Promise<McpAuthResult>;
 	getConnectionStatus: (serverName: string) => "connected" | "idle" | "failed" | "needs-auth";
-	refreshCacheAfterReconnect: (serverName: string) => import("./metadata-cache.ts").ServerCacheEntry | null;
+	refreshCacheAfterReconnect: (serverName: string) => ServerCacheEntry | null;
 }
 
 export interface McpPanelResult {

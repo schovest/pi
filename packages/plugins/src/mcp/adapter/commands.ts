@@ -1,4 +1,4 @@
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "../../pi-types.ts";
 import {
 	ensureCompatibilityImports,
 	getMcpDiscoverySummary,
@@ -13,6 +13,8 @@ import {
 import { getFailureAgeSeconds, lazyConnect, updateMetadataCache, updateStatusBar } from "./init.ts";
 import { getAuthForUrl } from "./mcp-auth.ts";
 import { authenticate, removeAuth, supportsOAuth } from "./mcp-auth-flow.ts";
+import { createMcpPanel } from "./mcp-panel.ts";
+import { createMcpSetupPanel } from "./mcp-setup-panel.ts";
 import { loadMetadataCache } from "./metadata-cache.ts";
 import {
 	loadOnboardingState,
@@ -253,7 +255,6 @@ export async function openMcpSetup(
 
 	const discovery = getMcpDiscoverySummary(configOverridePath, ctx.cwd);
 	const onboardingState = loadOnboardingState();
-	const { createMcpSetupPanel } = await import("./mcp-setup-panel.ts");
 	let configChanged = false;
 
 	const callbacks = {
@@ -356,7 +357,6 @@ export async function openMcpPanel(
 
 	const callbacks = buildMcpPanelCallbacks(state, config, ctx);
 
-	const { createMcpPanel } = await import("./mcp-panel.ts");
 	let configChanged = false;
 
 	await new Promise<void>((resolve) => {
@@ -410,8 +410,6 @@ export async function openMcpAuthPanel(
 	const configPath = (pi.getFlag("mcp-config") as string | undefined) ?? configOverridePath;
 	const provenanceMap = getServerProvenance(configPath, ctx.cwd);
 	const callbacks = buildMcpPanelCallbacks(state, config, ctx);
-	const { createMcpPanel } = await import("./mcp-panel.ts");
-
 	await new Promise<void>((resolve) => {
 		ctx.ui.custom(
 			(tui, _theme, _keybindings, done) => {

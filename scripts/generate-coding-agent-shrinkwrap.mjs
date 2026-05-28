@@ -60,6 +60,9 @@ function sortedPackageEntry(entry) {
 		"hasInstallScript",
 		"deprecated",
 		"funding",
+		"bundleDependencies",
+		"bundledDependencies",
+		"inBundle",
 	];
 	const sorted = {};
 
@@ -101,6 +104,8 @@ function copyPackageJsonEntry(packageJson, options) {
 		"os",
 		"cpu",
 		"libc",
+		"bundleDependencies",
+		"bundledDependencies",
 	]) {
 		if (packageJson[field] !== undefined) {
 			entry[field] = packageJson[field];
@@ -192,11 +197,15 @@ function resolveExternalDependency(lockPackages, packageName, fromLockPath) {
 	);
 }
 
-function addInternalWorkspace(shrinkwrapPackages, addedPaths, queue, name, workspace) {
+function addInternalWorkspace(shrinkwrapPackages, addedPaths, queue, name, workspace, bundledInternalNames) {
 	const packageJson = workspace.packageJson;
 	const outputPath = `node_modules/${name}`;
 	const entry = copyPackageJsonEntry(packageJson, { includeName: false });
-	entry.resolved = registryTarballUrl(name, packageJson.version);
+	if (bundledInternalNames.has(name)) {
+		entry.inBundle = true;
+	} else {
+		entry.resolved = registryTarballUrl(name, packageJson.version);
+	}
 
 	shrinkwrapPackages[outputPath] = sortedPackageEntry(entry);
 	addedPaths.add(outputPath);
@@ -295,6 +304,10 @@ function generateShrinkwrap() {
 
 	const lockPackages = rootLock.packages;
 	const codingAgentPackage = readJson(join(codingAgentDir, "package.json"));
+	const bundledInternalNames = new Set([
+		...(codingAgentPackage.bundleDependencies ?? []),
+		...(codingAgentPackage.bundledDependencies ?? []),
+	]);
 	const internalWorkspaces = getInternalWorkspaces(lockPackages);
 	const shrinkwrapPackages = {
 		"": copyPackageJsonEntry(codingAgentPackage, { includeName: true }),
@@ -314,7 +327,7 @@ function generateShrinkwrap() {
 			const outputPath = `node_modules/${item.name}`;
 			internalNames.add(item.name);
 			if (!addedPaths.has(outputPath)) {
-				addInternalWorkspace(shrinkwrapPackages, addedPaths, queue, item.name, workspace);
+				addInternalWorkspace(shrinkwrapPackages, addedPaths, queue, item.name, workspace, bundledInternalNames);
 			}
 			continue;
 		}

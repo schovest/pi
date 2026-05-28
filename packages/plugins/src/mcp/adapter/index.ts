@@ -1,10 +1,5 @@
-import type {
-	AgentToolUpdateCallback,
-	ExtensionAPI,
-	ExtensionContext,
-	ToolInfo,
-} from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import type { AgentToolUpdateCallback, ExtensionAPI, ExtensionContext, ToolInfo } from "../../pi-types.ts";
 import {
 	authenticateServer,
 	logoutServer,

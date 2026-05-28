@@ -6,7 +6,6 @@ import {
 	type Model,
 	type TextContent,
 } from "@earendil-works/pi-ai";
-import type { ExtensionUIContext, ModelRegistry } from "@earendil-works/pi-coding-agent";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import {
 	type CreateMessageRequest,
@@ -16,6 +15,7 @@ import {
 	type SamplingMessage,
 	type SamplingMessageContentBlock,
 } from "@modelcontextprotocol/sdk/types.js";
+import type { ExtensionUIContext, ModelRegistry } from "../../pi-types.ts";
 import { truncateAtWord } from "./utils.ts";
 
 export interface SamplingHandlerOptions {

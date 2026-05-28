@@ -11,9 +11,8 @@
 			"dependencies": {
 				"@earendil-works/pi-agent-core": "^0.76.0",
 				"@earendil-works/pi-ai": "^0.76.0",
+				"@earendil-works/pi-plugins": "file:../plugins",
 				"@earendil-works/pi-tui": "^0.76.0",
-				"@modelcontextprotocol/ext-apps": "1.2.2",
-				"@modelcontextprotocol/sdk": "1.29.0",
 				"@silvia-odwyer/photon-node": "0.3.4",
 				"chalk": "5.6.2",
 				"cross-spawn": "7.0.6",
@@ -24,13 +23,10 @@
 				"ignore": "7.0.5",
 				"jiti": "2.7.0",
 				"minimatch": "10.2.5",
-				"open": "10.2.0",
 				"proper-lockfile": "4.1.2",
-				"recheck": "4.5.0",
 				"typebox": "1.1.38",
 				"undici": "8.3.0",
-				"yaml": "2.9.0",
-				"zod": "3.25.76"
+				"yaml": "2.9.0"
 			},
 			"optionalDependencies": {
 				"@mariozechner/clipboard": "0.3.6"
@@ -40,7 +36,10 @@
 			},
 			"engines": {
 				"node": ">=22.19.0"
-			}
+			},
+			"bundledDependencies": [
+				"@earendil-works/pi-plugins"
+			]
 		},
 		"node_modules/@anthropic-ai/sdk": {
 			"version": "0.91.1",
@@ -513,6 +512,22 @@
 			"engines": {
 				"node": ">=22.19.0"
 			}
+		},
+		"node_modules/@earendil-works/pi-plugins": {
+			"version": "0.76.0",
+			"license": "MIT",
+			"dependencies": {
+				"@earendil-works/pi-agent-core": "^0.76.0",
+				"@earendil-works/pi-ai": "^0.76.0",
+				"@earendil-works/pi-tui": "^0.76.0",
+				"@modelcontextprotocol/ext-apps": "1.2.2",
+				"@modelcontextprotocol/sdk": "1.29.0",
+				"open": "10.2.0",
+				"recheck": "4.5.0",
+				"typebox": "1.1.38",
+				"zod": "3.25.76"
+			},
+			"inBundle": true
 		},
 		"node_modules/@earendil-works/pi-tui": {
 			"version": "0.76.0",

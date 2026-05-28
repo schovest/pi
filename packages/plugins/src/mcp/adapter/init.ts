@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "../../pi-types.ts";
 import { loadMcpConfig } from "./config.ts";
 import { ConsentManager } from "./consent-manager.ts";
 import { getMissingConfiguredDirectToolServers } from "./direct-tools.ts";
