@@ -256,6 +256,8 @@ export interface InteractiveModeOptions {
 }
 
 export class InteractiveMode {
+	private static readonly ALTERNATE_RENDER_INTERVAL_MS = 50;
+
 	private runtimeHost: AgentSessionRuntime;
 	private ui: TUI;
 	private chatContainer: Container;
@@ -309,12 +311,22 @@ export class InteractiveMode {
 	private alternateScrollOffset = 0;
 	private toolOutputExpandedBeforeAlternate = false;
 	private alternateScreenInputHandler?: (data: string) => { consume?: boolean; data?: string } | undefined;
+	private alternateScreenRenderInterval: ReturnType<typeof setInterval> | undefined;
+	private alternateScreenDirty = false;
+	private alternateScreenLastRenderedOffset = -1;
+	private alternateScreenContentVersion = 0;
+	private alternateScreenLastRenderedVersion = -1;
 
 	// Subagent alternate screen state
 	private subagentAlternateScreenActive = false;
 	private subagentAlternateScrollOffset = 0;
 	private subagentAlternateViewIndex: number | null = null;
 	private subagentAlternateInputHandler?: (data: string) => { consume?: boolean; data?: string } | undefined;
+	private subagentAlternateScreenRenderInterval: ReturnType<typeof setInterval> | undefined;
+	private subagentAlternateScreenDirty = false;
+	private subagentAlternateScreenLastRenderedOffset = -1;
+	private subagentAlternateScreenContentVersion = 0;
+	private subagentAlternateScreenLastRenderedVersion = -1;
 
 	// Thinking block visibility state
 	private hideThinkingBlock = false;
@@ -3039,6 +3051,14 @@ export class InteractiveMode {
 				break;
 			}
 		}
+		// Refresh alternate screen if active, since requestRender() is suppressed
+		if (this.alternateScreenActive) {
+			this.alternateScreenContentVersion++;
+			this.markAlternateScreenDirty();
+		} else if (this.subagentAlternateScreenActive) {
+			this.subagentAlternateScreenContentVersion++;
+			this.markSubagentAlternateScreenDirty();
+		}
 	}
 
 	/** Extract text content from a user message */
@@ -3577,12 +3597,29 @@ export class InteractiveMode {
 		for (const child of this.chatContainer.children) {
 			if (isExpandable(child)) child.setExpanded(true);
 		}
+		this.alternateScreenRenderInterval = setInterval(() => {
+			if (
+				this.alternateScreenDirty &&
+				(this.alternateScrollOffset !== this.alternateScreenLastRenderedOffset ||
+					this.alternateScreenContentVersion !== this.alternateScreenLastRenderedVersion)
+			) {
+				this.alternateScreenDirty = false;
+				this.renderAlternateScreen();
+			} else {
+				this.alternateScreenDirty = false;
+			}
+		}, InteractiveMode.ALTERNATE_RENDER_INTERVAL_MS);
 		this.renderAlternateScreen();
 		this.setupAlternateScreenInput();
 	}
 
 	private exitAlternateScreen(): void {
 		this.alternateScreenActive = false;
+		this.alternateScreenDirty = false;
+		if (this.alternateScreenRenderInterval) {
+			clearInterval(this.alternateScreenRenderInterval);
+			this.alternateScreenRenderInterval = undefined;
+		}
 		if (this.alternateScreenInputHandler) {
 			this.ui.removeInputListener(this.alternateScreenInputHandler);
 			this.alternateScreenInputHandler = undefined;
@@ -3601,21 +3638,31 @@ export class InteractiveMode {
 		const maxOffset = Math.max(0, totalLines - visibleHeight);
 		this.alternateScrollOffset = Math.max(0, Math.min(this.alternateScrollOffset, maxOffset));
 		const visibleLines = lines.slice(this.alternateScrollOffset, this.alternateScrollOffset + visibleHeight);
-		// Clear screen and move to home
+		// Synchronized output to prevent flickering
+		this.ui.terminal.write("\x1b[?2026h");
 		this.ui.terminal.write("\x1b[2J\x1b[H");
-		// Write content
 		this.ui.terminal.write(visibleLines.join("\n"));
-		// Write status bar at bottom
 		const statusLine = theme.fg(
 			"muted",
 			`Lines ${this.alternateScrollOffset + 1}-${Math.min(this.alternateScrollOffset + visibleHeight, totalLines)} of ${totalLines} | ↑↓ j/k scroll · PgUp/PgDn · Home/End · q exit`,
 		);
 		this.ui.terminal.write(`\n${statusLine}`);
+		this.ui.terminal.write("\x1b[?2026l");
+		this.alternateScreenLastRenderedOffset = this.alternateScrollOffset;
+		this.alternateScreenLastRenderedVersion = this.alternateScreenContentVersion;
+	}
+
+	private markAlternateScreenDirty(): void {
+		this.alternateScreenDirty = true;
+	}
+
+	private markAlternateScreenDirty(): void {
+		this.alternateScreenDirty = true;
 	}
 
 	private scrollAlternateScreen(delta: number): void {
 		this.alternateScrollOffset += delta;
-		this.renderAlternateScreen();
+		this.markAlternateScreenDirty();
 	}
 
 	private setupAlternateScreenInput(): void {
@@ -3638,14 +3685,14 @@ export class InteractiveMode {
 			}
 			if (matchesKey(data, "home") || data === "g") {
 				this.alternateScrollOffset = 0;
-				this.renderAlternateScreen();
+				this.markAlternateScreenDirty();
 				return { consume: true };
 			}
 			if (matchesKey(data, "end") || data === "G") {
 				const lines = this.chatContainer.render(this.ui.terminal.columns);
 				const maxOffset = Math.max(0, lines.length - (this.ui.terminal.rows - 1));
 				this.alternateScrollOffset = maxOffset;
-				this.renderAlternateScreen();
+				this.markAlternateScreenDirty();
 				return { consume: true };
 			}
 			if (data === "q" || data === "\x1b" || data === "\x0f") {
@@ -3669,6 +3716,18 @@ export class InteractiveMode {
 		this.subagentAlternateScrollOffset = 0;
 		this.ui.suspendRendering();
 		this.ui.terminal.write("\x1b[?1049h");
+		this.subagentAlternateScreenRenderInterval = setInterval(() => {
+			if (
+				this.subagentAlternateScreenDirty &&
+				(this.subagentAlternateScrollOffset !== this.subagentAlternateScreenLastRenderedOffset ||
+					this.subagentAlternateScreenContentVersion !== this.subagentAlternateScreenLastRenderedVersion)
+			) {
+				this.subagentAlternateScreenDirty = false;
+				this.renderSubagentAlternateScreen();
+			} else {
+				this.subagentAlternateScreenDirty = false;
+			}
+		}, InteractiveMode.ALTERNATE_RENDER_INTERVAL_MS);
 		this.renderSubagentAlternateScreen();
 		this.setupSubagentAlternateScreenInput();
 	}
@@ -3676,6 +3735,11 @@ export class InteractiveMode {
 	private exitSubagentAlternateScreen(): void {
 		this.subagentAlternateScreenActive = false;
 		this.subagentAlternateViewIndex = null;
+		this.subagentAlternateScreenDirty = false;
+		if (this.subagentAlternateScreenRenderInterval) {
+			clearInterval(this.subagentAlternateScreenRenderInterval);
+			this.subagentAlternateScreenRenderInterval = undefined;
+		}
 		if (this.subagentAlternateInputHandler) {
 			this.ui.removeInputListener(this.subagentAlternateInputHandler);
 			this.subagentAlternateInputHandler = undefined;
@@ -3760,8 +3824,10 @@ export class InteractiveMode {
 		const index = this.subagentAlternateViewIndex;
 		const result = this.latestSubagentDetails?.result?.results[index];
 		if (!result) {
+			this.ui.terminal.write("\x1b[?2026h");
 			this.ui.terminal.write("\x1b[2J\x1b[H");
 			this.ui.terminal.write("No output available");
+			this.ui.terminal.write("\x1b[?2026l");
 			return;
 		}
 
@@ -3777,7 +3843,8 @@ export class InteractiveMode {
 			this.subagentAlternateScrollOffset + visibleHeight,
 		);
 
-		// Clear screen and move to home
+		// Synchronized output to prevent flickering
+		this.ui.terminal.write("\x1b[?2026h");
 		this.ui.terminal.write("\x1b[2J\x1b[H");
 		// Write header
 		const statusText =
@@ -3792,11 +3859,18 @@ export class InteractiveMode {
 			`Lines ${this.subagentAlternateScrollOffset + 1}-${Math.min(this.subagentAlternateScrollOffset + visibleHeight, totalLines)} of ${totalLines} | ↑↓ j/k scroll · PgUp/PgDn · Home/End · q exit`,
 		);
 		this.ui.terminal.write(`\n${statusLine}`);
+		this.ui.terminal.write("\x1b[?2026l");
+		this.subagentAlternateScreenLastRenderedOffset = this.subagentAlternateScrollOffset;
+		this.subagentAlternateScreenLastRenderedVersion = this.subagentAlternateScreenContentVersion;
+	}
+
+	private markSubagentAlternateScreenDirty(): void {
+		this.subagentAlternateScreenDirty = true;
 	}
 
 	private scrollSubagentAlternateScreen(delta: number): void {
 		this.subagentAlternateScrollOffset += delta;
-		this.renderSubagentAlternateScreen();
+		this.markSubagentAlternateScreenDirty();
 	}
 
 	private setupSubagentAlternateScreenInput(): void {
@@ -3819,7 +3893,7 @@ export class InteractiveMode {
 			}
 			if (matchesKey(data, "home") || data === "g") {
 				this.subagentAlternateScrollOffset = 0;
-				this.renderSubagentAlternateScreen();
+				this.markSubagentAlternateScreenDirty();
 				return { consume: true };
 			}
 			if (matchesKey(data, "end") || data === "G") {
@@ -3827,7 +3901,7 @@ export class InteractiveMode {
 				const lines = container.render(this.ui.terminal.columns);
 				const maxOffset = Math.max(0, lines.length - (this.ui.terminal.rows - 2));
 				this.subagentAlternateScrollOffset = maxOffset;
-				this.renderSubagentAlternateScreen();
+				this.markSubagentAlternateScreenDirty();
 				return { consume: true };
 			}
 			if (data === "q" || data === "\x1b" || data === "\x0f") {
@@ -6028,6 +6102,11 @@ export class InteractiveMode {
 		// Exit alternate screens before stopping TUI
 		if (this.alternateScreenActive) {
 			this.alternateScreenActive = false;
+			this.alternateScreenDirty = false;
+			if (this.alternateScreenRenderInterval) {
+				clearInterval(this.alternateScreenRenderInterval);
+				this.alternateScreenRenderInterval = undefined;
+			}
 			if (this.alternateScreenInputHandler) {
 				this.ui.removeInputListener(this.alternateScreenInputHandler);
 				this.alternateScreenInputHandler = undefined;
@@ -6037,6 +6116,11 @@ export class InteractiveMode {
 		if (this.subagentAlternateScreenActive) {
 			this.subagentAlternateScreenActive = false;
 			this.subagentAlternateViewIndex = null;
+			this.subagentAlternateScreenDirty = false;
+			if (this.subagentAlternateScreenRenderInterval) {
+				clearInterval(this.subagentAlternateScreenRenderInterval);
+				this.subagentAlternateScreenRenderInterval = undefined;
+			}
 			if (this.subagentAlternateInputHandler) {
 				this.ui.removeInputListener(this.subagentAlternateInputHandler);
 				this.subagentAlternateInputHandler = undefined;
