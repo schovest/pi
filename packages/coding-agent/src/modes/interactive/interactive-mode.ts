@@ -122,11 +122,7 @@ import { ScopedModelsSelectorComponent } from "./components/scoped-models-select
 import { SessionSelectorComponent } from "./components/session-selector.ts";
 import { SettingsSelectorComponent } from "./components/settings-selector.ts";
 import { SkillInvocationMessageComponent } from "./components/skill-invocation-message.ts";
-import {
-	type SubagentDetailsData,
-	SubagentPickerComponent,
-	SubagentRunViewComponent,
-} from "./components/subagent-details.ts";
+import { type SubagentDetailsData, SubagentPickerComponent } from "./components/subagent-details.ts";
 import { SubagentsPanelComponent } from "./components/subagents-panel.ts";
 import { ToolExecutionComponent } from "./components/tool-execution.ts";
 import { TreeSelectorComponent } from "./components/tree-selector.ts";
@@ -306,11 +302,19 @@ export class InteractiveMode {
 	private latestSubagentDetails: SubagentDetailsData | undefined;
 	private subagentsPanelComponent: SubagentsPanelComponent | undefined;
 	private subagentPickerComponent: SubagentPickerComponent | undefined;
-	private subagentRunViewComponent: SubagentRunViewComponent | undefined;
-	private readonly subagentFooterStatusKey = "subagent-view";
 
 	// Tool output expansion state
 	private toolOutputExpanded = false;
+	private alternateScreenActive = false;
+	private alternateScrollOffset = 0;
+	private toolOutputExpandedBeforeAlternate = false;
+	private alternateScreenInputHandler?: (data: string) => { consume?: boolean; data?: string } | undefined;
+
+	// Subagent alternate screen state
+	private subagentAlternateScreenActive = false;
+	private subagentAlternateScrollOffset = 0;
+	private subagentAlternateViewIndex: number | null = null;
+	private subagentAlternateInputHandler?: (data: string) => { consume?: boolean; data?: string } | undefined;
 
 	// Thinking block visibility state
 	private hideThinkingBlock = false;
@@ -3080,8 +3084,6 @@ export class InteractiveMode {
 		this.latestSubagentDetails = details;
 		this.subagentsPanelComponent?.updateSubagentDetails(details);
 		this.subagentPickerComponent?.update(details);
-		this.subagentRunViewComponent?.update(details);
-		this.updateSubagentFooterStatus();
 	}
 
 	private addMessageToChat(message: AgentMessage, options?: { populateHistory?: boolean }): void {
@@ -3537,7 +3539,13 @@ export class InteractiveMode {
 	}
 
 	private toggleToolOutputExpansion(): void {
-		this.setToolsExpanded(!this.toolOutputExpanded);
+		if (this.subagentAlternateScreenActive) {
+			this.exitSubagentAlternateScreen();
+		} else if (this.alternateScreenActive) {
+			this.exitAlternateScreen();
+		} else {
+			this.enterAlternateScreen();
+		}
 	}
 
 	private setToolsExpanded(expanded: boolean): void {
@@ -3554,6 +3562,283 @@ export class InteractiveMode {
 		this.ui.requestRender();
 	}
 
+	// ==================== Ctrl+O Alternate Screen ====================
+
+	private enterAlternateScreen(): void {
+		this.toolOutputExpandedBeforeAlternate = this.toolOutputExpanded;
+		this.alternateScreenActive = true;
+		this.alternateScrollOffset = 0;
+		this.ui.suspendRendering();
+		this.ui.terminal.write("\x1b[?1049h");
+		// Expand all components without triggering TUI render
+		this.toolOutputExpanded = true;
+		const activeHeader = this.customHeader ?? this.builtInHeader;
+		if (isExpandable(activeHeader)) activeHeader.setExpanded(true);
+		for (const child of this.chatContainer.children) {
+			if (isExpandable(child)) child.setExpanded(true);
+		}
+		this.renderAlternateScreen();
+		this.setupAlternateScreenInput();
+	}
+
+	private exitAlternateScreen(): void {
+		this.alternateScreenActive = false;
+		if (this.alternateScreenInputHandler) {
+			this.ui.removeInputListener(this.alternateScreenInputHandler);
+			this.alternateScreenInputHandler = undefined;
+		}
+		this.ui.terminal.write("\x1b[?1049l");
+		this.setToolsExpanded(this.toolOutputExpandedBeforeAlternate);
+		this.ui.resumeRendering();
+	}
+
+	private renderAlternateScreen(): void {
+		if (!this.alternateScreenActive) return;
+		const width = this.ui.terminal.columns;
+		const lines = this.chatContainer.render(width);
+		const totalLines = lines.length;
+		const visibleHeight = this.ui.terminal.rows - 1; // Reserve 1 line for status bar
+		const maxOffset = Math.max(0, totalLines - visibleHeight);
+		this.alternateScrollOffset = Math.max(0, Math.min(this.alternateScrollOffset, maxOffset));
+		const visibleLines = lines.slice(this.alternateScrollOffset, this.alternateScrollOffset + visibleHeight);
+		// Clear screen and move to home
+		this.ui.terminal.write("\x1b[2J\x1b[H");
+		// Write content
+		this.ui.terminal.write(visibleLines.join("\n"));
+		// Write status bar at bottom
+		const statusLine = theme.fg(
+			"muted",
+			`Lines ${this.alternateScrollOffset + 1}-${Math.min(this.alternateScrollOffset + visibleHeight, totalLines)} of ${totalLines} | ↑↓ j/k scroll · PgUp/PgDn · Home/End · q exit`,
+		);
+		this.ui.terminal.write(`\n${statusLine}`);
+	}
+
+	private scrollAlternateScreen(delta: number): void {
+		this.alternateScrollOffset += delta;
+		this.renderAlternateScreen();
+	}
+
+	private setupAlternateScreenInput(): void {
+		this.alternateScreenInputHandler = (data: string) => {
+			if (matchesKey(data, "up") || data === "k") {
+				this.scrollAlternateScreen(-1);
+				return { consume: true };
+			}
+			if (matchesKey(data, "down") || data === "j") {
+				this.scrollAlternateScreen(1);
+				return { consume: true };
+			}
+			if (matchesKey(data, "pageUp")) {
+				this.scrollAlternateScreen(-(this.ui.terminal.rows - 2));
+				return { consume: true };
+			}
+			if (matchesKey(data, "pageDown")) {
+				this.scrollAlternateScreen(this.ui.terminal.rows - 2);
+				return { consume: true };
+			}
+			if (matchesKey(data, "home") || data === "g") {
+				this.alternateScrollOffset = 0;
+				this.renderAlternateScreen();
+				return { consume: true };
+			}
+			if (matchesKey(data, "end") || data === "G") {
+				const lines = this.chatContainer.render(this.ui.terminal.columns);
+				const maxOffset = Math.max(0, lines.length - (this.ui.terminal.rows - 1));
+				this.alternateScrollOffset = maxOffset;
+				this.renderAlternateScreen();
+				return { consume: true };
+			}
+			if (data === "q" || data === "\x1b" || data === "\x0f") {
+				this.exitAlternateScreen();
+				return { consume: true };
+			}
+			return { consume: true }; // Consume all other input
+		};
+		this.ui.addInputListener(this.alternateScreenInputHandler);
+	}
+
+	// ==================== Subagent Alternate Screen ====================
+
+	private enterSubagentAlternateScreen(index: number): void {
+		if (!this.latestSubagentDetails?.result?.results[index]) {
+			this.showStatus("No subagent result available");
+			return;
+		}
+		this.subagentAlternateViewIndex = index;
+		this.subagentAlternateScreenActive = true;
+		this.subagentAlternateScrollOffset = 0;
+		this.ui.suspendRendering();
+		this.ui.terminal.write("\x1b[?1049h");
+		this.renderSubagentAlternateScreen();
+		this.setupSubagentAlternateScreenInput();
+	}
+
+	private exitSubagentAlternateScreen(): void {
+		this.subagentAlternateScreenActive = false;
+		this.subagentAlternateViewIndex = null;
+		if (this.subagentAlternateInputHandler) {
+			this.ui.removeInputListener(this.subagentAlternateInputHandler);
+			this.subagentAlternateInputHandler = undefined;
+		}
+		this.ui.terminal.write("\x1b[?1049l");
+		this.ui.resumeRendering();
+	}
+
+	private buildSubagentChatContainer(index: number): Container {
+		const container = new Container();
+		const result = this.latestSubagentDetails?.result?.results[index];
+		if (!result) return container;
+
+		for (const message of result.messages) {
+			switch (message.role) {
+				case "user": {
+					const textContent = this.getUserMessageText(message);
+					if (textContent) {
+						container.addChild(new Spacer(1));
+						const userComponent = new UserMessageComponent(textContent, this.getMarkdownThemeWithSettings());
+						container.addChild(userComponent);
+					}
+					break;
+				}
+				case "assistant": {
+					const assistantComponent = new AssistantMessageComponent(
+						message,
+						this.hideThinkingBlock,
+						this.getMarkdownThemeWithSettings(),
+						this.hiddenThinkingLabel,
+					);
+					container.addChild(assistantComponent);
+					// Render tool call components
+					for (const content of message.content) {
+						if (content.type === "toolCall") {
+							const component = new ToolExecutionComponent(
+								content.name,
+								content.id,
+								content.arguments,
+								{
+									showImages: this.settingsManager.getShowImages(),
+									imageWidthCells: this.settingsManager.getImageWidthCells(),
+								},
+								this.getRegisteredToolDefinition(content.name),
+								this.ui,
+								this.sessionManager.getCwd(),
+							);
+							component.setExpanded(true);
+							container.addChild(component);
+						}
+					}
+					break;
+				}
+				case "toolResult": {
+					// Tool results are rendered inline with tool calls, skip here
+					break;
+				}
+				case "bashExecution": {
+					const component = new BashExecutionComponent(message.command, this.ui, message.excludeFromContext);
+					if (message.output) {
+						component.appendOutput(message.output);
+					}
+					component.setComplete(
+						message.exitCode,
+						message.cancelled,
+						message.truncated ? ({ truncated: true } as TruncationResult) : undefined,
+						message.fullOutputPath,
+					);
+					component.setExpanded(true);
+					container.addChild(component);
+					break;
+				}
+				default:
+					break;
+			}
+		}
+		return container;
+	}
+
+	private renderSubagentAlternateScreen(): void {
+		if (!this.subagentAlternateScreenActive || this.subagentAlternateViewIndex === null) return;
+		const index = this.subagentAlternateViewIndex;
+		const result = this.latestSubagentDetails?.result?.results[index];
+		if (!result) {
+			this.ui.terminal.write("\x1b[2J\x1b[H");
+			this.ui.terminal.write("No output available");
+			return;
+		}
+
+		const width = this.ui.terminal.columns;
+		const container = this.buildSubagentChatContainer(index);
+		const lines = container.render(width);
+		const totalLines = lines.length;
+		const visibleHeight = this.ui.terminal.rows - 2; // Reserve 2 lines for header and footer
+		const maxOffset = Math.max(0, totalLines - visibleHeight);
+		this.subagentAlternateScrollOffset = Math.max(0, Math.min(this.subagentAlternateScrollOffset, maxOffset));
+		const visibleLines = lines.slice(
+			this.subagentAlternateScrollOffset,
+			this.subagentAlternateScrollOffset + visibleHeight,
+		);
+
+		// Clear screen and move to home
+		this.ui.terminal.write("\x1b[2J\x1b[H");
+		// Write header
+		const statusText =
+			result.status === "success" ? theme.fg("success", result.status) : theme.fg("error", result.status);
+		const header = theme.bold(`[${result.agent} · ${statusText}]`);
+		this.ui.terminal.write(`${header}\n`);
+		// Write content
+		this.ui.terminal.write(visibleLines.join("\n"));
+		// Write status bar at bottom
+		const statusLine = theme.fg(
+			"muted",
+			`Lines ${this.subagentAlternateScrollOffset + 1}-${Math.min(this.subagentAlternateScrollOffset + visibleHeight, totalLines)} of ${totalLines} | ↑↓ j/k scroll · PgUp/PgDn · Home/End · q exit`,
+		);
+		this.ui.terminal.write(`\n${statusLine}`);
+	}
+
+	private scrollSubagentAlternateScreen(delta: number): void {
+		this.subagentAlternateScrollOffset += delta;
+		this.renderSubagentAlternateScreen();
+	}
+
+	private setupSubagentAlternateScreenInput(): void {
+		this.subagentAlternateInputHandler = (data: string) => {
+			if (matchesKey(data, "up") || data === "k") {
+				this.scrollSubagentAlternateScreen(-1);
+				return { consume: true };
+			}
+			if (matchesKey(data, "down") || data === "j") {
+				this.scrollSubagentAlternateScreen(1);
+				return { consume: true };
+			}
+			if (matchesKey(data, "pageUp")) {
+				this.scrollSubagentAlternateScreen(-(this.ui.terminal.rows - 3));
+				return { consume: true };
+			}
+			if (matchesKey(data, "pageDown")) {
+				this.scrollSubagentAlternateScreen(this.ui.terminal.rows - 3);
+				return { consume: true };
+			}
+			if (matchesKey(data, "home") || data === "g") {
+				this.subagentAlternateScrollOffset = 0;
+				this.renderSubagentAlternateScreen();
+				return { consume: true };
+			}
+			if (matchesKey(data, "end") || data === "G") {
+				const container = this.buildSubagentChatContainer(this.subagentAlternateViewIndex!);
+				const lines = container.render(this.ui.terminal.columns);
+				const maxOffset = Math.max(0, lines.length - (this.ui.terminal.rows - 2));
+				this.subagentAlternateScrollOffset = maxOffset;
+				this.renderSubagentAlternateScreen();
+				return { consume: true };
+			}
+			if (data === "q" || data === "\x1b" || data === "\x0f") {
+				this.exitSubagentAlternateScreen();
+				return { consume: true };
+			}
+			return { consume: true }; // Consume all other input
+		};
+		this.ui.addInputListener(this.subagentAlternateInputHandler);
+	}
+
 	private showSubagentDetails(): void {
 		if (!this.latestSubagentDetails) {
 			this.showStatus("No subagent details available");
@@ -3566,7 +3851,7 @@ export class InteractiveMode {
 				(index) => {
 					this.subagentPickerComponent = undefined;
 					done();
-					this.enterSubagentRunView(index);
+					this.enterSubagentAlternateScreen(index);
 				},
 				() => {
 					this.subagentPickerComponent = undefined;
@@ -3577,79 +3862,6 @@ export class InteractiveMode {
 			this.subagentPickerComponent = component;
 			return { component, focus: component };
 		});
-	}
-
-	private getCurrentFooterComponent(): Component {
-		return this.customFooter ?? this.footer;
-	}
-
-	private enterSubagentRunView(index: number): void {
-		if (!this.latestSubagentDetails) {
-			this.showStatus("No subagent details available");
-			return;
-		}
-
-		if (this.subagentRunViewComponent) {
-			this.subagentRunViewComponent.update(this.latestSubagentDetails);
-			this.ui.setFocus(this.subagentRunViewComponent);
-			this.updateSubagentFooterStatus();
-			this.ui.requestRender();
-			return;
-		}
-
-		const component = new SubagentRunViewComponent(this.latestSubagentDetails, index, () => {
-			this.exitSubagentRunView();
-		});
-		this.subagentRunViewComponent = component;
-
-		const footer = this.getCurrentFooterComponent();
-		this.ui.removeChild(footer);
-		this.ui.removeChild(this.chatContainer);
-		this.ui.removeChild(this.pendingMessagesContainer);
-		this.ui.removeChild(this.statusContainer);
-		this.ui.removeChild(this.widgetContainerAbove);
-		this.ui.removeChild(this.editorContainer);
-		this.ui.removeChild(this.widgetContainerBelow);
-		this.ui.addChild(component);
-		this.ui.addChild(footer);
-		this.ui.setFocus(component);
-		this.updateSubagentFooterStatus();
-		this.ui.requestRender();
-	}
-
-	private exitSubagentRunView(): void {
-		const component = this.subagentRunViewComponent;
-		if (!component) {
-			return;
-		}
-
-		const footer = this.getCurrentFooterComponent();
-		this.ui.removeChild(footer);
-		this.ui.removeChild(component);
-		this.subagentRunViewComponent = undefined;
-		this.footerDataProvider.setExtensionStatus(this.subagentFooterStatusKey, undefined);
-		this.ui.addChild(this.chatContainer);
-		this.ui.addChild(this.pendingMessagesContainer);
-		this.ui.addChild(this.statusContainer);
-		this.ui.addChild(this.widgetContainerAbove);
-		this.ui.addChild(this.editorContainer);
-		this.ui.addChild(this.widgetContainerBelow);
-		this.ui.addChild(footer);
-		this.ui.setFocus(this.editor);
-		this.ui.requestRender();
-	}
-
-	private updateSubagentFooterStatus(): void {
-		const component = this.subagentRunViewComponent;
-		if (!component) {
-			return;
-		}
-		const agent = component.getAgentName() ?? "unknown";
-		this.footerDataProvider.setExtensionStatus(
-			this.subagentFooterStatusKey,
-			theme.fg("warning", `Subagent: ${agent} · Esc 返回主 Agent`),
-		);
-		this.ui.requestRender();
 	}
 
 	private toggleThinkingBlockVisibility(): void {
@@ -5813,6 +6025,24 @@ export class InteractiveMode {
 
 	stop(): void {
 		this.unregisterSignalHandlers();
+		// Exit alternate screens before stopping TUI
+		if (this.alternateScreenActive) {
+			this.alternateScreenActive = false;
+			if (this.alternateScreenInputHandler) {
+				this.ui.removeInputListener(this.alternateScreenInputHandler);
+				this.alternateScreenInputHandler = undefined;
+			}
+			this.ui.terminal.write("\x1b[?1049l");
+		}
+		if (this.subagentAlternateScreenActive) {
+			this.subagentAlternateScreenActive = false;
+			this.subagentAlternateViewIndex = null;
+			if (this.subagentAlternateInputHandler) {
+				this.ui.removeInputListener(this.subagentAlternateInputHandler);
+				this.subagentAlternateInputHandler = undefined;
+			}
+			this.ui.terminal.write("\x1b[?1049l");
+		}
 		if (this.settingsManager.getShowTerminalProgress()) {
 			this.ui.terminal.setProgress(false);
 		}

@@ -950,8 +950,24 @@ export class TUI extends Container {
 		return null;
 	}
 
+	private renderingSuspended = false;
+
+	suspendRendering(): void {
+		this.renderingSuspended = true;
+		if (this.renderTimer) {
+			clearTimeout(this.renderTimer);
+			this.renderTimer = undefined;
+		}
+		this.renderRequested = false;
+	}
+
+	resumeRendering(): void {
+		this.renderingSuspended = false;
+		this.requestRender(true);
+	}
+
 	private doRender(): void {
-		if (this.stopped) return;
+		if (this.stopped || this.renderingSuspended) return;
 		const width = this.terminal.columns;
 		const height = this.terminal.rows;
 		const widthChanged = this.previousWidth !== 0 && this.previousWidth !== width;
