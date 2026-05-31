@@ -101,6 +101,8 @@ import type {
 	SubagentScope,
 } from "./subagents/index.ts";
 import { createSubagentToolDefinition, discoverSubagents, runSubagents } from "./subagents/index.ts";
+import type { PrimaryAgentDefinition } from "./primary-agents/index.ts";
+import { discoverPrimaryAgents } from "./primary-agents/index.ts";
 import { type BuildSystemPromptOptions, buildSystemPrompt } from "./system-prompt.ts";
 import { type BashOperations, createLocalBashOperations } from "./tools/bash.ts";
 import { createAllToolDefinitions } from "./tools/index.ts";
@@ -297,6 +299,10 @@ export class AgentSession {
 	private _retryAbortController: AbortController | undefined = undefined;
 	private _retryAttempt = 0;
 	private _runningSubagents = new Map<string, SubagentRunEvent>();
+
+	// Primary agent state
+	private _currentPrimaryAgent = "build";
+	private _primaryAgentPrompt = "";
 
 	// Bash execution state
 	private _bashAbortController: AbortController | undefined = undefined;
@@ -802,6 +808,11 @@ export class AgentSession {
 			parameters: definition.parameters,
 			sourceInfo,
 		}));
+	}
+
+	/** Current primary agent role name */
+	get currentPrimaryAgent(): string {
+		return this._currentPrimaryAgent;
 	}
 
 	getToolDefinition(name: string): ToolDefinition | undefined {
