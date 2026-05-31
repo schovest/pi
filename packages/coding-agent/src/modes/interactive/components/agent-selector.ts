@@ -47,8 +47,7 @@ export class AgentSelectorComponent extends Container {
 
 	private rebuild(): void {
 		this.clear();
-		this.selectedIndex =
-			this.agents.length === 0 ? 0 : Math.min(this.selectedIndex, this.agents.length - 1);
+		this.selectedIndex = this.agents.length === 0 ? 0 : Math.min(this.selectedIndex, this.agents.length - 1);
 		const selected = this.agents[this.selectedIndex];
 
 		this.addChild(new DynamicBorder());
@@ -73,7 +72,8 @@ export class AgentSelectorComponent extends Container {
 			this.addChild(new Text(theme.bold("Details"), 1, 0));
 			this.addChild(new Text(`${theme.bold("Description")} ${selected.description}`, 1, 0));
 			const promptSummary = selected.systemPrompt
-				? selected.systemPrompt.replace(/\s+/g, " ").trim().slice(0, 120) + (selected.systemPrompt.length > 120 ? "..." : "")
+				? selected.systemPrompt.replace(/\s+/g, " ").trim().slice(0, 120) +
+					(selected.systemPrompt.length > 120 ? "..." : "")
 				: "(default system prompt)";
 			this.addChild(new Text(`${theme.bold("Prompt")} ${promptSummary}`, 1, 0));
 			const tools = selected.includedTools

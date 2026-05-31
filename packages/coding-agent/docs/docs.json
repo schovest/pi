@@ -69,6 +69,10 @@
           "path": "plugins.md"
         },
         {
+          "title": "MCP",
+          "path": "mcp.md"
+        },
+        {
           "title": "Custom Models",
           "path": "models.md"
         },

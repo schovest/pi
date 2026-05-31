@@ -77,6 +77,7 @@ import { type AppKeybinding, KeybindingsManager } from "../../core/keybindings.t
 import { createCompactionSummaryMessage } from "../../core/messages.ts";
 import { defaultModelPerProvider, findExactModelReferenceMatch, resolveModelScope } from "../../core/model-resolver.ts";
 import { DefaultPackageManager } from "../../core/package-manager.ts";
+import { discoverPrimaryAgentsSync } from "../../core/primary-agents/index.ts";
 import { BUILT_IN_PROVIDER_DISPLAY_NAMES } from "../../core/provider-display-names.ts";
 import type { ResourceDiagnostic } from "../../core/resource-loader.ts";
 import { formatMissingSessionCwdPrompt, MissingSessionCwdError } from "../../core/session-cwd.ts";
@@ -84,8 +85,6 @@ import { type SessionContext, SessionManager } from "../../core/session-manager.
 import { BUILTIN_SLASH_COMMANDS } from "../../core/slash-commands.ts";
 import type { SourceInfo } from "../../core/source-info.ts";
 import { discoverSubagentsSync } from "../../core/subagents/index.ts";
-import { discoverPrimaryAgentsSync } from "../../core/primary-agents/index.ts";
-import type { PrimaryAgentDefinition } from "../../core/primary-agents/types.ts";
 import { isInstallTelemetryEnabled } from "../../core/telemetry.ts";
 import type { TruncationResult } from "../../core/tools/truncate.ts";
 import { getChangelogPath, getNewEntries, parseChangelog } from "../../utils/changelog.ts";
@@ -97,8 +96,8 @@ import { getPiUserAgent } from "../../utils/pi-user-agent.ts";
 import { killTrackedDetachedChildren } from "../../utils/shell.ts";
 import { ensureTool } from "../../utils/tools-manager.ts";
 import { checkForNewPiVersion, type LatestPiRelease } from "../../utils/version-check.ts";
-import { AgentsPanelComponent } from "./components/agents-panel.ts";
 import { AgentSelectorComponent } from "./components/agent-selector.ts";
+import { AgentsPanelComponent } from "./components/agents-panel.ts";
 import { ArminComponent } from "./components/armin.ts";
 import { AssistantMessageComponent } from "./components/assistant-message.ts";
 import { BashExecutionComponent } from "./components/bash-execution.ts";
@@ -2550,6 +2549,12 @@ export class InteractiveMode {
 			}
 			if (text === "/agents") {
 				this.handleAgentsCommand();
+				return;
+			}
+			if (text === "/agent" || text.startsWith("/agent ")) {
+				const agentName = text.startsWith("/agent ") ? text.slice(7).trim() : undefined;
+				this.editor.setText("");
+				await this.handleAgentCommand(agentName || undefined);
 				return;
 			}
 			if (text === "/running-agents") {

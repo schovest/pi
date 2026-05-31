@@ -80,6 +80,8 @@ import {
 import { emitSessionShutdownEvent } from "./extensions/runner.ts";
 import type { BashExecutionMessage, CustomMessage } from "./messages.ts";
 import type { ModelRegistry } from "./model-registry.ts";
+import type { PrimaryAgentDefinition } from "./primary-agents/index.ts";
+import { discoverPrimaryAgents } from "./primary-agents/index.ts";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.ts";
 import type { ResourceExtensionPaths, ResourceLoader } from "./resource-loader.ts";
 import type { BranchSummaryEntry, CompactionEntry } from "./session-manager.ts";
@@ -101,8 +103,6 @@ import type {
 	SubagentScope,
 } from "./subagents/index.ts";
 import { createSubagentToolDefinition, discoverSubagents, runSubagents } from "./subagents/index.ts";
-import type { PrimaryAgentDefinition } from "./primary-agents/index.ts";
-import { discoverPrimaryAgents } from "./primary-agents/index.ts";
 import { type BuildSystemPromptOptions, buildSystemPrompt } from "./system-prompt.ts";
 import { type BashOperations, createLocalBashOperations } from "./tools/bash.ts";
 import { createAllToolDefinitions } from "./tools/index.ts";
@@ -160,6 +160,7 @@ export type AgentSessionEvent =
 			errorMessage?: string;
 	  }
 	| { type: "auto_retry_start"; attempt: number; maxAttempts: number; delayMs: number; errorMessage: string }
+	| { type: "primary_agent_changed"; name: string; previousName: string }
 	| { type: "auto_retry_end"; success: boolean; attempt: number; finalError?: string };
 
 /** Listener function for agent session events */
@@ -815,6 +816,54 @@ export class AgentSession {
 		return this._currentPrimaryAgent;
 	}
 
+	/** List available primary agent definitions. */
+	async listPrimaryAgents(): Promise<PrimaryAgentDefinition[]> {
+		return discoverPrimaryAgents({ cwd: this._cwd, agentDir: this._agentDir });
+	}
+
+	/** Switch the primary agent role. Replaces system prompt and active tools. */
+	async switchPrimaryAgent(name: string): Promise<void> {
+		if (this.isStreaming) {
+			throw new Error("Cannot switch agent role while streaming");
+		}
+
+		const definitions = await discoverPrimaryAgents({ cwd: this._cwd, agentDir: this._agentDir });
+		const definition = definitions.find((d) => d.name === name);
+		if (!definition) {
+			throw new Error(`Unknown primary agent: ${name}`);
+		}
+
+		const previousName = this._currentPrimaryAgent;
+		this._currentPrimaryAgent = name;
+		this._primaryAgentPrompt = definition.systemPrompt;
+
+		// Compute new active tool set
+		const allToolNames = Array.from(this._toolRegistry.keys());
+		let newActiveTools: string[];
+		if (definition.includedTools && definition.includedTools.length > 0) {
+			newActiveTools = definition.includedTools.filter((t) => this._toolRegistry.has(t));
+		} else if (definition.excludedTools && definition.excludedTools.length > 0) {
+			const excluded = new Set(definition.excludedTools);
+			newActiveTools = allToolNames.filter((t) => !excluded.has(t));
+		} else {
+			newActiveTools = allToolNames;
+		}
+		this.setActiveToolsByName(newActiveTools);
+
+		// Optionally update model and thinking level
+		if (definition.model && this.model) {
+			const targetModel = this._modelRegistry.find(this.model.provider, definition.model);
+			if (targetModel && this._modelRegistry.hasConfiguredAuth(targetModel)) {
+				await this.setModel(targetModel);
+			}
+		}
+		if (definition.thinking) {
+			this.setThinkingLevel(definition.thinking);
+		}
+
+		this._emit({ type: "primary_agent_changed", name, previousName });
+	}
+
 	getToolDefinition(name: string): ToolDefinition | undefined {
 		return this._toolDefinitions.get(name)?.definition;
 	}
@@ -1015,6 +1064,7 @@ export class AgentSession {
 			skills: loadedSkills,
 			contextFiles: loadedContextFiles,
 			customPrompt: loaderSystemPrompt,
+			primaryAgentPrompt: this._primaryAgentPrompt || undefined,
 			appendSystemPrompt,
 			selectedTools: validToolNames,
 			toolSnippets,
