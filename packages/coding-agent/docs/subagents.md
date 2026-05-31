@@ -15,8 +15,8 @@ Subagent 是一种任务委托机制，允许主 agent 将任务分配给专门�
 
 创建 Markdown 文件定义自定义 agent：
 
-**用户级**：`~/.pi/agent/agents/*.md`
-**项目级**：`.pi/agents/*.md`（需要 `agentScope: "project"` 或 `"both"`）
+**用户级**：`~/.pi/agent/subagents/*.md`
+**项目级**：`.pi/subagents/*.md`（需要 `subagentScope: "project"` 或 `"both"`）
 
 ```markdown
 ---
@@ -82,16 +82,16 @@ Frontmatter 中的 `model` 和 `thinking` 可被任务参数覆盖。
 
 | Scope | 加载的 Agent |
 |-------|-------------|
-| `user`（默认） | 内置 + `~/.pi/agent/agents/` |
-| `project` | 内置 + `.pi/agents/` |
+| `user`（默认） | 内置 + `~/.pi/agent/subagents/` |
+| `project` | 内置 + `.pi/subagents/` |
 | `both` | 内置 + 用户级 + 项目级 |
 
 项目级 agent 覆盖同名的用户级 agent。
 
 ## 运行时监控
 
-- 状态栏显示 `agents:N` 表示运行中的 subagent 数量
-- `/running-agents` 查看每个 subagent 的事件、工具、输出、错误、模型、思考级别和用量
+- 状态栏显示 `subagents:N` 表示运行中的 subagent 数量
+- `/running-subagents` 查看每个 subagent 的事件、工具、输出、错误、模型、思考级别和用量
 
 ## 创建自定义 Agent
 
@@ -180,8 +180,8 @@ tools: [read, grep, find, ls, bash]
 
 ```bash
 # 用户级（所有项目可用）
-mkdir -p ~/.pi/agent/agents
-cat > ~/.pi/agent/agents/dep-analyzer.md << 'EOF'
+mkdir -p ~/.pi/agent/subagents
+cat > ~/.pi/agent/subagents/dep-analyzer.md << 'EOF'
 ---
 description: 分析依赖关系
 model: anthropic/claude-sonnet-4-5
@@ -191,8 +191,8 @@ tools: [read, grep, find, ls, bash]
 EOF
 
 # 项目级（仅当前项目）
-mkdir -p .pi/agents
-cat > .pi/agents/project-reviewer.md << 'EOF'
+mkdir -p .pi/subagents
+cat > .pi/subagents/project-reviewer.md << 'EOF'
 ---
 description: 项目特定审查规则
 tools: [read, grep, find, ls]
@@ -209,7 +209,7 @@ pi
 > 使用 dep-analyzer 分析当前项目的依赖
 
 # 指定 scope 测试项目级 agent
-> 用 agentScope=both 运行 project-reviewer 审查 src/
+> 用 subagentScope=both 运行 project-reviewer 审查 src/
 ```
 
 ## 最佳实践

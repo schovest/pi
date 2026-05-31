@@ -92,10 +92,10 @@ function loadAgentDir(path: string, scope: SubagentDefinitionScope): SubagentDef
 		.map((entry) => readAgentFile(join(path, entry.name), scope));
 }
 
-function findNearestProjectAgentsDir(cwd: string): string | undefined {
+function findNearestProjectSubagentsDir(cwd: string): string | undefined {
 	let current = cwd;
 	for (;;) {
-		const candidate = join(current, ".pi", "agents");
+		const candidate = join(current, ".pi", "subagents");
 		if (existsSync(candidate) && statSync(candidate).isDirectory()) {
 			return candidate;
 		}
@@ -120,9 +120,9 @@ function mergeAgents(groups: SubagentDefinition[][]): SubagentDefinition[] {
 export function discoverSubagentsSync(options: DiscoverSubagentsOptions): SubagentDefinition[] {
 	const scope = options.scope ?? "user";
 	const builtIn = BUILT_IN_SUBAGENTS.map((agent) => ({ ...agent }));
-	const user = loadAgentDir(join(options.agentDir, "agents"), "user");
+	const user = loadAgentDir(join(options.agentDir, "subagents"), "user");
 	const shouldLoadProject = scope === "project" || scope === "both";
-	const projectDir = shouldLoadProject ? findNearestProjectAgentsDir(options.cwd) : undefined;
+	const projectDir = shouldLoadProject ? findNearestProjectSubagentsDir(options.cwd) : undefined;
 	const project = projectDir ? loadAgentDir(projectDir, "project") : [];
 	return mergeAgents([builtIn, user, project]);
 }

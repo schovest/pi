@@ -369,7 +369,7 @@ export async function runSubagents(
 			await discoverSubagents({
 				cwd: session.cwd,
 				agentDir: options.agentDir ?? session.agentDir,
-				scope: "agentScope" in request ? request.agentScope : undefined,
+				scope: "subagentScope" in request ? request.subagentScope : undefined,
 			})
 		).map((definition) => [definition.name, definition]),
 	);

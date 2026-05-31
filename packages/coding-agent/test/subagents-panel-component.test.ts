@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import type { SubagentDefinition } from "../src/core/subagents/types.ts";
-import { AgentsPanelComponent } from "../src/modes/interactive/components/agents-panel.ts";
+import { SubagentsPanelComponent } from "../src/modes/interactive/components/subagents-panel.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../src/utils/ansi.ts";
 
-function render(component: AgentsPanelComponent): string {
+function render(component: SubagentsPanelComponent): string {
 	return stripAnsi(component.render(160).join("\n"));
 }
 
-const agents: SubagentDefinition[] = [
+const subagents: SubagentDefinition[] = [
 	{
 		name: "scout",
 		description: "Builtin scout",
@@ -36,17 +36,17 @@ const agents: SubagentDefinition[] = [
 	},
 ];
 
-describe("AgentsPanelComponent", () => {
+describe("SubagentsPanelComponent", () => {
 	it("renders builtin, user, and project agent definitions with locations", () => {
 		initTheme("dark");
-		const component = new AgentsPanelComponent({
-			agents,
+		const component = new SubagentsPanelComponent({
+			subagents,
 			onClose: () => {},
 		});
 
 		const text = render(component);
 
-		expect(text).toContain("Agents");
+		expect(text).toContain("Subagents");
 		expect(text).toContain("scout");
 		expect(text).toContain("builtin");
 		expect(text).toContain("Builtin definitions are compiled into this Pi distribution.");
@@ -60,8 +60,8 @@ describe("AgentsPanelComponent", () => {
 
 	it("shows lifecycle status, task, tool, tokens, error, and recent events", () => {
 		initTheme("dark");
-		const component = new AgentsPanelComponent({
-			agents,
+		const component = new SubagentsPanelComponent({
+			subagents,
 			subagentDetails: {
 				events: [
 					{
@@ -119,8 +119,8 @@ describe("AgentsPanelComponent", () => {
 
 	it("shows a clear empty run state when no run exists for the selected agent", () => {
 		initTheme("dark");
-		const component = new AgentsPanelComponent({
-			agents,
+		const component = new SubagentsPanelComponent({
+			subagents,
 			onClose: () => {},
 		});
 
@@ -129,8 +129,8 @@ describe("AgentsPanelComponent", () => {
 
 	it("updates details when navigating between agents", () => {
 		initTheme("dark");
-		const component = new AgentsPanelComponent({
-			agents,
+		const component = new SubagentsPanelComponent({
+			subagents,
 			onClose: () => {},
 		});
 

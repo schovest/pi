@@ -15,14 +15,14 @@ const ThinkingSchema = Type.Union([
 	Type.Literal("xhigh"),
 ]);
 
-function createAgentSchema(agentNames: string[]) {
-	const description = `Subagent name. Available values: ${agentNames.join(", ")}`;
-	return Type.String({ description, enum: agentNames });
+function createSubagentNameSchema(subagentNames: string[]) {
+	const description = `Subagent name. Available values: ${subagentNames.join(", ")}`;
+	return Type.String({ description, enum: subagentNames });
 }
 
-function createTaskSchema(agentNames: string[]) {
+function createTaskSchema(subagentNames: string[]) {
 	return Type.Object({
-		agent: createAgentSchema(agentNames),
+		agent: createSubagentNameSchema(subagentNames),
 		task: Type.String(),
 		model: Type.Optional(Type.String()),
 		thinking: Type.Optional(ThinkingSchema),
@@ -30,17 +30,17 @@ function createTaskSchema(agentNames: string[]) {
 	});
 }
 
-function createSubagentToolSchema(agentNames: string[]) {
-	const taskSchema = createTaskSchema(agentNames);
+function createSubagentToolSchema(subagentNames: string[]) {
+	const taskSchema = createTaskSchema(subagentNames);
 	return Type.Object({
-		agent: Type.Optional(createAgentSchema(agentNames)),
+		agent: Type.Optional(createSubagentNameSchema(subagentNames)),
 		task: Type.Optional(Type.String()),
 		model: Type.Optional(Type.String()),
 		thinking: Type.Optional(ThinkingSchema),
 		tools: Type.Optional(Type.Array(Type.String())),
 		tasks: Type.Optional(Type.Array(taskSchema)),
 		chain: Type.Optional(Type.Array(taskSchema)),
-		agentScope: Type.Optional(Type.Union([Type.Literal("user"), Type.Literal("project"), Type.Literal("both")])),
+		subagentScope: Type.Optional(Type.Union([Type.Literal("user"), Type.Literal("project"), Type.Literal("both")])),
 	});
 }
 
@@ -64,7 +64,7 @@ type SubagentToolInput = {
 		thinking?: SubagentToolInput["thinking"];
 		tools?: string[];
 	}>;
-	agentScope?: "user" | "project" | "both";
+	subagentScope?: "user" | "project" | "both";
 };
 
 interface SubagentToolDetails {
@@ -131,11 +131,11 @@ export function createSubagentToolDefinition(session: AgentSession) {
 		agentDir: session.agentDir,
 		scope: "both",
 	});
-	const agentNames = availableAgents.map((agent) => agent.name);
+	const subagentNames = availableAgents.map((agent) => agent.name);
 	const agentSummary = availableAgents
 		.map((agent) => `${agent.name} (${agent.scope}) - ${agent.description}`)
 		.join("; ");
-	const parameterSummary = `agent must be one of: ${agentNames.join(", ")}. Use agentScope="project" or "both" for project-defined agents.`;
+	const parameterSummary = `agent must be one of: ${subagentNames.join(", ")}. Use subagentScope="project" or "both" for project-defined subagents.`;
 	const parallelGuidance =
 		"For 2 or more independent subagents, use one subagent call with tasks[] so they run concurrently. Use multiple separate subagent tool calls only when tasks cannot be expressed in one tasks[] batch.";
 
@@ -152,23 +152,23 @@ export function createSubagentToolDefinition(session: AgentSession) {
 			"Use subagent for independent subtasks that benefit from a focused agent role.",
 			"Do not use subagent recursively from inside subagents.",
 		],
-		parameters: createSubagentToolSchema(agentNames),
+		parameters: createSubagentToolSchema(subagentNames),
 		executionMode: "parallel",
 		execute: async (_toolCallId, params, signal, onUpdate) => {
 			validateMode(params);
 			const details: SubagentToolDetails = { events: [] };
 			const result = await session.runSubagents(
 				params.tasks
-					? { tasks: params.tasks, agentScope: params.agentScope }
+					? { tasks: params.tasks, subagentScope: params.subagentScope }
 					: params.chain
-						? { chain: params.chain, agentScope: params.agentScope }
+						? { chain: params.chain, subagentScope: params.subagentScope }
 						: {
 								agent: params.agent ?? "",
 								task: params.task ?? "",
 								model: params.model,
 								thinking: params.thinking,
 								tools: params.tools,
-								agentScope: params.agentScope,
+								subagentScope: params.subagentScope,
 							},
 				{
 					signal,

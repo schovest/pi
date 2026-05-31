@@ -97,7 +97,6 @@ import { killTrackedDetachedChildren } from "../../utils/shell.ts";
 import { ensureTool } from "../../utils/tools-manager.ts";
 import { checkForNewPiVersion, type LatestPiRelease } from "../../utils/version-check.ts";
 import { AgentSelectorComponent } from "./components/agent-selector.ts";
-import { AgentsPanelComponent } from "./components/agents-panel.ts";
 import { ArminComponent } from "./components/armin.ts";
 import { AssistantMessageComponent } from "./components/assistant-message.ts";
 import { BashExecutionComponent } from "./components/bash-execution.ts";
@@ -128,6 +127,7 @@ import {
 	SubagentPickerComponent,
 	SubagentRunViewComponent,
 } from "./components/subagent-details.ts";
+import { SubagentsPanelComponent } from "./components/subagents-panel.ts";
 import { ToolExecutionComponent } from "./components/tool-execution.ts";
 import { TreeSelectorComponent } from "./components/tree-selector.ts";
 import { UserMessageComponent } from "./components/user-message.ts";
@@ -304,7 +304,7 @@ export class InteractiveMode {
 	// Tool execution tracking: toolCallId -> component
 	private pendingTools = new Map<string, ToolExecutionComponent>();
 	private latestSubagentDetails: SubagentDetailsData | undefined;
-	private agentsPanelComponent: AgentsPanelComponent | undefined;
+	private subagentsPanelComponent: SubagentsPanelComponent | undefined;
 	private subagentPickerComponent: SubagentPickerComponent | undefined;
 	private subagentRunViewComponent: SubagentRunViewComponent | undefined;
 	private readonly subagentFooterStatusKey = "subagent-view";
@@ -2547,8 +2547,8 @@ export class InteractiveMode {
 				this.editor.setText("");
 				return;
 			}
-			if (text === "/agents") {
-				this.handleAgentsCommand();
+			if (text === "/subagents") {
+				this.handleSubagentsCommand();
 				return;
 			}
 			if (text === "/agent" || text.startsWith("/agent ")) {
@@ -2557,7 +2557,7 @@ export class InteractiveMode {
 				await this.handleAgentCommand(agentName || undefined);
 				return;
 			}
-			if (text === "/running-agents") {
+			if (text === "/running-subagents") {
 				this.showSubagentDetails();
 				this.editor.setText("");
 				return;
@@ -3078,7 +3078,7 @@ export class InteractiveMode {
 			return;
 		}
 		this.latestSubagentDetails = details;
-		this.agentsPanelComponent?.updateSubagentDetails(details);
+		this.subagentsPanelComponent?.updateSubagentDetails(details);
 		this.subagentPickerComponent?.update(details);
 		this.subagentRunViewComponent?.update(details);
 		this.updateSubagentFooterStatus();
@@ -4177,23 +4177,23 @@ export class InteractiveMode {
 		});
 	}
 
-	private showAgentsPanel(): void {
+	private showSubagentsPanel(): void {
 		this.showSelector((done) => {
 			const agents = discoverSubagentsSync({
 				cwd: this.session.cwd,
 				agentDir: this.session.agentDir,
 				scope: "both",
 			});
-			const panel = new AgentsPanelComponent({
-				agents,
+			const panel = new SubagentsPanelComponent({
+				subagents: agents,
 				subagentDetails: this.latestSubagentDetails,
 				onClose: () => {
-					this.agentsPanelComponent = undefined;
+					this.subagentsPanelComponent = undefined;
 					done();
 					this.ui.requestRender();
 				},
 			});
-			this.agentsPanelComponent = panel;
+			this.subagentsPanelComponent = panel;
 			return { component: panel, focus: panel };
 		});
 	}
@@ -5128,9 +5128,9 @@ export class InteractiveMode {
 		this.showPluginsManager();
 	}
 
-	private handleAgentsCommand(): void {
+	private handleSubagentsCommand(): void {
 		this.editor.setText("");
-		this.showAgentsPanel();
+		this.showSubagentsPanel();
 	}
 
 	private async handleReloadCommand(): Promise<void> {

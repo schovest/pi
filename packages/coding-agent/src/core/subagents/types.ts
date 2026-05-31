@@ -26,9 +26,9 @@ export interface SubagentTask {
 }
 
 export type SubagentRunRequest =
-	| (SubagentTask & { agentScope?: SubagentScope })
-	| { tasks: SubagentTask[]; agentScope?: SubagentScope }
-	| { chain: SubagentTask[]; agentScope?: SubagentScope };
+	| (SubagentTask & { subagentScope?: SubagentScope })
+	| { tasks: SubagentTask[]; subagentScope?: SubagentScope }
+	| { chain: SubagentTask[]; subagentScope?: SubagentScope };
 
 export interface SubagentRunOptions {
 	signal?: AbortSignal;

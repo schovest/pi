@@ -5,8 +5,8 @@ import { DynamicBorder } from "./dynamic-border.ts";
 import { keyHint, rawKeyHint } from "./keybinding-hints.ts";
 import type { SubagentDetailsData } from "./subagent-details.ts";
 
-interface AgentsPanelOptions {
-	agents: SubagentDefinition[];
+interface SubagentsPanelOptions {
+	subagents: SubagentDefinition[];
 	subagentDetails?: SubagentDetailsData;
 	onClose: () => void;
 }
@@ -108,15 +108,15 @@ function latestRunForAgent(data: SubagentDetailsData | undefined, agent: string)
 	return latestResultForAgent(data.result, agent) ?? latestEventRunForAgent(data.events, agent);
 }
 
-export class AgentsPanelComponent extends Container {
-	private agents: SubagentDefinition[];
+export class SubagentsPanelComponent extends Container {
+	private subagents: SubagentDefinition[];
 	private subagentDetails: SubagentDetailsData | undefined;
 	private selectedIndex = 0;
 	private onClose: () => void;
 
-	constructor(options: AgentsPanelOptions) {
+	constructor(options: SubagentsPanelOptions) {
 		super();
-		this.agents = options.agents;
+		this.subagents = options.subagents;
 		this.subagentDetails = options.subagentDetails;
 		this.onClose = options.onClose;
 		this.rebuild();
@@ -133,7 +133,7 @@ export class AgentsPanelComponent extends Container {
 			this.selectedIndex = Math.max(0, this.selectedIndex - 1);
 			this.rebuild();
 		} else if (kb.matches(keyData, "tui.select.down") || keyData === "j") {
-			this.selectedIndex = Math.min(this.agents.length - 1, this.selectedIndex + 1);
+			this.selectedIndex = Math.min(this.subagents.length - 1, this.selectedIndex + 1);
 			this.rebuild();
 		} else if (kb.matches(keyData, "tui.select.cancel")) {
 			this.onClose();
@@ -142,18 +142,18 @@ export class AgentsPanelComponent extends Container {
 
 	private rebuild(): void {
 		this.clear();
-		this.selectedIndex = this.agents.length === 0 ? 0 : Math.min(this.selectedIndex, this.agents.length - 1);
-		const selected = this.agents[this.selectedIndex];
+		this.selectedIndex = this.subagents.length === 0 ? 0 : Math.min(this.selectedIndex, this.subagents.length - 1);
+		const selected = this.subagents[this.selectedIndex];
 
 		this.addChild(new DynamicBorder());
-		this.addChild(new Text(theme.fg("accent", theme.bold("Agents")), 1, 0));
+		this.addChild(new Text(theme.fg("accent", theme.bold("Subagents")), 1, 0));
 		this.addChild(new Spacer(1));
 
-		if (this.agents.length === 0) {
+		if (this.subagents.length === 0) {
 			this.addChild(new Text(theme.fg("muted", "No subagent definitions are available."), 1, 0));
 		} else {
-			for (let index = 0; index < this.agents.length; index++) {
-				const agent = this.agents[index];
+			for (let index = 0; index < this.subagents.length; index++) {
+				const agent = this.subagents[index];
 				const run = latestRunForAgent(this.subagentDetails, agent.name);
 				const pointer = index === this.selectedIndex ? theme.fg("accent", "-> ") : "   ";
 				const status = run?.status ?? "idle";

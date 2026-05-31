@@ -136,7 +136,7 @@ export class FooterComponent implements Component {
 			statsParts.push(costStr);
 		}
 		if (runningSubagents > 0) {
-			statsParts.push(theme.fg("warning", `agents:${runningSubagents}`));
+			statsParts.push(theme.fg("warning", `subagents:${runningSubagents}`));
 		}
 
 		// Colorize context percentage based on usage

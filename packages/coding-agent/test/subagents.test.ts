@@ -96,7 +96,7 @@ describe("AgentSession subagents", () => {
 					task: "make a plan",
 					model: "faux/parent",
 					thinking: "xhigh",
-					agentScope: "user",
+					subagentScope: "user",
 				},
 				{ agentDir },
 			);
