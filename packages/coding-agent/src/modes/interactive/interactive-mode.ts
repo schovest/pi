@@ -4231,6 +4231,50 @@ export class InteractiveMode {
 		this.showModelSelector(searchTerm);
 	}
 
+	private async handleAgentCommand(agentName?: string): Promise<void> {
+		if (agentName) {
+			try {
+				await this.session.switchPrimaryAgent(agentName);
+				this.footer.invalidate();
+				this.showStatus(`Agent: ${agentName}`);
+			} catch (error) {
+				this.showError(error instanceof Error ? error.message : String(error));
+			}
+			return;
+		}
+
+		this.showAgentSelector();
+	}
+
+	private showAgentSelector(): void {
+		this.showSelector((done) => {
+			const agents = discoverPrimaryAgentsSync({
+				cwd: this.session.cwd,
+				agentDir: this.session.agentDir,
+			});
+			const selector = new AgentSelectorComponent({
+				agents,
+				currentAgent: this.session.currentPrimaryAgent,
+				onSelect: async (name: string) => {
+					done();
+					this.ui.requestRender();
+					try {
+						await this.session.switchPrimaryAgent(name);
+						this.footer.invalidate();
+						this.showStatus(`Agent: ${name}`);
+					} catch (error) {
+						this.showError(error instanceof Error ? error.message : String(error));
+					}
+				},
+				onClose: () => {
+					done();
+					this.ui.requestRender();
+				},
+			});
+			return { component: selector, focus: selector };
+		});
+	}
+
 	private async findExactModelMatch(searchTerm: string): Promise<Model<any> | undefined> {
 		const models = await this.getModelCandidates();
 		return findExactModelReferenceMatch(searchTerm, models);
