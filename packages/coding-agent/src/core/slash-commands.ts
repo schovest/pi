@@ -27,6 +27,7 @@ export const BUILTIN_SLASH_COMMANDS: ReadonlyArray<BuiltinSlashCommand> = [
 	{ name: "name", description: "Set session display name" },
 	{ name: "session", description: "Show session info and stats" },
 	{ name: "agents", description: "View agent definitions and run status" },
+	{ name: "agent", description: "Switch primary agent role (opens selector UI)" },
 	{ name: "running-agents", description: "Inspect running subagents" },
 	{ name: "changelog", description: "Show changelog entries" },
 	{ name: "hotkeys", description: "Show all keyboard shortcuts" },
