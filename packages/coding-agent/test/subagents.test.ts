@@ -14,50 +14,49 @@ import type { SubagentRunEvent, SubagentRunRequest } from "../src/core/subagents
 import { createHarness, getMessageText } from "./suite/harness.ts";
 
 describe("subagents discovery", () => {
-	it("loads built-in, user, and project agents with project overriding user overriding built-in", async () => {
-		const harness = await createHarness();
-		try {
-			const agentDir = join(harness.tempDir, "agent");
-			const userAgentsDir = join(agentDir, "agents");
-			const projectAgentsDir = join(harness.tempDir, ".pi", "agents");
-			mkdirSync(userAgentsDir, { recursive: true });
-			mkdirSync(projectAgentsDir, { recursive: true });
+		it("loads built-in, user, and project agents with project overriding user overriding built-in", async () => {
+			const harness = await createHarness();
+			try {
+				const userAgentsDir = join(harness.tempDir, "subagents");
+				const projectAgentsDir = join(harness.tempDir, ".pi", "subagents");
+				mkdirSync(userAgentsDir, { recursive: true });
+				mkdirSync(projectAgentsDir, { recursive: true });
 
-			writeFileSync(
-				join(userAgentsDir, "scout.md"),
-				"---\ndescription: User scout\nmodel: faux/faux-fast\nthinking: high\ntools: [read]\n---\nUser scout prompt",
-			);
-			writeFileSync(
-				join(projectAgentsDir, "scout.md"),
-				"---\ndescription: Project scout\nthinking: low\ntools: [grep]\n---\nProject scout prompt",
-			);
-			writeFileSync(join(projectAgentsDir, "local.md"), "---\ndescription: Local only\n---\nLocal prompt");
+				writeFileSync(
+					join(userAgentsDir, "scout.md"),
+					"---\ndescription: User scout\nmodel: faux/faux-fast\nthinking: high\ntools: [read]\n---\nUser scout prompt",
+				);
+				writeFileSync(
+					join(projectAgentsDir, "scout.md"),
+					"---\ndescription: Project scout\nthinking: low\ntools: [grep]\n---\nProject scout prompt",
+				);
+				writeFileSync(join(projectAgentsDir, "local.md"), "---\ndescription: Local only\n---\nLocal prompt");
 
-			const userOnly = await discoverSubagents({ cwd: harness.tempDir, agentDir, scope: "user" });
-			expect(userOnly.map((agent) => agent.name)).toContain("scout");
-			expect(userOnly.find((agent) => agent.name === "scout")).toMatchObject({
-				description: "User scout",
-				model: "faux/faux-fast",
-				thinking: "high",
-				tools: ["read"],
-				prompt: "User scout prompt",
-				scope: "user",
-			});
-			expect(userOnly.map((agent) => agent.name)).not.toContain("local");
+				const userOnly = await discoverSubagents({ cwd: harness.tempDir, agentDir: harness.tempDir, scope: "user" });
+				expect(userOnly.map((agent) => agent.name)).toContain("scout");
+				expect(userOnly.find((agent) => agent.name === "scout")).toMatchObject({
+					description: "User scout",
+					model: "faux/faux-fast",
+					thinking: "high",
+					tools: ["read"],
+					prompt: "User scout prompt",
+					scope: "user",
+				});
+				expect(userOnly.map((agent) => agent.name)).not.toContain("local");
 
-			const project = await discoverSubagents({ cwd: harness.tempDir, agentDir, scope: "project" });
-			expect(project.find((agent) => agent.name === "scout")).toMatchObject({
-				description: "Project scout",
-				thinking: "low",
-				tools: ["grep"],
-				prompt: "Project scout prompt",
-				scope: "project",
-			});
-			expect(project.map((agent) => agent.name)).toContain("local");
-		} finally {
-			harness.cleanup();
-		}
-	});
+				const project = await discoverSubagents({ cwd: harness.tempDir, agentDir: harness.tempDir, scope: "project" });
+				expect(project.find((agent) => agent.name === "scout")).toMatchObject({
+					description: "Project scout",
+					thinking: "low",
+					tools: ["grep"],
+					prompt: "Project scout prompt",
+					scope: "project",
+				});
+				expect(project.map((agent) => agent.name)).toContain("local");
+			} finally {
+				harness.cleanup();
+			}
+		});
 });
 
 describe("AgentSession subagents", () => {
@@ -228,7 +227,7 @@ describe("AgentSession subagents", () => {
 					},
 				],
 			});
-			const agentsDir = join(harness.tempDir, "agents");
+			const agentsDir = join(harness.tempDir, "subagents");
 			mkdirSync(agentsDir, { recursive: true });
 			writeFileSync(
 				join(agentsDir, "architect.md"),

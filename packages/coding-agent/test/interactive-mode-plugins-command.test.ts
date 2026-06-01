@@ -11,14 +11,14 @@ type PluginsCommandContext = {
 	showPluginsManager: () => void;
 };
 
-type AgentsCommandContext = {
+type SubagentsCommandContext = {
 	editor: { setText: (text: string) => void };
-	showAgentsPanel: () => void;
+	showSubagentsPanel: () => void;
 };
 
 type InteractiveModePrototype = {
 	handlePluginsCommand(this: PluginsCommandContext): void;
-	handleAgentsCommand(this: AgentsCommandContext): void;
+	handleSubagentsCommand(this: SubagentsCommandContext): void;
 };
 
 const interactiveModePrototype = InteractiveMode.prototype as unknown as InteractiveModePrototype;
@@ -32,12 +32,12 @@ describe("InteractiveMode /plugins", () => {
 		expect(BUILTIN_SLASH_COMMANDS.some((command) => command.name === "plugins")).toBe(true);
 	});
 
-	it("registers /running-agents as a built-in slash command", () => {
-		expect(BUILTIN_SLASH_COMMANDS.some((command) => command.name === "running-agents")).toBe(true);
+	it("registers /running-subagents as a built-in slash command", () => {
+		expect(BUILTIN_SLASH_COMMANDS.some((command) => command.name === "running-subagents")).toBe(true);
 	});
 
-	it("registers /agents as a built-in slash command", () => {
-		expect(BUILTIN_SLASH_COMMANDS.some((command) => command.name === "agents")).toBe(true);
+	it("registers /subagents as a built-in slash command", () => {
+		expect(BUILTIN_SLASH_COMMANDS.some((command) => command.name === "subagents")).toBe(true);
 	});
 
 	it("opens the plugin manager and clears the editor", () => {
@@ -53,17 +53,17 @@ describe("InteractiveMode /plugins", () => {
 		expect(showPluginsManager).toHaveBeenCalledTimes(1);
 	});
 
-	it("opens the agents panel and clears the editor", () => {
+	it("opens the subagents panel and clears the editor", () => {
 		const setText = vi.fn();
-		const showAgentsPanel = vi.fn();
+		const showSubagentsPanel = vi.fn();
 
-		interactiveModePrototype.handleAgentsCommand.call({
+		interactiveModePrototype.handleSubagentsCommand.call({
 			editor: { setText },
-			showAgentsPanel,
+			showSubagentsPanel,
 		});
 
 		expect(setText).toHaveBeenCalledWith("");
-		expect(showAgentsPanel).toHaveBeenCalledTimes(1);
+		expect(showSubagentsPanel).toHaveBeenCalledTimes(1);
 	});
 });
 
