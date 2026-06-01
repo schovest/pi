@@ -70,6 +70,7 @@ type SubagentToolInput = {
 interface SubagentToolDetails {
 	result?: SubagentRunResult;
 	events: SubagentRunEvent[];
+	children: Map<number, AgentSession>;
 }
 
 function validateMode(input: SubagentToolInput): void {
@@ -156,7 +157,7 @@ export function createSubagentToolDefinition(session: AgentSession) {
 		executionMode: "parallel",
 		execute: async (_toolCallId, params, signal, onUpdate) => {
 			validateMode(params);
-			const details: SubagentToolDetails = { events: [] };
+			const details: SubagentToolDetails = { events: [], children: new Map() };
 			const result = await session.runSubagents(
 				params.tasks
 					? { tasks: params.tasks, subagentScope: params.subagentScope }
@@ -172,13 +173,15 @@ export function createSubagentToolDefinition(session: AgentSession) {
 							},
 				{
 					signal,
-					onEvent: (event) => {
+					onEvent: (event, child) => {
 						details.events.push(event);
+						details.children.set(event.index, child);
 						onUpdate?.({ content: [{ type: "text", text: renderDetails(details, false) }], details });
 					},
 				},
 			);
 			details.result = result;
+			details.children.clear();
 			return {
 				content: [{ type: "text", text: resultText(result) }],
 				details,

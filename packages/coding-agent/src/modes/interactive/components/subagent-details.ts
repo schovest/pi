@@ -1,4 +1,5 @@
 import { Container, getKeybindings, Spacer, Text, truncateToWidth } from "@earendil-works/pi-tui";
+import type { AgentSession } from "../../../core/agent-session.ts";
 import type { SubagentRunEvent, SubagentRunResult, SubagentTaskResult } from "../../../core/subagents/types.ts";
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
@@ -7,6 +8,7 @@ import { keyHint, rawKeyHint } from "./keybinding-hints.ts";
 export interface SubagentDetailsData {
 	result?: SubagentRunResult;
 	events: SubagentRunEvent[];
+	children?: Map<number, AgentSession>;
 }
 
 interface SubagentDetailsItem {

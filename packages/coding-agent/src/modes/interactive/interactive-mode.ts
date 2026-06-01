@@ -158,13 +158,14 @@ function isSubagentDetailsData(value: unknown): value is SubagentDetailsData {
 	if (!value || typeof value !== "object") {
 		return false;
 	}
-	const candidate = value as { events?: unknown; result?: unknown };
+	const candidate = value as { events?: unknown; result?: unknown; children?: unknown };
 	return (
 		Array.isArray(candidate.events) &&
 		(candidate.result === undefined ||
 			(typeof candidate.result === "object" &&
 				candidate.result !== null &&
-				Array.isArray((candidate.result as { results?: unknown }).results)))
+				Array.isArray((candidate.result as { results?: unknown }).results))) &&
+		(candidate.children === undefined || candidate.children instanceof Map)
 	);
 }
 
@@ -3703,8 +3704,11 @@ export class InteractiveMode {
 	// ==================== Subagent Alternate Screen ====================
 
 	private enterSubagentAlternateScreen(index: number): void {
-		if (!this.latestSubagentDetails?.result?.results[index]) {
-			this.showStatus("No subagent result available");
+		const hasResult = this.latestSubagentDetails?.result?.results[index];
+		const hasChild = this.latestSubagentDetails?.children?.has(index);
+		const hasEvents = this.latestSubagentDetails?.events.some((e) => e.index === index);
+		if (!hasResult && !hasChild && !hasEvents) {
+			this.showStatus("No subagent data available");
 			return;
 		}
 		this.subagentAlternateViewIndex = index;
@@ -3747,9 +3751,11 @@ export class InteractiveMode {
 	private buildSubagentChatContainer(index: number): Container {
 		const container = new Container();
 		const result = this.latestSubagentDetails?.result?.results[index];
-		if (!result) return container;
+		const child = this.latestSubagentDetails?.children?.get(index);
+		const messages = result?.messages ?? child?.messages;
+		if (!messages || messages.length === 0) return container;
 
-		for (const message of result.messages) {
+		for (const message of messages) {
 			switch (message.role) {
 				case "user": {
 					const textContent = this.getUserMessageText(message);
@@ -3768,7 +3774,6 @@ export class InteractiveMode {
 						this.hiddenThinkingLabel,
 					);
 					container.addChild(assistantComponent);
-					// Render tool call components
 					for (const content of message.content) {
 						if (content.type === "toolCall") {
 							const component = new ToolExecutionComponent(
@@ -3790,7 +3795,6 @@ export class InteractiveMode {
 					break;
 				}
 				case "toolResult": {
-					// Tool results are rendered inline with tool calls, skip here
 					break;
 				}
 				case "bashExecution": {
@@ -3819,7 +3823,9 @@ export class InteractiveMode {
 		if (!this.subagentAlternateScreenActive || this.subagentAlternateViewIndex === null) return;
 		const index = this.subagentAlternateViewIndex;
 		const result = this.latestSubagentDetails?.result?.results[index];
-		if (!result) {
+		const child = this.latestSubagentDetails?.children?.get(index);
+		const itemEvents = this.latestSubagentDetails?.events.filter((e) => e.index === index) ?? [];
+		if (!result && !child && itemEvents.length === 0) {
 			this.ui.terminal.write("\x1b[?2026h");
 			this.ui.terminal.write("\x1b[2J\x1b[H");
 			this.ui.terminal.write("No output available");
@@ -3831,7 +3837,7 @@ export class InteractiveMode {
 		const container = this.buildSubagentChatContainer(index);
 		const lines = container.render(width);
 		const totalLines = lines.length;
-		const visibleHeight = this.ui.terminal.rows - 2; // Reserve 2 lines for header and footer
+		const visibleHeight = this.ui.terminal.rows - 2;
 		const maxOffset = Math.max(0, totalLines - visibleHeight);
 		this.subagentAlternateScrollOffset = Math.max(0, Math.min(this.subagentAlternateScrollOffset, maxOffset));
 		const visibleLines = lines.slice(
@@ -3839,17 +3845,19 @@ export class InteractiveMode {
 			this.subagentAlternateScrollOffset + visibleHeight,
 		);
 
-		// Synchronized output to prevent flickering
 		this.ui.terminal.write("\x1b[?2026h");
 		this.ui.terminal.write("\x1b[2J\x1b[H");
-		// Write header
+		const agentName = result?.agent ?? itemEvents.at(-1)?.agent ?? "unknown";
+		const statusValue = result?.status ?? itemEvents.at(-1)?.status ?? "running";
 		const statusText =
-			result.status === "success" ? theme.fg("success", result.status) : theme.fg("error", result.status);
-		const header = theme.bold(`[${result.agent} · ${statusText}]`);
+			statusValue === "success"
+				? theme.fg("success", statusValue)
+				: statusValue === "running"
+					? theme.fg("warning", statusValue)
+					: theme.fg("error", statusValue);
+		const header = theme.bold(`[${agentName} · ${statusText}]`);
 		this.ui.terminal.write(`${header}\n`);
-		// Write content
 		this.ui.terminal.write(visibleLines.join("\n"));
-		// Write status bar at bottom
 		const statusLine = theme.fg(
 			"muted",
 			`Lines ${this.subagentAlternateScrollOffset + 1}-${Math.min(this.subagentAlternateScrollOffset + visibleHeight, totalLines)} of ${totalLines} | ↑↓ j/k scroll · PgUp/PgDn · Home/End · q exit`,

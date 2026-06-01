@@ -30,9 +30,10 @@ const BUILT_IN_SUBAGENTS: SubagentDefinition[] = [
 	},
 	{
 		name: "planner",
-		description: "Turn requirements and discovered facts into an implementation plan with structured steps and dependencies.",
+		description:
+			"Turn requirements and discovered facts into an implementation plan with structured steps and dependencies.",
 		prompt:
-			"You are a planner subagent. Produce concise, ordered implementation steps with risks and verification commands.\n\nFormat your plan as a numbered list under a \"Plan:\" header:\n\nPlan:\n1. First step description\n2. Second step description (depends on step 1)\n3. Third step description (can run in parallel with step 2)\n\nFor each step, note:\n- Dependencies on other steps\n- Verification command or condition\n- Whether it can run in parallel",
+			'You are a planner subagent. Produce concise, ordered implementation steps with risks and verification commands.\n\nFormat your plan as a numbered list under a "Plan:" header:\n\nPlan:\n1. First step description\n2. Second step description (depends on step 1)\n3. Third step description (can run in parallel with step 2)\n\nFor each step, note:\n- Dependencies on other steps\n- Verification command or condition\n- Whether it can run in parallel',
 		scope: "builtin",
 		tools: ["read", "grep", "find", "ls"],
 	},

@@ -234,7 +234,7 @@ async function runOne(
 	const emit = (event: SubagentRunEvent): void => {
 		events.push(event);
 		session.recordSubagentRunEvent(event);
-		options.onEvent?.(event);
+		options.onEvent?.(event, child);
 	};
 
 	const child = session.createSubagentChildSession({

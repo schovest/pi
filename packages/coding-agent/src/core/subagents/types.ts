@@ -1,5 +1,6 @@
 import type { AgentMessage, ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { Usage } from "@earendil-works/pi-ai";
+import type { AgentSession } from "../agent-session.ts";
 
 export type SubagentScope = "user" | "project" | "both";
 export type SubagentDefinitionScope = "builtin" | "user" | "project";
@@ -33,7 +34,7 @@ export type SubagentRunRequest =
 export interface SubagentRunOptions {
 	signal?: AbortSignal;
 	agentDir?: string;
-	onEvent?: (event: SubagentRunEvent) => void;
+	onEvent?: (event: SubagentRunEvent, child: AgentSession) => void;
 }
 
 export interface SubagentRunEvent {
