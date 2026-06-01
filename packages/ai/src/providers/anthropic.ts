@@ -6,7 +6,6 @@ import type {
 	MessageParam,
 	RawMessageStreamEvent,
 } from "@anthropic-ai/sdk/resources/messages.js";
-import { getEnvApiKey } from "../env-api-keys.ts";
 import { calculateCost } from "../models.ts";
 import type {
 	AnthropicMessagesCompat,
@@ -177,6 +176,7 @@ function getAnthropicCompat(
 		sendSessionAffinityHeaders:
 			model.compat?.sendSessionAffinityHeaders ?? !!(isFireworks || isCloudflareAiGatewayAnthropic),
 		supportsCacheControlOnTools: model.compat?.supportsCacheControlOnTools ?? !isFireworks,
+		allowEmptySignature: model.compat?.allowEmptySignature ?? false,
 	};
 }
 
@@ -478,7 +478,10 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
 				client = options.client;
 				isOAuth = false;
 			} else {
-				const apiKey = options?.apiKey ?? getEnvApiKey(model.provider) ?? "";
+				const apiKey = options?.apiKey;
+				if (!apiKey) {
+					throw new Error(`No API key for provider: ${model.provider}`);
+				}
 
 				let copilotDynamicHeaders: Record<string, string> | undefined;
 				if (model.provider === "github-copilot") {
@@ -734,7 +737,7 @@ export const streamSimpleAnthropic: StreamFunction<"anthropic-messages", SimpleS
 	context: Context,
 	options?: SimpleStreamOptions,
 ): AssistantMessageEventStream => {
-	const apiKey = options?.apiKey || getEnvApiKey(model.provider);
+	const apiKey = options?.apiKey;
 	if (!apiKey) {
 		throw new Error(`No API key for provider: ${model.provider}`);
 	}
@@ -895,7 +898,13 @@ function buildParams(
 	const { cacheControl } = getCacheControl(model, options?.cacheRetention);
 	const params: MessageCreateParamsStreaming = {
 		model: model.id,
-		messages: convertMessages(context.messages, model, isOAuthToken, cacheControl),
+		messages: convertMessages(
+			context.messages,
+			model,
+			isOAuthToken,
+			cacheControl,
+			getAnthropicCompat(model).allowEmptySignature,
+		),
 		max_tokens: options?.maxTokens ?? model.maxTokens,
 		stream: true,
 	};
@@ -1001,6 +1010,7 @@ function convertMessages(
 	model: Model<"anthropic-messages">,
 	isOAuthToken: boolean,
 	cacheControl?: CacheControlEphemeral,
+	allowEmptySignature = false,
 ): MessageParam[] {
 	const params: MessageParam[] = [];
 
@@ -1069,13 +1079,21 @@ function convertMessages(
 					}
 					if (block.thinking.trim().length === 0) continue;
 					// If thinking signature is missing/empty (e.g., from aborted stream),
-					// convert to plain text block without <thinking> tags to avoid API rejection
-					// and prevent Claude from mimicking the tags in responses
+					// convert to plain text for Anthropic. Some compatible providers emit
+					// and accept empty signatures, so let marked models preserve the block.
 					if (!block.thinkingSignature || block.thinkingSignature.trim().length === 0) {
-						blocks.push({
-							type: "text",
-							text: sanitizeSurrogates(block.thinking),
-						});
+						blocks.push(
+							allowEmptySignature
+								? {
+										type: "thinking",
+										thinking: sanitizeSurrogates(block.thinking),
+										signature: "",
+									}
+								: {
+										type: "text",
+										text: sanitizeSurrogates(block.thinking),
+									},
+						);
 					} else {
 						blocks.push({
 							type: "thinking",

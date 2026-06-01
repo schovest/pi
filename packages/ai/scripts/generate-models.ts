@@ -184,6 +184,8 @@ function isAnthropicAdaptiveThinkingModel(modelId: string): boolean {
 		modelId.includes("opus-4.6") ||
 		modelId.includes("opus-4-7") ||
 		modelId.includes("opus-4.7") ||
+		modelId.includes("opus-4-8") ||
+		modelId.includes("opus-4.8") ||
 		modelId.includes("sonnet-4-6") ||
 		modelId.includes("sonnet-4.6")
 	);
@@ -225,17 +227,30 @@ function applyThinkingLevelMetadata(model: Model<any>): void {
 	if (supportsOpenAiXhigh(model.id)) {
 		mergeThinkingLevelMap(model, { xhigh: "xhigh" });
 	}
+	if (model.id.endsWith("gpt-5.5-pro")) {
+		mergeThinkingLevelMap(model, { off: null, minimal: null, low: null });
+	}
 	if (model.id.includes("opus-4-6") || model.id.includes("opus-4.6")) {
 		mergeThinkingLevelMap(model, { xhigh: "max" });
 	}
-	if (model.id.includes("opus-4-7") || model.id.includes("opus-4.7")) {
+	if (
+		model.id.includes("opus-4-7") ||
+		model.id.includes("opus-4.7") ||
+		model.id.includes("opus-4-8") ||
+		model.id.includes("opus-4.8")
+	) {
 		mergeThinkingLevelMap(model, { xhigh: "xhigh" });
 	}
 	if (model.api === "anthropic-messages" && isAnthropicAdaptiveThinkingModel(model.id)) {
 		mergeAnthropicMessagesCompat(model, { forceAdaptiveThinking: true });
 	}
 	if (model.api === "openai-completions" && model.id.includes("deepseek-v4")) {
-		mergeThinkingLevelMap(model, DEEPSEEK_V4_THINKING_LEVEL_MAP);
+		mergeThinkingLevelMap(
+			model,
+			model.provider === "openrouter"
+				? { ...DEEPSEEK_V4_THINKING_LEVEL_MAP, xhigh: "xhigh" }
+				: DEEPSEEK_V4_THINKING_LEVEL_MAP,
+		);
 	}
 	if (isGoogleThinkingApi(model) && isGemini3ProModel(model.id)) {
 		mergeThinkingLevelMap(model, { off: null, minimal: null, low: "LOW", medium: null, high: "HIGH" });
@@ -259,12 +274,25 @@ function applyThinkingLevelMetadata(model: Model<any>): void {
 		// Pi's low/medium/high pass through verbatim; OpenRouter normalizes to Mercury's vocabulary.
 		mergeThinkingLevelMap(model, { off: null });
 	}
+	if (model.provider === "opencode-go" && model.id === "kimi-k2.6") {
+		// OpenCode Go exposes Kimi K2.6 thinking as on/off, not distinct effort tiers.
+		mergeThinkingLevelMap(model, { minimal: null, low: null, medium: null });
+	}
+	if (model.provider === "opencode" && model.id === "grok-build-0.1") {
+		// OpenCode Zen Grok Build reasons by default but rejects explicit reasoningEffort.
+		mergeThinkingLevelMap(model, { off: null, minimal: null, low: null, medium: null });
+	}
 }
 
 function getAnthropicMessagesCompat(provider: string, modelId: string): AnthropicMessagesCompat | undefined {
-	return EAGER_TOOL_INPUT_STREAMING_UNSUPPORTED_ANTHROPIC_MODELS.has(`${provider}:${modelId}`)
-		? { supportsEagerToolInputStreaming: false }
-		: undefined;
+	const compat: AnthropicMessagesCompat = {};
+	if (EAGER_TOOL_INPUT_STREAMING_UNSUPPORTED_ANTHROPIC_MODELS.has(`${provider}:${modelId}`)) {
+		compat.supportsEagerToolInputStreaming = false;
+	}
+	if (provider === "xiaomi" || provider.startsWith("xiaomi-token-plan-")) {
+		compat.allowEmptySignature = true;
+	}
+	return Object.keys(compat).length > 0 ? compat : undefined;
 }
 
 function getBedrockBaseUrl(modelId: string): string {
@@ -873,6 +901,16 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 					baseUrl = `${variant.basePath}/v1`;
 				}
 
+				if (variant.provider === "opencode" && modelId === "grok-build-0.1") {
+					compat = { ...(compat ?? {}), supportsReasoningEffort: false };
+				}
+
+				if ((variant.provider === "opencode" || variant.provider === "opencode-go") && modelId === "kimi-k2.6") {
+					// OpenCode Kimi K2.6 accepts Anthropic-style thinking objects
+					// and rejects string thinking values or combined reasoning_effort.
+					compat = { ...(compat ?? {}), thinkingFormat: "deepseek", supportsReasoningEffort: false };
+				}
+
 				// Fix known mismatches between models.dev npm data and actual
 				// OpenCode Go endpoint behaviour. models.dev reports these models
 				// as @ai-sdk/anthropic, but the OpenCode Go endpoints either don't
@@ -1101,6 +1139,7 @@ async function loadModelsDevData(): Promise<Model<any>[]> {
 				for (const [modelId, model] of Object.entries(data.xiaomi.models)) {
 					const m = model as ModelsDevModel;
 					if (m.tool_call !== true) continue;
+					if (provider.startsWith("xiaomi-token-plan-") && modelId === "mimo-v2-flash") continue;
 
 					models.push({
 						id: modelId,
@@ -1196,6 +1235,9 @@ async function generateModels() {
 			candidate.cost.cacheRead = 0.07;
 			candidate.maxTokens = 4096;
 		}
+		if (candidate.provider === "openrouter" && candidate.id.startsWith("moonshotai/kimi-k2.6")) {
+			candidate.compat = { ...candidate.compat, supportsDeveloperRole: false };
+		}
 		if (candidate.provider === "openrouter" && candidate.id === "z-ai/glm-5") {
 			candidate.cost.input = 0.6;
 			candidate.cost.output = 1.9;
@@ -1252,6 +1294,27 @@ async function generateModels() {
 		allModels.push({
 			id: "claude-opus-4-7",
 			name: "Claude Opus 4.7",
+			api: "anthropic-messages",
+			baseUrl: "https://api.anthropic.com",
+			provider: "anthropic",
+			reasoning: true,
+			input: ["text", "image"],
+			cost: {
+				input: 5,
+				output: 25,
+				cacheRead: 0.5,
+				cacheWrite: 6.25,
+			},
+			contextWindow: 1000000,
+			maxTokens: 128000,
+		});
+	}
+
+	// Add missing Claude Opus 4.8
+	if (!allModels.some(m => m.provider === "anthropic" && m.id === "claude-opus-4-8")) {
+		allModels.push({
+			id: "claude-opus-4-8",
+			name: "Claude Opus 4.8",
 			api: "anthropic-messages",
 			baseUrl: "https://api.anthropic.com",
 			provider: "anthropic",
@@ -1477,11 +1540,9 @@ async function generateModels() {
 					? {
 							requiresReasoningContentOnAssistantMessages:
 								deepseekCompat.requiresReasoningContentOnAssistantMessages,
-							thinkingFormat: deepseekCompat.thinkingFormat,
 						}
 					: deepseekCompat),
 			};
-			mergeThinkingLevelMap(candidate, DEEPSEEK_V4_THINKING_LEVEL_MAP);
 		}
 	}
 
