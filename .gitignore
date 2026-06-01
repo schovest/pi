@@ -21,6 +21,9 @@ packages/*/dist-firefox/
 *.swo
 *~
 
+# Generated
+packages/ai/src/models.generated.ts
+
 # Package specific
 .npm/
 coverage/

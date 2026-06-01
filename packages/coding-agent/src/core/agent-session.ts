@@ -23,7 +23,7 @@ import {
 	type AgentTool,
 	type Plan,
 	PlanEngine,
-	type PlanJSON,
+	// type PlanJSON,
 	type ThinkingLevel,
 } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, ImageContent, Message, Model, TextContent } from "@earendil-works/pi-ai";
@@ -2852,22 +2852,22 @@ export class AgentSession {
 		return this.planEngine.createPlan(prompt);
 	}
 
-	private persistPlanState(): void {
-		if (!this.planEngine.currentPlan) return;
-		const data: PlanJSON = this.planEngine.serialize();
-		this.sessionManager.appendCustomEntry("plan", data);
-	}
+	// private persistPlanState(): void {
+	// 	if (!this.planEngine.currentPlan) return;
+	// 	const data: PlanJSON = this.planEngine.serialize();
+	// 	this.sessionManager.appendCustomEntry("plan", data);
+	// }
 
-	private restorePlanState(): void {
-		const entries = this.sessionManager.getEntries();
-		const planEntry = entries.filter((e) => e.type === "custom" && e.customType === "plan").pop() as
-			| { data?: PlanJSON }
-			| undefined;
-
-		if (planEntry?.data) {
-			this.planEngine.currentPlan = PlanEngine.deserialize(planEntry.data).currentPlan;
-		}
-	}
+	// private restorePlanState(): void {
+	// 	const entries = this.sessionManager.getEntries();
+	// 	const planEntry = entries.filter((e) => e.type === "custom" && e.customType === "plan").pop() as
+	// 		| { data?: PlanJSON }
+	// 		| undefined;
+	//
+	// 	if (planEntry?.data) {
+	// 		this.planEngine.currentPlan = PlanEngine.deserialize(planEntry.data).currentPlan;
+	// 	}
+	// }
 
 	// =========================================================================
 	// Tree Navigation
