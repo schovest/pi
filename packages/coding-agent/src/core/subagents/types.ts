@@ -4,7 +4,7 @@ import type { AgentSession } from "../agent-session.ts";
 
 export type SubagentScope = "user" | "project" | "both";
 export type SubagentDefinitionScope = "builtin" | "user" | "project";
-export type SubagentRunMode = "single" | "parallel" | "chain";
+export type SubagentRunMode = "parallel" | "chain";
 export type SubagentRunStatus = "pending" | "running" | "success" | "failed" | "aborted";
 
 export interface SubagentDefinition {
@@ -27,7 +27,6 @@ export interface SubagentTask {
 }
 
 export type SubagentRunRequest =
-	| (SubagentTask & { subagentScope?: SubagentScope })
 	| { tasks: SubagentTask[]; subagentScope?: SubagentScope }
 	| { chain: SubagentTask[]; subagentScope?: SubagentScope };
 

@@ -21,11 +21,62 @@ interface SubagentDetailsItem {
 	output?: string;
 	error?: string;
 	totalTokens?: number;
-	currentTool?: string;
-	currentToolArgs?: string;
-	toolResultSummary?: string;
+	toolCount: number;
+	recentTools: string[];
 	outputSummary?: string;
 	events: SubagentRunEvent[];
+}
+
+function formatToolArgs(toolName: string, argsJson: string | undefined): string {
+	if (!argsJson) return "";
+	try {
+		const args: Record<string, unknown> = JSON.parse(argsJson);
+		switch (toolName) {
+			case "bash":
+				return typeof args.command === "string" ? truncate(args.command, 60) : truncate(argsJson, 60);
+			case "read":
+				return truncate(String(args.file_path ?? args.path ?? argsJson), 60);
+			case "edit":
+				return truncate(String(args.path ?? args.file_path ?? argsJson), 60);
+			case "write":
+				return truncate(String(args.path ?? args.file_path ?? argsJson), 60);
+			case "ls":
+				return truncate(String(args.path ?? args.dir ?? "."), 60);
+			case "grep": {
+				const pattern = String(args.pattern ?? "");
+				const searchPath = args.path ? ` in ${args.path}` : "";
+				const include = args.glob ? ` (${args.glob})` : "";
+				return truncate(`/${pattern}/${searchPath}${include}`, 60);
+			}
+			case "find": {
+				const pattern = String(args.pattern ?? args.glob ?? "");
+				const searchPath = args.path ? ` in ${args.path}` : "";
+				return truncate(`${pattern}${searchPath}`, 60);
+			}
+			default:
+				return truncate(argsJson, 60);
+		}
+	} catch {
+		return truncate(argsJson, 60);
+	}
+}
+
+function truncate(text: string, maxLength: number): string {
+	return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
+}
+
+function countToolCalls(events: SubagentRunEvent[]): number {
+	return events.filter((e) => e.currentTool && e.currentToolArgs).length;
+}
+
+function extractRecentTools(events: SubagentRunEvent[], max: number): string[] {
+	return events
+		.filter((e) => e.currentTool && e.currentToolArgs)
+		.slice(-max)
+		.map((e) => {
+			const args = formatToolArgs(e.currentTool!, e.currentToolArgs);
+			return `${e.currentTool}${args ? ` ${args}` : ""}`;
+		});
 }
 
 function latestByIndex(events: SubagentRunEvent[]): Map<number, SubagentRunEvent> {
@@ -34,6 +85,19 @@ function latestByIndex(events: SubagentRunEvent[]): Map<number, SubagentRunEvent
 		byIndex.set(event.index, event);
 	}
 	return byIndex;
+}
+
+function latestDefined<T>(
+	events: SubagentRunEvent[],
+	select: (event: SubagentRunEvent) => T | undefined,
+): T | undefined {
+	for (let index = events.length - 1; index >= 0; index--) {
+		const value = select(events[index]);
+		if (value !== undefined) {
+			return value;
+		}
+	}
+	return undefined;
 }
 
 function latestEvents(events: SubagentRunEvent[]): SubagentDetailsItem[] {
@@ -51,9 +115,8 @@ function latestEvents(events: SubagentRunEvent[]): SubagentDetailsItem[] {
 				thinking: event.thinking,
 				error: event.error,
 				totalTokens: event.usage?.totalTokens,
-				currentTool: latestDefined(itemEvents, (candidate) => candidate.currentTool),
-				currentToolArgs: latestDefined(itemEvents, (candidate) => candidate.currentToolArgs),
-				toolResultSummary: latestDefined(itemEvents, (candidate) => candidate.toolResultSummary),
+				toolCount: countToolCalls(itemEvents),
+				recentTools: extractRecentTools(itemEvents, 3),
 				outputSummary: latestDefined(itemEvents, (candidate) => candidate.outputSummary),
 				events: itemEvents,
 			};
@@ -79,26 +142,12 @@ function resultItems(data: SubagentDetailsData): SubagentDetailsItem[] {
 			output: result.output,
 			error: latestEvent?.error ?? result.error,
 			totalTokens: latestEvent?.usage?.totalTokens ?? result.usage?.totalTokens,
-			currentTool: latestDefined(resultEvents, (event) => event.currentTool),
-			currentToolArgs: latestDefined(resultEvents, (event) => event.currentToolArgs),
-			toolResultSummary: latestDefined(resultEvents, (event) => event.toolResultSummary),
+			toolCount: countToolCalls(resultEvents),
+			recentTools: extractRecentTools(resultEvents, 3),
 			outputSummary: latestDefined(resultEvents, (event) => event.outputSummary),
 			events: resultEvents,
 		};
 	});
-}
-
-function latestDefined<T>(
-	events: SubagentRunEvent[],
-	select: (event: SubagentRunEvent) => T | undefined,
-): T | undefined {
-	for (let index = events.length - 1; index >= 0; index--) {
-		const value = select(events[index]);
-		if (value !== undefined) {
-			return value;
-		}
-	}
-	return undefined;
 }
 
 function statusColor(status: string): "success" | "error" | "warning" | "muted" {
@@ -198,9 +247,12 @@ export class SubagentPickerComponent extends Container {
 				const selected = index === this.selectedIndex;
 				const pointer = selected ? theme.fg("accent", "-> ") : "   ";
 				const status = theme.fg(statusColor(item.status), item.status);
-				const tool = item.currentTool ? theme.fg("muted", ` tool=${item.currentTool}`) : "";
 				const usage = item.totalTokens === undefined ? "" : theme.fg("muted", ` tokens=${item.totalTokens}`);
-				this.addChild(new Text(`${pointer}${item.index + 1}. ${item.agent} ${status}${tool}${usage}`, 1, 0));
+				const tools = theme.fg("muted", ` tools=${item.toolCount}`);
+				const lastTool = item.recentTools.length > 0 ? theme.fg("muted", ` → ${item.recentTools.at(-1)}`) : "";
+				this.addChild(
+					new Text(`${pointer}${item.index + 1}. ${item.agent} ${status}${usage}${tools}${lastTool}`, 1, 0),
+				);
 			}
 		}
 
@@ -242,9 +294,7 @@ export class SubagentRunViewComponent {
 		}
 	}
 
-	invalidate(): void {
-		// Render is derived directly from current data.
-	}
+	invalidate(): void {}
 
 	render(width: number): string[] {
 		const item = this.getSelectedItem();
@@ -264,18 +314,20 @@ export class SubagentRunViewComponent {
 		lines.push(
 			theme.fg(
 				"muted",
-				`model=${item.model ?? "default"} thinking=${item.thinking ?? "default"} index=${item.index + 1}`,
+				`model=${item.model ?? "default"} thinking=${item.thinking ?? "default"} index=${item.index + 1} tools=${item.toolCount}`,
 			),
 		);
 		lines.push(`${theme.bold("Task")} ${item.task}`);
 
-		if (item.currentTool) {
-			const args = item.currentToolArgs ? ` ${item.currentToolArgs}` : "";
-			lines.push(`${theme.bold("Current Tool")} ${item.currentTool}${args}`);
+		lines.push(theme.bold("Recent Tools") + theme.fg("muted", ` (${item.toolCount} total)`));
+		if (item.recentTools.length > 0) {
+			for (const tool of item.recentTools) {
+				lines.push(theme.fg("muted", `  --${tool}`));
+			}
+		} else {
+			lines.push(theme.fg("muted", "  (no tool calls)"));
 		}
-		if (item.toolResultSummary) {
-			lines.push(`${theme.bold("Tool Result")} ${item.toolResultSummary}`);
-		}
+
 		if (item.outputSummary) {
 			lines.push(`${theme.bold("Latest Output")} ${item.outputSummary}`);
 		}

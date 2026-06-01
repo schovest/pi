@@ -7,7 +7,6 @@ import { discoverSubagents } from "./discovery.ts";
 import type {
 	SubagentDefinition,
 	SubagentRunEvent,
-	SubagentRunMode,
 	SubagentRunOptions,
 	SubagentRunRequest,
 	SubagentRunResult,
@@ -26,18 +25,6 @@ interface ResolvedTask {
 	thinking: ThinkingLevel;
 	tools: string[];
 	prompt: string;
-}
-
-function requestMode(request: SubagentRunRequest): SubagentRunMode {
-	if ("tasks" in request) return "parallel";
-	if ("chain" in request) return "chain";
-	return "single";
-}
-
-function requestTasks(request: SubagentRunRequest): SubagentTask[] {
-	if ("tasks" in request) return request.tasks;
-	if ("chain" in request) return request.chain;
-	return [request];
 }
 
 function textFromMessage(message: AgentMessage): string {
@@ -358,10 +345,11 @@ export async function runSubagents(
 	request: SubagentRunRequest,
 	options: SubagentRunOptions = {},
 ): Promise<SubagentRunResult> {
-	const mode = requestMode(request);
-	const tasks = requestTasks(request);
-	if (mode === "parallel" && tasks.length > MAX_PARALLEL_TASKS) {
-		throw new Error(`parallel subagent runs support at most ${MAX_PARALLEL_TASKS} tasks`);
+	const mode: "parallel" | "chain" = "chain" in request ? "chain" : "parallel";
+	const tasks = "chain" in request ? request.chain : request.tasks;
+
+	if (tasks.length > MAX_PARALLEL_TASKS) {
+		throw new Error(`subagent runs support at most ${MAX_PARALLEL_TASKS} tasks`);
 	}
 
 	const definitions = new Map(
@@ -369,7 +357,7 @@ export async function runSubagents(
 			await discoverSubagents({
 				cwd: session.cwd,
 				agentDir: options.agentDir ?? session.agentDir,
-				scope: "subagentScope" in request ? request.subagentScope : undefined,
+				scope: request.subagentScope,
 			})
 		).map((definition) => [definition.name, definition]),
 	);
@@ -394,13 +382,9 @@ export async function runSubagents(
 			tasks.map((task, index) => resolveTask(session, definitions, task, index)),
 		);
 		results = new Array<SubagentTaskResult>(resolvedTasks.length);
-		if (mode === "parallel") {
-			await runWithConcurrency(resolvedTasks, PARALLEL_CONCURRENCY, async (resolved) => {
-				results[resolved.index] = await runOne(session, runId, resolved, options);
-			});
-		} else {
-			results[0] = await runOne(session, runId, resolvedTasks[0], options);
-		}
+		await runWithConcurrency(resolvedTasks, PARALLEL_CONCURRENCY, async (resolved) => {
+			results[resolved.index] = await runOne(session, runId, resolved, options);
+		});
 	}
 
 	return {

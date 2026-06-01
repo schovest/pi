@@ -92,16 +92,13 @@ describe("AgentSession subagents", () => {
 
 			const result = await harness.session.runSubagents(
 				{
-					agent: "planner",
-					task: "make a plan",
-					model: "faux/parent",
-					thinking: "xhigh",
+					tasks: [{ agent: "planner", task: "make a plan", model: "faux/parent", thinking: "xhigh" }],
 					subagentScope: "user",
 				},
 				{ agentDir },
 			);
 
-			expect(result.mode).toBe("single");
+			expect(result.mode).toBe("parallel");
 			expect(result.results).toHaveLength(1);
 			expect(result.results[0]).toMatchObject({
 				agent: "planner",
@@ -195,7 +192,7 @@ describe("AgentSession subagents", () => {
 
 			const controller = new AbortController();
 			const promise = harness.session.runSubagents(
-				{ agent: "worker", task: "slow", tools: [] },
+				{ tasks: [{ agent: "worker", task: "slow", tools: [] }] },
 				{ signal: controller.signal },
 			);
 			controller.abort();
@@ -252,9 +249,7 @@ describe("AgentSession subagents", () => {
 			expect(enabled.session.getAllTools().map((tool) => tool.name)).toContain("subagent");
 			expect(enabled.session.systemPrompt).toContain("Available subagents for the subagent tool");
 			expect(enabled.session.systemPrompt).toContain("architect (user) - Architecture review");
-			expect(enabled.session.systemPrompt).toContain(
-				"For 2 or more independent subagents, use one subagent call with tasks[]",
-			);
+			expect(enabled.session.systemPrompt).toContain("Always use tasks[] even for a single subagent");
 			expect(enabled.session.getToolDefinition("subagent")?.description).toContain(
 				"agent must be one of: architect",
 			);
@@ -289,7 +284,7 @@ describe("AgentSession subagents", () => {
 			const events: SubagentRunEvent[] = [];
 
 			const result = await harness.session.runSubagents(
-				{ agent: "worker", task: "via api", tools: ["capture"] } satisfies SubagentRunRequest,
+				{ tasks: [{ agent: "worker", task: "via api", tools: ["capture"] }] } satisfies SubagentRunRequest,
 				{ onEvent: (event) => events.push(event) },
 			);
 
@@ -324,8 +319,16 @@ describe("AgentSession subagents", () => {
 			harness.setResponses([
 				fauxAssistantMessage(
 					[
-						fauxToolCall("subagent", { agent: "worker", task: "first", tools: [] }, { id: "subagent-1" }),
-						fauxToolCall("subagent", { agent: "reviewer", task: "second", tools: [] }, { id: "subagent-2" }),
+						fauxToolCall(
+							"subagent",
+							{ tasks: [{ agent: "worker", task: "first", tools: [] }] },
+							{ id: "subagent-1" },
+						),
+						fauxToolCall(
+							"subagent",
+							{ tasks: [{ agent: "reviewer", task: "second", tools: [] }] },
+							{ id: "subagent-2" },
+						),
 					],
 					{ stopReason: "toolUse" },
 				),
