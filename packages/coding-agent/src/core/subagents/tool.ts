@@ -120,34 +120,6 @@ function recentToolCalls(events: SubagentRunEvent[], max: number): string {
 		.join("\n");
 }
 
-function eventText(event: SubagentRunEvent): string {
-	const parts: string[] = [`${event.index + 1} ${event.agent}: ${event.status}`];
-	if (event.currentTool) {
-		parts.push(`tool=${event.currentTool}`);
-	}
-	if (event.outputSummary) {
-		parts.push(`output=${event.outputSummary}`);
-	}
-	if (event.error) {
-		parts.push(`error=${event.error}`);
-	}
-	return parts.join(" ");
-}
-
-function compactEventTexts(events: SubagentRunEvent[]): Array<{ text: string; count: number }> {
-	const compacted: Array<{ text: string; count: number }> = [];
-	for (const event of events) {
-		const text = eventText(event);
-		const previous = compacted.at(-1);
-		if (previous?.text === text) {
-			previous.count++;
-		} else {
-			compacted.push({ text, count: 1 });
-		}
-	}
-	return compacted;
-}
-
 function resultText(result: SubagentRunResult): string {
 	return result.results
 		.map((item) => {
@@ -176,13 +148,6 @@ function renderDetails(details: SubagentToolDetails | undefined, expanded: boole
 			const recent = recentToolCalls(result.events, 3);
 			return recent ? `${base}\n${recent}` : base;
 		});
-		if (expanded) {
-			const compacted = compactEventTexts(details.events);
-			for (const entry of compacted) {
-				const repeated = entry.count > 1 ? ` (repeated ${entry.count}x)` : "";
-				lines.push(`event ${entry.text}${repeated}`);
-			}
-		}
 		return lines.join("\n\n");
 	}
 	const latest = new Map<number, SubagentRunEvent>();
