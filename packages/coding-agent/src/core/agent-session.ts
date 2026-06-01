@@ -22,8 +22,8 @@ import {
 	type AgentState,
 	type AgentTool,
 	type Plan,
-	type PlanJSON,
 	PlanEngine,
+	type PlanJSON,
 	type ThinkingLevel,
 } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, ImageContent, Message, Model, TextContent } from "@earendil-works/pi-ai";
@@ -2836,9 +2836,9 @@ export class AgentSession {
 
 	private restorePlanState(): void {
 		const entries = this.sessionManager.getEntries();
-		const planEntry = entries
-			.filter((e) => e.type === "custom" && e.customType === "plan")
-			.pop() as { data?: PlanJSON } | undefined;
+		const planEntry = entries.filter((e) => e.type === "custom" && e.customType === "plan").pop() as
+			| { data?: PlanJSON }
+			| undefined;
 
 		if (planEntry?.data) {
 			this.planEngine.currentPlan = PlanEngine.deserialize(planEntry.data).currentPlan;
