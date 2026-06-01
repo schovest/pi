@@ -120,6 +120,34 @@ function recentToolCalls(events: SubagentRunEvent[], max: number): string {
 		.join("\n");
 }
 
+function eventText(event: SubagentRunEvent): string {
+	const parts: string[] = [`${event.index + 1} ${event.agent}: ${event.status}`];
+	if (event.currentTool) {
+		parts.push(`tool=${event.currentTool}`);
+	}
+	if (event.outputSummary) {
+		parts.push(`output=${event.outputSummary}`);
+	}
+	if (event.error) {
+		parts.push(`error=${event.error}`);
+	}
+	return parts.join(" ");
+}
+
+function compactEventTexts(events: SubagentRunEvent[]): Array<{ text: string; count: number }> {
+	const compacted: Array<{ text: string; count: number }> = [];
+	for (const event of events) {
+		const text = eventText(event);
+		const previous = compacted.at(-1);
+		if (previous?.text === text) {
+			previous.count++;
+		} else {
+			compacted.push({ text, count: 1 });
+		}
+	}
+	return compacted;
+}
+
 function resultText(result: SubagentRunResult): string {
 	return result.results
 		.map((item) => {
@@ -149,11 +177,10 @@ function renderDetails(details: SubagentToolDetails | undefined, expanded: boole
 			return recent ? `${base}\n${recent}` : base;
 		});
 		if (expanded) {
-			for (const event of details.events) {
-				lines.push("");
-				lines.push(
-					`event ${event.index + 1} ${event.agent}: ${event.status}${event.currentTool ? ` tool=${event.currentTool}` : ""}`,
-				);
+			const compacted = compactEventTexts(details.events);
+			for (const entry of compacted) {
+				const repeated = entry.count > 1 ? ` (repeated ${entry.count}x)` : "";
+				lines.push(`event ${entry.text}${repeated}`);
 			}
 		}
 		return lines.join("\n\n");
@@ -167,7 +194,7 @@ function renderDetails(details: SubagentToolDetails | undefined, expanded: boole
 		.map((event) => {
 			const itemEvents = details.events.filter((e) => e.index === event.index);
 			const tools = ` tools=${toolCallCount(itemEvents)}`;
-		 const base = `${event.index + 1}. ${event.agent}: ${event.status} ${event.model ?? ""} thinking=${event.thinking ?? "default"}${tools}`;
+			const base = `${event.index + 1}. ${event.agent}: ${event.status} ${event.model ?? ""} thinking=${event.thinking ?? "default"}${tools}`;
 			const recent = recentToolCalls(itemEvents, 3);
 			return recent ? `${base}\n${recent}` : base;
 		})
