@@ -42,3 +42,5 @@ export * from "./harness/utils/truncate.ts";
 export * from "./proxy.ts";
 // Types
 export * from "./types.ts";
+// Plan
+export * from "./plan/index.ts";
