@@ -3656,10 +3656,6 @@ export class InteractiveMode {
 		this.alternateScreenDirty = true;
 	}
 
-	private markAlternateScreenDirty(): void {
-		this.alternateScreenDirty = true;
-	}
-
 	private scrollAlternateScreen(delta: number): void {
 		this.alternateScrollOffset += delta;
 		this.markAlternateScreenDirty();
