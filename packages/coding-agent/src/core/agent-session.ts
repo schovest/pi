@@ -21,6 +21,9 @@ import {
 	type AgentMessage,
 	type AgentState,
 	type AgentTool,
+	type Plan,
+	type PlanJSON,
+	PlanEngine,
 	type ThinkingLevel,
 } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, ImageContent, Message, Model, TextContent } from "@earendil-works/pi-ai";
@@ -274,6 +277,7 @@ export class AgentSession {
 	readonly agent: Agent;
 	readonly sessionManager: SessionManager;
 	readonly settingsManager: SettingsManager;
+	readonly planEngine = new PlanEngine();
 
 	private _scopedModels: Array<{ model: Model<any>; thinkingLevel?: ThinkingLevel }>;
 
@@ -2806,6 +2810,39 @@ export class AgentSession {
 	setSessionName(name: string): void {
 		this.sessionManager.appendSessionInfo(name);
 		this._emit({ type: "session_info_changed", name: this.sessionManager.getSessionName() });
+	}
+
+	// =========================================================================
+	// Plan Mode
+	// =========================================================================
+
+	async enterPlanMode(): Promise<void> {
+		this.planEngine.createPlan("");
+	}
+
+	async exitPlanMode(): Promise<void> {
+		this.planEngine.resetPlan();
+	}
+
+	async submitPlanDraft(prompt: string): Promise<Plan> {
+		return this.planEngine.createPlan(prompt);
+	}
+
+	private persistPlanState(): void {
+		if (!this.planEngine.currentPlan) return;
+		const data: PlanJSON = this.planEngine.serialize();
+		this.sessionManager.appendCustomEntry("plan", data);
+	}
+
+	private restorePlanState(): void {
+		const entries = this.sessionManager.getEntries();
+		const planEntry = entries
+			.filter((e) => e.type === "custom" && e.customType === "plan")
+			.pop() as { data?: PlanJSON } | undefined;
+
+		if (planEntry?.data) {
+			this.planEngine.currentPlan = PlanEngine.deserialize(planEntry.data).currentPlan;
+		}
 	}
 
 	// =========================================================================
