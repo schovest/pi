@@ -1,4 +1,4 @@
-import type { AgentMessage, Plan, PlanStep } from "@earendil-works/pi-agent-core";
+import type { AgentMessage, Plan /* , PlanStep */ } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, TextContent } from "@earendil-works/pi-ai";
 import { Key } from "@earendil-works/pi-tui";
 import type { ExtensionAPI, ExtensionContext, ExtensionUIContext } from "../pi-types.ts";
