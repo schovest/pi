@@ -41,10 +41,23 @@ if (!fdArch || platform !== "linux") {
 		const fdReleaseUrl = `https://github.com/sharkdp/fd/releases/download/v10.4.2/fd-v10.4.2-${fdArch}.tar.gz`;
 		execSync(`curl -sL ${fdReleaseUrl} | tar -xzf - -C ${tmpDir}`, { stdio: "inherit" });
 		const fdSrc = join(tmpDir, `fd-v10.4.2-${fdArch}`, "fd");
+		if (!existsSync(fdSrc)) {
+			console.error(`fd binary not found in extracted archive at ${fdSrc}`);
+			execSync(`rm -rf ${tmpDir}`, { stdio: "inherit" });
+			process.exit(1);
+		}
 		execSync(`mkdir -p ${fdDir} && cp ${fdSrc} ${fdBinary} && chmod +x ${fdBinary}`, { stdio: "inherit" });
 		execSync(`rm -rf ${tmpDir}`, { stdio: "inherit" });
 		console.log("fd binary ready at", fdBinary);
+	} else {
+		console.log("fd binary already exists at", fdBinary);
 	}
+}
+
+if (platform === "linux" && !existsSync(join(distDir, "bin", "fd"))) {
+	console.error("Missing required file: dist/bin/fd");
+	console.error("Cannot create portable package without fd.");
+	process.exit(1);
 }
 
 const fileList = [
