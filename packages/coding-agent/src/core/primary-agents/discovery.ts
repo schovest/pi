@@ -37,7 +37,7 @@ const BUILT_IN_PRIMARY_AGENTS: PrimaryAgentDefinition[] = [
 		systemPrompt:
 			"You are a planning agent. Analyze requirements, explore the codebase, and produce concise implementation plans. Do not modify files or execute commands. Focus on understanding, designing, and proposing solutions.",
 		scope: "builtin",
-		excludedTools: ["bash", "edit", "write"],
+		excludedTools: ["bash", "subagent"],
 	},
 ];
 
