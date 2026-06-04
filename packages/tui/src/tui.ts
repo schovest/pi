@@ -284,6 +284,8 @@ export class TUI extends Container {
 	private currentScrollableViewportTop = 0;
 	private selection: SelectionState | null = null;
 	private scrollOffset = 0;
+	private autoFollow = true;
+	private previousScrollableLineCount = 0;
 	private autoScrollTimer: ReturnType<typeof setInterval> | null = null;
 	private mouseListenerRemover?: () => void;
 	onCopySelection?: (text: string) => void;
@@ -545,9 +547,11 @@ export class TUI extends Container {
 		const height = this.terminal.rows;
 		if (event.type === "mouseWheel") {
 			if (event.button === 64) {
+				this.autoFollow = false;
 				this.scrollOffset = Math.min(this.getMaxScrollOffset(), this.scrollOffset + AUTO_SCROLL_ROWS);
 			} else if (event.button === 65) {
 				this.scrollOffset = Math.max(0, this.scrollOffset - AUTO_SCROLL_ROWS);
+				if (this.scrollOffset === 0) this.autoFollow = true;
 			}
 			this.onScrollOffsetChange?.(this.scrollOffset);
 			this.forceFullRender = true;
@@ -615,6 +619,7 @@ export class TUI extends Container {
 
 	setScrollOffset(offset: number): void {
 		this.scrollOffset = offset;
+		this.autoFollow = offset === 0;
 		this.onScrollOffsetChange?.(offset);
 		this.forceFullRender = true;
 		this.requestRender();
@@ -622,9 +627,25 @@ export class TUI extends Container {
 
 	resetScrollOffset(): void {
 		this.scrollOffset = 0;
+		this.autoFollow = true;
 		this.onScrollOffsetChange?.(0);
 		this.forceFullRender = true;
 		this.requestRender();
+	}
+
+	getAutoFollow(): boolean {
+		return this.autoFollow;
+	}
+
+	setAutoFollow(value: boolean): void {
+		if (this.autoFollow === value) return;
+		this.autoFollow = value;
+		if (value) {
+			this.scrollOffset = 0;
+			this.onScrollOffsetChange?.(0);
+			this.forceFullRender = true;
+			this.requestRender();
+		}
 	}
 
 	setFixedBottomCount(count: number): void {
@@ -633,6 +654,7 @@ export class TUI extends Container {
 
 	private startAutoScroll(): void {
 		if (this.autoScrollTimer) return;
+		this.autoFollow = false;
 		this.autoScrollTimer = setInterval(() => {
 			const maxOffset = this.getMaxScrollOffset();
 			if (this.scrollOffset < maxOffset) {
@@ -1230,7 +1252,16 @@ export class TUI extends Container {
 
 		// Apply scrollOffset to scrollable content only
 		const maxScroll = Math.max(0, scrollableLines.length - scrollableViewport);
+		const lineCountDelta = scrollableLines.length - this.previousScrollableLineCount;
+		if (lineCountDelta > 0) {
+			if (this.autoFollow) {
+				this.scrollOffset = 0;
+			} else if (this.scrollOffset > 0) {
+				this.scrollOffset += lineCountDelta;
+			}
+		}
 		if (this.scrollOffset > maxScroll) this.scrollOffset = maxScroll;
+		this.previousScrollableLineCount = scrollableLines.length;
 
 		// Determine visible scrollable lines
 		const scrollableViewportTop = Math.max(0, scrollableLines.length - scrollableViewport - this.scrollOffset);

@@ -23,7 +23,7 @@ const arch = archMap[osArch()] || osArch();
 const platform = platformMap[osPlatform()] || osPlatform();
 const version = pkg.version || "0.0.0";
 
-const archiveName = `pi-${version}-${platform}-${arch}.tar.gz`;
+const archiveName = `pi-${version}-${platform}-${arch}.tgz`;
 const archivePath = join(distDir, archiveName);
 
 const fdArchMap = { x86_64: "x86_64-unknown-linux-musl", aarch64: "aarch64-unknown-linux-musl" };
@@ -38,7 +38,7 @@ if (!fdArch || platform !== "linux") {
 		console.log("Downloading fd musl binary...");
 		const tmpDir = join(distDir, "_fd_tmp");
 		execSync(`mkdir -p ${tmpDir}`, { stdio: "inherit" });
-		const fdReleaseUrl = `https://github.com/sharkdp/fd/releases/download/v10.4.2/fd-v10.4.2-${fdArch}.tar.gz`;
+		const fdReleaseUrl = `https://github.com/sharkdp/fd/releases/download/v10.4.2/fd-v10.4.2-${fdArch}.tgz`;
 		execSync(`curl -sL ${fdReleaseUrl} | tar -xzf - -C ${tmpDir}`, { stdio: "inherit" });
 		const fdSrc = join(tmpDir, `fd-v10.4.2-${fdArch}`, "fd");
 		if (!existsSync(fdSrc)) {
