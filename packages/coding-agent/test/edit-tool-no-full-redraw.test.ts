@@ -28,6 +28,11 @@ class FakeTerminal implements Terminal {
 	clearScreen(): void {}
 	setTitle(_title: string): void {}
 	setProgress(_active: boolean): void {}
+	enterAlternateScreen(): void {}
+	exitAlternateScreen(): void {}
+	enableMouseTracking(): void {}
+	disableMouseTracking(): void {}
+	stdinBuffer = undefined;
 
 	get fullClearCount(): number {
 		return this.writes.filter((write) => write.includes("\x1b[2J\x1b[H\x1b[3J")).length;

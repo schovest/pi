@@ -136,7 +136,7 @@ function resultText(result: SubagentRunResult): string {
 		.join("\n\n");
 }
 
-function renderDetails(details: SubagentToolDetails | undefined, expanded: boolean): string {
+function renderDetails(details: SubagentToolDetails | undefined, _expanded: boolean): string {
 	if (!details) {
 		return "";
 	}

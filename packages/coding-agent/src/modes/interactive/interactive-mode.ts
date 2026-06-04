@@ -280,8 +280,6 @@ export interface InteractiveModeOptions {
 }
 
 export class InteractiveMode {
-	private static readonly ALTERNATE_RENDER_INTERVAL_MS = 50;
-
 	private runtimeHost: AgentSessionRuntime;
 	private ui: TUI;
 	private chatContainer: Container;
@@ -332,26 +330,6 @@ export class InteractiveMode {
 
 	// Tool output expansion state
 	private toolOutputExpanded = false;
-	private alternateScreenActive = false;
-	private alternateScrollOffset = 0;
-	private toolOutputExpandedBeforeAlternate = false;
-	private alternateScreenInputHandler?: (data: string) => { consume?: boolean; data?: string } | undefined;
-	private alternateScreenRenderInterval: ReturnType<typeof setInterval> | undefined;
-	private alternateScreenDirty = false;
-	private alternateScreenLastRenderedOffset = -1;
-	private alternateScreenContentVersion = 0;
-	private alternateScreenLastRenderedVersion = -1;
-
-	// Subagent alternate screen state
-	private subagentAlternateScreenActive = false;
-	private subagentAlternateScrollOffset = 0;
-	private subagentAlternateViewIndex: number | null = null;
-	private subagentAlternateInputHandler?: (data: string) => { consume?: boolean; data?: string } | undefined;
-	private subagentAlternateScreenRenderInterval: ReturnType<typeof setInterval> | undefined;
-	private subagentAlternateScreenDirty = false;
-	private subagentAlternateScreenLastRenderedOffset = -1;
-	private subagentAlternateScreenContentVersion = 0;
-	private subagentAlternateScreenLastRenderedVersion = -1;
 
 	// Thinking block visibility state
 	private hideThinkingBlock = false;
@@ -741,8 +719,12 @@ export class InteractiveMode {
 		this.setupKeyHandlers();
 		this.setupEditorSubmitHandler();
 
-		// Start the UI before initializing extensions so session_start handlers can use interactive dialogs
+		this.ui.onCopySelection = async (text: string) => {
+			await copyToClipboard(text);
+		};
+
 		this.ui.start();
+		this.ui.setFixedBottomCount(4);
 		this.isInitialized = true;
 
 		// Initialize extensions first so resources are shown before messages
@@ -3078,14 +3060,6 @@ export class InteractiveMode {
 				break;
 			}
 		}
-		// Refresh alternate screen if active, since requestRender() is suppressed
-		if (this.alternateScreenActive) {
-			this.alternateScreenContentVersion++;
-			this.markAlternateScreenDirty();
-		} else if (this.subagentAlternateScreenActive) {
-			this.subagentAlternateScreenContentVersion++;
-			this.markSubagentAlternateScreenDirty();
-		}
 	}
 
 	/** Extract text content from a user message */
@@ -3615,13 +3589,7 @@ export class InteractiveMode {
 	}
 
 	private toggleToolOutputExpansion(): void {
-		if (this.subagentAlternateScreenActive) {
-			this.exitSubagentAlternateScreen();
-		} else if (this.alternateScreenActive) {
-			this.exitAlternateScreen();
-		} else {
-			this.enterAlternateScreen();
-		}
+		this.setToolsExpanded(!this.toolOutputExpanded);
 	}
 
 	private setToolsExpanded(expanded: boolean): void {
@@ -3638,339 +3606,7 @@ export class InteractiveMode {
 		this.ui.requestRender();
 	}
 
-	// ==================== Ctrl+O Alternate Screen ====================
-
-	private enterAlternateScreen(): void {
-		this.toolOutputExpandedBeforeAlternate = this.toolOutputExpanded;
-		this.alternateScreenActive = true;
-		this.alternateScrollOffset = 0;
-		this.ui.suspendRendering();
-		this.ui.terminal.write("\x1b[?1049h");
-		// Expand all components without triggering TUI render
-		this.toolOutputExpanded = true;
-		const activeHeader = this.customHeader ?? this.builtInHeader;
-		if (isExpandable(activeHeader)) activeHeader.setExpanded(true);
-		for (const child of this.chatContainer.children) {
-			if (isExpandable(child)) child.setExpanded(true);
-		}
-		this.alternateScreenRenderInterval = setInterval(() => {
-			if (
-				this.alternateScreenDirty &&
-				(this.alternateScrollOffset !== this.alternateScreenLastRenderedOffset ||
-					this.alternateScreenContentVersion !== this.alternateScreenLastRenderedVersion)
-			) {
-				this.alternateScreenDirty = false;
-				this.renderAlternateScreen();
-			} else {
-				this.alternateScreenDirty = false;
-			}
-		}, InteractiveMode.ALTERNATE_RENDER_INTERVAL_MS);
-		this.renderAlternateScreen();
-		this.setupAlternateScreenInput();
-	}
-
-	private exitAlternateScreen(): void {
-		this.alternateScreenActive = false;
-		this.alternateScreenDirty = false;
-		if (this.alternateScreenRenderInterval) {
-			clearInterval(this.alternateScreenRenderInterval);
-			this.alternateScreenRenderInterval = undefined;
-		}
-		if (this.alternateScreenInputHandler) {
-			this.ui.removeInputListener(this.alternateScreenInputHandler);
-			this.alternateScreenInputHandler = undefined;
-		}
-		this.ui.terminal.write("\x1b[?1049l");
-		this.setToolsExpanded(this.toolOutputExpandedBeforeAlternate);
-		this.ui.resumeRendering();
-	}
-
-	private renderAlternateScreen(): void {
-		if (!this.alternateScreenActive) return;
-		const width = this.ui.terminal.columns;
-		const lines = this.chatContainer.render(width);
-		const totalLines = lines.length;
-		const visibleHeight = this.ui.terminal.rows - 1; // Reserve 1 line for status bar
-		const maxOffset = Math.max(0, totalLines - visibleHeight);
-		this.alternateScrollOffset = Math.max(0, Math.min(this.alternateScrollOffset, maxOffset));
-		const visibleLines = lines.slice(this.alternateScrollOffset, this.alternateScrollOffset + visibleHeight);
-		// Synchronized output to prevent flickering
-		this.ui.terminal.write("\x1b[?2026h");
-		this.ui.terminal.write("\x1b[2J\x1b[H");
-		this.ui.terminal.write(visibleLines.join("\n"));
-		const statusLine = theme.fg(
-			"muted",
-			`Lines ${this.alternateScrollOffset + 1}-${Math.min(this.alternateScrollOffset + visibleHeight, totalLines)} of ${totalLines} | ↑↓ j/k scroll · PgUp/PgDn · Home/End · q exit`,
-		);
-		this.ui.terminal.write(`\n${statusLine}`);
-		this.ui.terminal.write("\x1b[?2026l");
-		this.alternateScreenLastRenderedOffset = this.alternateScrollOffset;
-		this.alternateScreenLastRenderedVersion = this.alternateScreenContentVersion;
-	}
-
-	private markAlternateScreenDirty(): void {
-		this.alternateScreenDirty = true;
-	}
-
-	private scrollAlternateScreen(delta: number): void {
-		this.alternateScrollOffset += delta;
-		this.markAlternateScreenDirty();
-	}
-
-	private setupAlternateScreenInput(): void {
-		this.alternateScreenInputHandler = (data: string) => {
-			if (matchesKey(data, "up") || data === "k") {
-				this.scrollAlternateScreen(-1);
-				return { consume: true };
-			}
-			if (matchesKey(data, "down") || data === "j") {
-				this.scrollAlternateScreen(1);
-				return { consume: true };
-			}
-			if (matchesKey(data, "pageUp")) {
-				this.scrollAlternateScreen(-(this.ui.terminal.rows - 2));
-				return { consume: true };
-			}
-			if (matchesKey(data, "pageDown")) {
-				this.scrollAlternateScreen(this.ui.terminal.rows - 2);
-				return { consume: true };
-			}
-			if (matchesKey(data, "home") || data === "g") {
-				this.alternateScrollOffset = 0;
-				this.markAlternateScreenDirty();
-				return { consume: true };
-			}
-			if (matchesKey(data, "end") || data === "G") {
-				const lines = this.chatContainer.render(this.ui.terminal.columns);
-				const maxOffset = Math.max(0, lines.length - (this.ui.terminal.rows - 1));
-				this.alternateScrollOffset = maxOffset;
-				this.markAlternateScreenDirty();
-				return { consume: true };
-			}
-			if (data === "q" || data === "\x1b" || data === "\x0f") {
-				this.exitAlternateScreen();
-				return { consume: true };
-			}
-			return { consume: true }; // Consume all other input
-		};
-		this.ui.addInputListener(this.alternateScreenInputHandler);
-	}
-
 	// ==================== Subagent Alternate Screen ====================
-
-	private enterSubagentAlternateScreen(index: number): void {
-		const hasResult = this.latestSubagentDetails?.result?.results[index];
-		const hasChild = this.latestSubagentDetails?.children?.has(index);
-		const hasEvents = this.latestSubagentDetails?.events.some((e) => e.index === index);
-		if (!hasResult && !hasChild && !hasEvents) {
-			this.showStatus("No subagent data available");
-			return;
-		}
-		this.subagentAlternateViewIndex = index;
-		this.subagentAlternateScreenActive = true;
-		this.subagentAlternateScrollOffset = 0;
-		this.ui.suspendRendering();
-		this.ui.terminal.write("\x1b[?1049h");
-		this.subagentAlternateScreenRenderInterval = setInterval(() => {
-			if (
-				this.subagentAlternateScreenDirty &&
-				(this.subagentAlternateScrollOffset !== this.subagentAlternateScreenLastRenderedOffset ||
-					this.subagentAlternateScreenContentVersion !== this.subagentAlternateScreenLastRenderedVersion)
-			) {
-				this.subagentAlternateScreenDirty = false;
-				this.renderSubagentAlternateScreen();
-			} else {
-				this.subagentAlternateScreenDirty = false;
-			}
-		}, InteractiveMode.ALTERNATE_RENDER_INTERVAL_MS);
-		this.renderSubagentAlternateScreen();
-		this.setupSubagentAlternateScreenInput();
-	}
-
-	private exitSubagentAlternateScreen(): void {
-		this.subagentAlternateScreenActive = false;
-		this.subagentAlternateViewIndex = null;
-		this.subagentAlternateScreenDirty = false;
-		if (this.subagentAlternateScreenRenderInterval) {
-			clearInterval(this.subagentAlternateScreenRenderInterval);
-			this.subagentAlternateScreenRenderInterval = undefined;
-		}
-		if (this.subagentAlternateInputHandler) {
-			this.ui.removeInputListener(this.subagentAlternateInputHandler);
-			this.subagentAlternateInputHandler = undefined;
-		}
-		this.ui.terminal.write("\x1b[?1049l");
-		this.ui.resumeRendering();
-	}
-
-	private buildSubagentChatContainer(index: number): Container {
-		const container = new Container();
-		const result = this.latestSubagentDetails?.result?.results[index];
-		const child = this.latestSubagentDetails?.children?.get(index);
-		const messages = result?.messages ?? child?.messages;
-		if (!messages || messages.length === 0) return container;
-
-		for (const message of messages) {
-			switch (message.role) {
-				case "user": {
-					const textContent = this.getUserMessageText(message);
-					if (textContent) {
-						container.addChild(new Spacer(1));
-						const userComponent = new UserMessageComponent(textContent, this.getMarkdownThemeWithSettings());
-						container.addChild(userComponent);
-					}
-					break;
-				}
-				case "assistant": {
-					const assistantComponent = new AssistantMessageComponent(
-						message,
-						this.hideThinkingBlock,
-						this.getMarkdownThemeWithSettings(),
-						this.hiddenThinkingLabel,
-					);
-					container.addChild(assistantComponent);
-					for (const content of message.content) {
-						if (content.type === "toolCall") {
-							const component = new ToolExecutionComponent(
-								content.name,
-								content.id,
-								content.arguments,
-								{
-									showImages: this.settingsManager.getShowImages(),
-									imageWidthCells: this.settingsManager.getImageWidthCells(),
-								},
-								this.getRegisteredToolDefinition(content.name),
-								this.ui,
-								this.sessionManager.getCwd(),
-							);
-							component.setExpanded(true);
-							container.addChild(component);
-						}
-					}
-					break;
-				}
-				case "toolResult": {
-					break;
-				}
-				case "bashExecution": {
-					const component = new BashExecutionComponent(message.command, this.ui, message.excludeFromContext);
-					if (message.output) {
-						component.appendOutput(message.output);
-					}
-					component.setComplete(
-						message.exitCode,
-						message.cancelled,
-						message.truncated ? ({ truncated: true } as TruncationResult) : undefined,
-						message.fullOutputPath,
-					);
-					component.setExpanded(true);
-					container.addChild(component);
-					break;
-				}
-				default:
-					break;
-			}
-		}
-		return container;
-	}
-
-	private renderSubagentAlternateScreen(): void {
-		if (!this.subagentAlternateScreenActive || this.subagentAlternateViewIndex === null) return;
-		const index = this.subagentAlternateViewIndex;
-		const result = this.latestSubagentDetails?.result?.results[index];
-		const child = this.latestSubagentDetails?.children?.get(index);
-		const itemEvents = this.latestSubagentDetails?.events.filter((e) => e.index === index) ?? [];
-		if (!result && !child && itemEvents.length === 0) {
-			this.ui.terminal.write("\x1b[?2026h");
-			this.ui.terminal.write("\x1b[2J\x1b[H");
-			this.ui.terminal.write("No output available");
-			this.ui.terminal.write("\x1b[?2026l");
-			return;
-		}
-
-		const width = this.ui.terminal.columns;
-		const container = this.buildSubagentChatContainer(index);
-		const lines = container.render(width);
-		const totalLines = lines.length;
-		const visibleHeight = this.ui.terminal.rows - 2;
-		const maxOffset = Math.max(0, totalLines - visibleHeight);
-		this.subagentAlternateScrollOffset = Math.max(0, Math.min(this.subagentAlternateScrollOffset, maxOffset));
-		const visibleLines = lines.slice(
-			this.subagentAlternateScrollOffset,
-			this.subagentAlternateScrollOffset + visibleHeight,
-		);
-
-		this.ui.terminal.write("\x1b[?2026h");
-		this.ui.terminal.write("\x1b[2J\x1b[H");
-		const agentName = result?.agent ?? itemEvents.at(-1)?.agent ?? "unknown";
-		const statusValue = result?.status ?? itemEvents.at(-1)?.status ?? "running";
-		const statusText =
-			statusValue === "success"
-				? theme.fg("success", statusValue)
-				: statusValue === "running"
-					? theme.fg("warning", statusValue)
-					: theme.fg("error", statusValue);
-		const header = theme.bold(`[${agentName} · ${statusText}]`);
-		this.ui.terminal.write(`${header}\n`);
-		this.ui.terminal.write(visibleLines.join("\n"));
-		const statusLine = theme.fg(
-			"muted",
-			`Lines ${this.subagentAlternateScrollOffset + 1}-${Math.min(this.subagentAlternateScrollOffset + visibleHeight, totalLines)} of ${totalLines} | ↑↓ j/k scroll · PgUp/PgDn · Home/End · q exit`,
-		);
-		this.ui.terminal.write(`\n${statusLine}`);
-		this.ui.terminal.write("\x1b[?2026l");
-		this.subagentAlternateScreenLastRenderedOffset = this.subagentAlternateScrollOffset;
-		this.subagentAlternateScreenLastRenderedVersion = this.subagentAlternateScreenContentVersion;
-	}
-
-	private markSubagentAlternateScreenDirty(): void {
-		this.subagentAlternateScreenDirty = true;
-	}
-
-	private scrollSubagentAlternateScreen(delta: number): void {
-		this.subagentAlternateScrollOffset += delta;
-		this.markSubagentAlternateScreenDirty();
-	}
-
-	private setupSubagentAlternateScreenInput(): void {
-		this.subagentAlternateInputHandler = (data: string) => {
-			if (matchesKey(data, "up") || data === "k") {
-				this.scrollSubagentAlternateScreen(-1);
-				return { consume: true };
-			}
-			if (matchesKey(data, "down") || data === "j") {
-				this.scrollSubagentAlternateScreen(1);
-				return { consume: true };
-			}
-			if (matchesKey(data, "pageUp")) {
-				this.scrollSubagentAlternateScreen(-(this.ui.terminal.rows - 3));
-				return { consume: true };
-			}
-			if (matchesKey(data, "pageDown")) {
-				this.scrollSubagentAlternateScreen(this.ui.terminal.rows - 3);
-				return { consume: true };
-			}
-			if (matchesKey(data, "home") || data === "g") {
-				this.subagentAlternateScrollOffset = 0;
-				this.markSubagentAlternateScreenDirty();
-				return { consume: true };
-			}
-			if (matchesKey(data, "end") || data === "G") {
-				const container = this.buildSubagentChatContainer(this.subagentAlternateViewIndex!);
-				const lines = container.render(this.ui.terminal.columns);
-				const maxOffset = Math.max(0, lines.length - (this.ui.terminal.rows - 2));
-				this.subagentAlternateScrollOffset = maxOffset;
-				this.markSubagentAlternateScreenDirty();
-				return { consume: true };
-			}
-			if (data === "q" || data === "\x1b" || data === "\x0f") {
-				this.exitSubagentAlternateScreen();
-				return { consume: true };
-			}
-			return { consume: true }; // Consume all other input
-		};
-		this.ui.addInputListener(this.subagentAlternateInputHandler);
-	}
 
 	private showSubagentDetails(): void {
 		if (!this.latestSubagentDetails) {
@@ -3984,7 +3620,9 @@ export class InteractiveMode {
 				(index) => {
 					this.subagentPickerComponent = undefined;
 					done();
-					this.enterSubagentAlternateScreen(index);
+					const result = this.latestSubagentDetails?.result?.results[index];
+					const status = result?.status ?? "running";
+					this.showStatus(`Subagent ${index}: ${status} (detailed view not yet implemented in alt-screen mode)`);
 				},
 				() => {
 					this.subagentPickerComponent = undefined;
@@ -6161,34 +5799,6 @@ export class InteractiveMode {
 
 	stop(): void {
 		this.unregisterSignalHandlers();
-		// Exit alternate screens before stopping TUI
-		if (this.alternateScreenActive) {
-			this.alternateScreenActive = false;
-			this.alternateScreenDirty = false;
-			if (this.alternateScreenRenderInterval) {
-				clearInterval(this.alternateScreenRenderInterval);
-				this.alternateScreenRenderInterval = undefined;
-			}
-			if (this.alternateScreenInputHandler) {
-				this.ui.removeInputListener(this.alternateScreenInputHandler);
-				this.alternateScreenInputHandler = undefined;
-			}
-			this.ui.terminal.write("\x1b[?1049l");
-		}
-		if (this.subagentAlternateScreenActive) {
-			this.subagentAlternateScreenActive = false;
-			this.subagentAlternateViewIndex = null;
-			this.subagentAlternateScreenDirty = false;
-			if (this.subagentAlternateScreenRenderInterval) {
-				clearInterval(this.subagentAlternateScreenRenderInterval);
-				this.subagentAlternateScreenRenderInterval = undefined;
-			}
-			if (this.subagentAlternateInputHandler) {
-				this.ui.removeInputListener(this.subagentAlternateInputHandler);
-				this.subagentAlternateInputHandler = undefined;
-			}
-			this.ui.terminal.write("\x1b[?1049l");
-		}
 		if (this.settingsManager.getShowTerminalProgress()) {
 			this.ui.terminal.setProgress(false);
 		}

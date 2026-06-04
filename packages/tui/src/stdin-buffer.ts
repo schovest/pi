@@ -262,9 +262,58 @@ export type StdinBufferOptions = {
 	timeout?: number;
 };
 
+export interface MouseEvent {
+	type: "mouseDown" | "mouseUp" | "mouseMove" | "mouseWheel";
+	button: number;
+	col: number;
+	row: number;
+	shift: boolean;
+	alt: boolean;
+	ctrl: boolean;
+}
+
+const SGR_MOUSE_RE = /^\x1b\[<(\d+);(\d+);(\d+)([Mm])$/;
+
+function parseSGRMouseEvent(sequence: string): MouseEvent | null {
+	const match = sequence.match(SGR_MOUSE_RE);
+	if (!match) return null;
+
+	const cb = Number.parseInt(match[1]!, 10);
+	const col = Number.parseInt(match[2]!, 10);
+	const row = Number.parseInt(match[3]!, 10);
+	const isRelease = match[4] === "m";
+
+	const shift = (cb & 4) !== 0;
+	const alt = (cb & 8) !== 0;
+	const ctrl = (cb & 16) !== 0;
+	const buttonCode = cb & 3;
+	const isMotion = (cb & 32) !== 0;
+	const isWheel = (cb & 64) !== 0;
+
+	let type: MouseEvent["type"];
+	let button: number;
+
+	if (isWheel) {
+		type = "mouseWheel";
+		button = cb & 1 ? 65 : 64;
+	} else if (isRelease) {
+		type = "mouseUp";
+		button = buttonCode;
+	} else if (isMotion) {
+		type = "mouseMove";
+		button = buttonCode;
+	} else {
+		type = "mouseDown";
+		button = buttonCode;
+	}
+
+	return { type, button, col, row, shift, alt, ctrl };
+}
+
 export type StdinBufferEventMap = {
 	data: [string];
 	paste: [string];
+	mouse: [MouseEvent];
 };
 
 /**
@@ -387,6 +436,11 @@ export class StdinBuffer extends EventEmitter<StdinBufferEventMap> {
 	}
 
 	private emitDataSequence(sequence: string): void {
+		const mouseEvent = parseSGRMouseEvent(sequence);
+		if (mouseEvent) {
+			this.emit("mouse", mouseEvent);
+		}
+
 		const rawCodepoint = sequence.length === 1 ? sequence.codePointAt(0) : undefined;
 		if (rawCodepoint !== undefined && rawCodepoint === this.pendingKittyPrintableCodepoint) {
 			this.pendingKittyPrintableCodepoint = undefined;

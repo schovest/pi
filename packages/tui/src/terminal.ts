@@ -82,6 +82,14 @@ export interface Terminal {
 	hideCursor(): void; // Hide the cursor
 	showCursor(): void; // Show the cursor
 
+	// Alternate screen
+	enterAlternateScreen(): void;
+	exitAlternateScreen(): void;
+
+	// Mouse tracking
+	enableMouseTracking(): void;
+	disableMouseTracking(): void;
+
 	// Clear operations
 	clearLine(): void; // Clear current line
 	clearFromCursor(): void; // Clear from cursor to end of screen
@@ -92,6 +100,9 @@ export interface Terminal {
 
 	// Progress indicator (OSC 9;4)
 	setProgress(active: boolean): void;
+
+	// Access to the stdin buffer for mouse event subscription
+	get stdinBuffer(): StdinBuffer | undefined;
 }
 
 /**
@@ -109,7 +120,7 @@ export class ProcessTerminal implements Terminal {
 	private keyboardProtocolNegotiationBuffer = "";
 	private keyboardProtocolFallbackTimer?: ReturnType<typeof setTimeout>;
 	private keyboardProtocolBufferFlushTimer?: ReturnType<typeof setTimeout>;
-	private stdinBuffer?: StdinBuffer;
+	private _stdinBuffer?: StdinBuffer;
 	private stdinDataHandler?: (data: string) => void;
 	private progressInterval?: ReturnType<typeof setInterval>;
 	private writeLogPath = (() => {
@@ -131,6 +142,10 @@ export class ProcessTerminal implements Terminal {
 		return this._kittyProtocolActive;
 	}
 
+	get stdinBuffer(): StdinBuffer | undefined {
+		return this._stdinBuffer;
+	}
+
 	start(onInput: (data: string) => void, onResize: () => void): void {
 		this.inputHandler = onInput;
 		this.resizeHandler = onResize;
@@ -145,6 +160,14 @@ export class ProcessTerminal implements Terminal {
 
 		// Enable bracketed paste mode - terminal will wrap pastes in \x1b[200~ ... \x1b[201~
 		process.stdout.write("\x1b[?2004h");
+
+		// Enter alternate screen buffer
+		process.stdout.write("\x1b[?1049h");
+
+		// Enable mouse tracking (button + drag + SGR extended format)
+		process.stdout.write("\x1b[?1000h");
+		process.stdout.write("\x1b[?1002h");
+		process.stdout.write("\x1b[?1006h");
 
 		// Set up resize handler immediately
 		process.stdout.on("resize", this.resizeHandler);
@@ -176,10 +199,10 @@ export class ProcessTerminal implements Terminal {
 	 * to handle the case where the response arrives split across multiple events.
 	 */
 	private setupStdinBuffer(): void {
-		this.stdinBuffer = new StdinBuffer({ timeout: 10 });
+		this._stdinBuffer = new StdinBuffer({ timeout: 10 });
 
 		// Forward individual sequences to the input handler
-		this.stdinBuffer.on("data", (sequence) => {
+		this._stdinBuffer.on("data", (sequence) => {
 			if (this.keyboardProtocolNegotiationPending) {
 				const negotiationSequence = this.readKeyboardProtocolNegotiationSequence(sequence, true);
 				if (negotiationSequence === "pending") {
@@ -205,7 +228,7 @@ export class ProcessTerminal implements Terminal {
 		});
 
 		// Re-wrap paste content with bracketed paste markers for existing editor handling
-		this.stdinBuffer.on("paste", (content) => {
+		this._stdinBuffer.on("paste", (content) => {
 			if (this.inputHandler) {
 				this.inputHandler(`\x1b[200~${content}\x1b[201~`);
 			}
@@ -213,7 +236,7 @@ export class ProcessTerminal implements Terminal {
 
 		// Handler that pipes stdin data through the buffer
 		this.stdinDataHandler = (data: string) => {
-			this.stdinBuffer!.process(data);
+			this._stdinBuffer!.process(data);
 		};
 	}
 
@@ -446,6 +469,14 @@ export class ProcessTerminal implements Terminal {
 		// Disable bracketed paste mode
 		process.stdout.write("\x1b[?2004l");
 
+		// Disable mouse tracking
+		process.stdout.write("\x1b[?1006l");
+		process.stdout.write("\x1b[?1002l");
+		process.stdout.write("\x1b[?1000l");
+
+		// Exit alternate screen buffer
+		process.stdout.write("\x1b[?1049l");
+
 		const shouldDisableKittyProtocol =
 			this.keyboardProtocolPushed || this._kittyProtocolActive || this.keyboardProtocolNegotiationPending;
 		this.keyboardProtocolLateResponsePending = false;
@@ -466,9 +497,9 @@ export class ProcessTerminal implements Terminal {
 		}
 
 		// Clean up StdinBuffer
-		if (this.stdinBuffer) {
-			this.stdinBuffer.destroy();
-			this.stdinBuffer = undefined;
+		if (this._stdinBuffer) {
+			this._stdinBuffer.destroy();
+			this._stdinBuffer = undefined;
 		}
 
 		// Remove event handlers
@@ -529,6 +560,26 @@ export class ProcessTerminal implements Terminal {
 
 	showCursor(): void {
 		process.stdout.write("\x1b[?25h");
+	}
+
+	enterAlternateScreen(): void {
+		process.stdout.write("\x1b[?1049h");
+	}
+
+	exitAlternateScreen(): void {
+		process.stdout.write("\x1b[?1049l");
+	}
+
+	enableMouseTracking(): void {
+		process.stdout.write("\x1b[?1000h");
+		process.stdout.write("\x1b[?1002h");
+		process.stdout.write("\x1b[?1006h");
+	}
+
+	disableMouseTracking(): void {
+		process.stdout.write("\x1b[?1006l");
+		process.stdout.write("\x1b[?1002l");
+		process.stdout.write("\x1b[?1000l");
 	}
 
 	clearLine(): void {

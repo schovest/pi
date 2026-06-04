@@ -206,6 +206,14 @@ function graphemeWidth(segment: string): number {
 /**
  * Calculate the visible width of a string in terminal columns.
  */
+export function stripAnsi(str: string): string {
+	// eslint-disable-next-line no-control-regex
+	return str
+		.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "")
+		.replace(/\x1b\].*?\x07/g, "")
+		.replace(/\x1b\[<[^>]*>/g, "");
+}
+
 export function visibleWidth(str: string): number {
 	if (str.length === 0) {
 		return 0;
