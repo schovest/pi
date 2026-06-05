@@ -123,7 +123,8 @@ import { ScopedModelsSelectorComponent } from "./components/scoped-models-select
 import { SessionSelectorComponent } from "./components/session-selector.ts";
 import { SettingsSelectorComponent } from "./components/settings-selector.ts";
 import { SkillInvocationMessageComponent } from "./components/skill-invocation-message.ts";
-import { type SubagentDetailsData, SubagentPickerComponent } from "./components/subagent-details.ts";
+import type { SubagentDetailsData, SubagentPickerComponent } from "./components/subagent-details.ts";
+import { SubagentOverlayComponent } from "./components/subagent-overlay.ts";
 import { SubagentsPanelComponent } from "./components/subagents-panel.ts";
 import { ToolExecutionComponent } from "./components/tool-execution.ts";
 import { TreeSelectorComponent } from "./components/tree-selector.ts";
@@ -327,6 +328,8 @@ export class InteractiveMode {
 	private latestSubagentDetails: SubagentDetailsData | undefined;
 	private subagentsPanelComponent: SubagentsPanelComponent | undefined;
 	private subagentPickerComponent: SubagentPickerComponent | undefined;
+	private subagentOverlayComponent: SubagentOverlayComponent | undefined;
+	private subagentOverlayHandle: OverlayHandle | undefined;
 
 	// Tool output expansion state
 	private toolOutputExpanded = false;
@@ -3105,6 +3108,72 @@ export class InteractiveMode {
 		this.latestSubagentDetails = details;
 		this.subagentsPanelComponent?.updateSubagentDetails(details);
 		this.subagentPickerComponent?.update(details);
+		this.subagentOverlayComponent?.update(details);
+	}
+
+	private renderSubagentMessages(messages: AgentMessage[], container: Container, expanded: boolean): void {
+		const renderedPendingTools = new Map<string, ToolExecutionComponent>();
+		for (const message of messages) {
+			if (message.role === "assistant") {
+				const assistantComponent = new AssistantMessageComponent(
+					message,
+					this.hideThinkingBlock,
+					this.getMarkdownThemeWithSettings(),
+					this.hiddenThinkingLabel,
+				);
+				container.addChild(assistantComponent);
+				for (const content of message.content) {
+					if (content.type === "toolCall") {
+						const component = new ToolExecutionComponent(
+							content.name,
+							content.id,
+							content.arguments,
+							{
+								showImages: this.settingsManager.getShowImages(),
+								imageWidthCells: this.settingsManager.getImageWidthCells(),
+							},
+							this.getRegisteredToolDefinition(content.name),
+							this.ui,
+							this.sessionManager.getCwd(),
+						);
+						component.setExpanded(expanded);
+						container.addChild(component);
+						if (message.stopReason === "aborted" || message.stopReason === "error") {
+							const errorMessage =
+								message.stopReason === "aborted" ? "Operation aborted" : message.errorMessage || "Error";
+							component.updateResult({ content: [{ type: "text", text: errorMessage }], isError: true });
+						} else {
+							renderedPendingTools.set(content.id, component);
+						}
+					}
+				}
+			} else if (message.role === "toolResult") {
+				const component = renderedPendingTools.get(message.toolCallId);
+				if (component) {
+					component.updateResult(message);
+					renderedPendingTools.delete(message.toolCallId);
+				}
+			} else if (message.role === "user") {
+				const textContent = this.getUserMessageText(message);
+				if (textContent) {
+					const userComponent = new UserMessageComponent(textContent, this.getMarkdownThemeWithSettings());
+					container.addChild(userComponent);
+				}
+			} else if (message.role === "bashExecution") {
+				const component = new BashExecutionComponent(message.command, this.ui, message.excludeFromContext);
+				if (message.output) {
+					component.appendOutput(message.output);
+				}
+				component.setComplete(
+					message.exitCode,
+					message.cancelled,
+					message.truncated ? ({ truncated: true } as TruncationResult) : undefined,
+					message.fullOutputPath,
+				);
+				component.setExpanded(expanded);
+				container.addChild(component);
+			}
+		}
 	}
 
 	private addMessageToChat(message: AgentMessage, options?: { populateHistory?: boolean }): void {
@@ -3614,24 +3683,33 @@ export class InteractiveMode {
 			return;
 		}
 
-		this.showSelector((done) => {
-			const component = new SubagentPickerComponent(
-				this.latestSubagentDetails!,
-				(index) => {
-					this.subagentPickerComponent = undefined;
-					done();
-					const result = this.latestSubagentDetails?.result?.results[index];
-					const status = result?.status ?? "running";
-					this.showStatus(`Subagent ${index}: ${status} (detailed view not yet implemented in alt-screen mode)`);
-				},
-				() => {
-					this.subagentPickerComponent = undefined;
-					done();
-					this.ui.requestRender();
-				},
-			);
-			this.subagentPickerComponent = component;
-			return { component, focus: component };
+		if (this.subagentOverlayHandle) {
+			this.subagentOverlayHandle.focus();
+			return;
+		}
+
+		const overlay = new SubagentOverlayComponent({
+			data: this.latestSubagentDetails,
+			onClose: () => {
+				this.subagentOverlayHandle?.hide();
+				this.subagentOverlayHandle = undefined;
+				this.subagentOverlayComponent = undefined;
+			},
+			renderMessages: (messages, container, expanded) => {
+				this.renderSubagentMessages(messages, container, expanded);
+			},
+			getChildSession: (index) => {
+				return this.latestSubagentDetails?.children?.get(index);
+			},
+		});
+		this.subagentOverlayComponent = overlay;
+		this.subagentOverlayHandle = this.ui.showOverlay(overlay, {
+			row: 0,
+			col: 0,
+			width: "100%",
+			maxHeight: "100%",
+			margin: 0,
+			background: theme.getBgAnsi("toolPendingBg"),
 		});
 	}
 

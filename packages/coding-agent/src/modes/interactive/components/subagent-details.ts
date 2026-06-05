@@ -11,7 +11,7 @@ export interface SubagentDetailsData {
 	children?: Map<number, AgentSession>;
 }
 
-interface SubagentDetailsItem {
+export interface SubagentDetailsItem {
 	index: number;
 	agent: string;
 	task: string;
@@ -123,7 +123,7 @@ function latestEvents(events: SubagentRunEvent[]): SubagentDetailsItem[] {
 		});
 }
 
-function resultItems(data: SubagentDetailsData): SubagentDetailsItem[] {
+export function resultItems(data: SubagentDetailsData): SubagentDetailsItem[] {
 	const latest = latestByIndex(data.events);
 	if (!data.result) {
 		return latestEvents(data.events);
@@ -150,7 +150,7 @@ function resultItems(data: SubagentDetailsData): SubagentDetailsItem[] {
 	});
 }
 
-function statusColor(status: string): "success" | "error" | "warning" | "muted" {
+export function statusColor(status: string): "success" | "error" | "warning" | "muted" {
 	if (status === "success") return "success";
 	if (status === "failed" || status === "aborted") return "error";
 	if (status === "running") return "warning";
@@ -181,7 +181,7 @@ function eventText(event: SubagentRunEvent): string {
 	return parts.join(" ");
 }
 
-function compactEventTexts(events: SubagentRunEvent[]): Array<{ text: string; count: number }> {
+export function compactEventTexts(events: SubagentRunEvent[]): Array<{ text: string; count: number }> {
 	const compacted: Array<{ text: string; count: number }> = [];
 	for (const event of events) {
 		const text = eventText(event);

@@ -193,6 +193,8 @@ export interface OverlayOptions {
 	visible?: (termWidth: number, termHeight: number) => boolean;
 	/** If true, don't capture keyboard focus when shown */
 	nonCapturing?: boolean;
+	/** ANSI background sequence to fill behind overlay lines (e.g., "\x1b[48;5;235m") */
+	background?: string;
 }
 
 /**
@@ -1028,7 +1030,7 @@ export class TUI extends Container {
 		const result = [...lines];
 
 		// Pre-render all visible overlays and calculate positions
-		const rendered: { overlayLines: string[]; row: number; col: number; w: number }[] = [];
+		const rendered: { overlayLines: string[]; row: number; col: number; w: number; background?: string }[] = [];
 		let minLinesNeeded = result.length;
 
 		const visibleEntries = this.overlayStack.filter((e) => this.isOverlayVisible(e));
@@ -1051,7 +1053,7 @@ export class TUI extends Container {
 			// Get final row/col with actual overlay height
 			const { row, col } = this.resolveOverlayLayout(options, overlayLines.length, termWidth, termHeight);
 
-			rendered.push({ overlayLines, row, col, w: width });
+			rendered.push({ overlayLines, row, col, w: width, background: options?.background });
 			minLinesNeeded = Math.max(minLinesNeeded, row + overlayLines.length);
 		}
 
@@ -1068,7 +1070,7 @@ export class TUI extends Container {
 		const viewportStart = Math.max(0, workingHeight - termHeight);
 
 		// Composite each overlay
-		for (const { overlayLines, row, col, w } of rendered) {
+		for (const { overlayLines, row, col, w, background: bg } of rendered) {
 			for (let i = 0; i < overlayLines.length; i++) {
 				const idx = viewportStart + row + i;
 				if (idx >= 0 && idx < result.length) {
@@ -1076,7 +1078,11 @@ export class TUI extends Container {
 					// (components should already respect width, but this ensures it)
 					const truncatedOverlayLine =
 						visibleWidth(overlayLines[i]) > w ? sliceByColumn(overlayLines[i], 0, w, true) : overlayLines[i];
-					result[idx] = this.compositeLineAt(result[idx], truncatedOverlayLine, col, w, termWidth);
+					let baseLine = result[idx];
+					if (bg) {
+						baseLine = this.applyOverlayBackground(baseLine, col, w, bg, termWidth);
+					}
+					result[idx] = this.compositeLineAt(baseLine, truncatedOverlayLine, col, w, termWidth);
 				}
 			}
 		}
@@ -1137,6 +1143,25 @@ export class TUI extends Container {
 		}
 
 		return this.deleteKittyImages(ids);
+	}
+
+	/** Apply background fill to the overlay region of a base line. */
+	private applyOverlayBackground(
+		baseLine: string,
+		startCol: number,
+		overlayWidth: number,
+		bg: string,
+		totalWidth: number,
+	): string {
+		if (isImageLine(baseLine)) return baseLine;
+		const afterStart = startCol + overlayWidth;
+		const segments = extractSegments(baseLine, startCol, afterStart, totalWidth - afterStart, true);
+		const r = TUI.SEGMENT_RESET;
+		const beforePad = Math.max(0, startCol - segments.beforeWidth);
+		const overlayFill = bg + " ".repeat(overlayWidth) + r;
+		const afterTarget = Math.max(0, totalWidth - Math.max(startCol, segments.beforeWidth) - overlayWidth);
+		const afterPad = Math.max(0, afterTarget - segments.afterWidth);
+		return segments.before + " ".repeat(beforePad) + r + overlayFill + segments.after + " ".repeat(afterPad);
 	}
 
 	/** Splice overlay content into a base line at a specific column. Single-pass optimized. */
