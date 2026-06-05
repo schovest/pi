@@ -53,9 +53,11 @@ export interface Component {
 	render(width: number): string[];
 
 	/**
-	 * Optional handler for keyboard input when component has focus
+	 * Optional handler for keyboard input when component has focus.
+	 * Return true to indicate the input was consumed and should not be processed further.
+	 * Return void or false to allow TUI to handle the input as a fallback.
 	 */
-	handleInput?(data: string): void;
+	handleInput?(data: string): boolean | void;
 
 	/**
 	 * If true, component receives key release events (Kitty protocol).
@@ -548,6 +550,12 @@ export class TUI extends Container {
 	handleMouseEvent(event: MouseEvent): void {
 		const height = this.terminal.rows;
 		if (event.type === "mouseWheel") {
+			if (this.focusedComponent?.handleInput) {
+				const direction = event.button === 64 ? "scrollUp" : "scrollDown";
+				const consumed = this.focusedComponent.handleInput(`\x1b[${direction}`);
+				this.requestRender();
+				if (consumed) return;
+			}
 			if (event.button === 64) {
 				this.autoFollow = false;
 				this.scrollOffset = Math.min(this.getMaxScrollOffset(), this.scrollOffset + AUTO_SCROLL_ROWS);
@@ -821,7 +829,34 @@ export class TUI extends Container {
 			return;
 		}
 
-		// PageUp/PageDown: always scroll (even at bottom, pageUp starts scrolling)
+		// If focused component is an overlay, verify it's still visible
+		// (visibility can change due to terminal resize or visible() callback)
+		const focusedOverlay = this.overlayStack.find((o) => o.component === this.focusedComponent);
+		if (focusedOverlay && !this.isOverlayVisible(focusedOverlay)) {
+			// Focused overlay is no longer visible, redirect to topmost visible overlay
+			const topVisible = this.getTopmostVisibleOverlay();
+			if (topVisible) {
+				this.setFocus(topVisible.component);
+			} else {
+				// No visible overlays, restore to preFocus
+				this.setFocus(focusedOverlay.preFocus);
+			}
+		}
+
+		// Pass input to focused component first. If it returns true, it consumed the input.
+		if (this.focusedComponent?.handleInput) {
+			// Filter out key release events unless component opts in
+			if (isKeyRelease(data) && !this.focusedComponent.wantsKeyRelease) {
+				return;
+			}
+			const consumed = this.focusedComponent.handleInput(data);
+			this.requestRender();
+			if (consumed) {
+				return;
+			}
+		}
+
+		// Fallback: TUI handles scroll keys when focused component didn't consume them
 		if (matchesKey(data, "pageUp")) {
 			this.setScrollOffset(this.scrollOffset + this.terminal.rows - 2);
 			return;
@@ -838,31 +873,6 @@ export class TUI extends Container {
 		if (matchesKey(data, "ctrl+end")) {
 			this.setScrollOffset(0);
 			return;
-		}
-
-		// If focused component is an overlay, verify it's still visible
-		// (visibility can change due to terminal resize or visible() callback)
-		const focusedOverlay = this.overlayStack.find((o) => o.component === this.focusedComponent);
-		if (focusedOverlay && !this.isOverlayVisible(focusedOverlay)) {
-			// Focused overlay is no longer visible, redirect to topmost visible overlay
-			const topVisible = this.getTopmostVisibleOverlay();
-			if (topVisible) {
-				this.setFocus(topVisible.component);
-			} else {
-				// No visible overlays, restore to preFocus
-				this.setFocus(focusedOverlay.preFocus);
-			}
-		}
-
-		// Pass input to focused component (including Ctrl+C)
-		// The focused component can decide how to handle Ctrl+C
-		if (this.focusedComponent?.handleInput) {
-			// Filter out key release events unless component opts in
-			if (isKeyRelease(data) && !this.focusedComponent.wantsKeyRelease) {
-				return;
-			}
-			this.focusedComponent.handleInput(data);
-			this.requestRender();
 		}
 	}
 

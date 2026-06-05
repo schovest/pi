@@ -1,5 +1,5 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import { Container, getKeybindings, Spacer, Text, visibleWidth } from "@earendil-works/pi-tui";
+import { Container, getKeybindings, matchesKey, Spacer, Text, visibleWidth } from "@earendil-works/pi-tui";
 import type { AgentSession } from "../../../core/agent-session.ts";
 import type { SubagentTaskResult } from "../../../core/subagents/types.ts";
 import { theme } from "../theme/theme.ts";
@@ -75,13 +75,13 @@ export class SubagentOverlayComponent extends Container {
 		this.rebuild();
 	}
 
-	handleInput(keyData: string): void {
+	handleInput(keyData: string): boolean {
 		const kb = getKeybindings();
 		const items = toListItems(this.data);
 
 		if (kb.matches(keyData, "tui.select.cancel")) {
 			this.onClose();
-			return;
+			return true;
 		}
 
 		if (this.focusedPane === "list") {
@@ -89,37 +89,50 @@ export class SubagentOverlayComponent extends Container {
 				this.selectedIndex = Math.max(0, this.selectedIndex - 1);
 				this.detailScrollOffset = 0;
 				this.rebuild();
+				return true;
 			} else if (kb.matches(keyData, "tui.select.down") || keyData === "j") {
 				this.selectedIndex = Math.min(items.length - 1, this.selectedIndex + 1);
 				this.detailScrollOffset = 0;
 				this.rebuild();
+				return true;
 			} else if (kb.matches(keyData, "tui.select.confirm") || keyData === "\n" || keyData === "\t") {
 				this.focusedPane = "detail";
 				this.rebuild();
+				return true;
 			}
 		} else {
 			if (keyData === "\t") {
 				this.focusedPane = "list";
 				this.rebuild();
+				return true;
 			} else if (keyData === "\x0f") {
 				this.expanded = !this.expanded;
 				this.rebuildRightPanel();
-			} else if (kb.matches(keyData, "tui.select.up") || keyData === "k") {
-				this.detailScrollOffset = Math.max(0, this.detailScrollOffset - 1);
-				this.rebuildRightPanel();
-			} else if (kb.matches(keyData, "tui.select.down") || keyData === "j") {
-				this.detailScrollOffset++;
-				this.rebuildRightPanel();
-			} else if (keyData === "\x1b[A" || keyData === "\x1b[5~") {
+				return true;
+			} else if (this.focusedPane === "detail") {
 				const termHeight = process.stdout.rows || 24;
-				this.detailScrollOffset = Math.max(0, this.detailScrollOffset - (termHeight - 4));
-				this.rebuildRightPanel();
-			} else if (keyData === "\x1b[B" || keyData === "\x1b[6~") {
-				const termHeight = process.stdout.rows || 24;
-				this.detailScrollOffset += termHeight - 4;
-				this.rebuildRightPanel();
+				const pageAmount = termHeight - 4;
+				if (matchesKey(keyData, "pageUp") || keyData === "\x1b[scrollUp") {
+					this.detailScrollOffset = Math.max(0, this.detailScrollOffset - pageAmount);
+					this.rebuildRightPanel();
+					return true;
+				} else if (matchesKey(keyData, "pageDown") || keyData === "\x1b[scrollDown") {
+					this.detailScrollOffset += pageAmount;
+					this.rebuildRightPanel();
+					return true;
+				} else if (kb.matches(keyData, "tui.select.up") || keyData === "k") {
+					this.detailScrollOffset = Math.max(0, this.detailScrollOffset - 1);
+					this.rebuildRightPanel();
+					return true;
+				} else if (kb.matches(keyData, "tui.select.down") || keyData === "j") {
+					this.detailScrollOffset++;
+					this.rebuildRightPanel();
+					return true;
+				}
 			}
 		}
+
+		return false;
 	}
 
 	private rebuild(): void {
