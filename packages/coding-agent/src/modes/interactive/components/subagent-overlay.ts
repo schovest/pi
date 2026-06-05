@@ -114,19 +114,15 @@ export class SubagentOverlayComponent extends Container {
 				const pageAmount = termHeight - 4;
 				if (matchesKey(keyData, "pageUp") || keyData === "\x1b[scrollUp") {
 					this.detailScrollOffset = Math.max(0, this.detailScrollOffset - pageAmount);
-					this.rebuildRightPanel();
 					return true;
 				} else if (matchesKey(keyData, "pageDown") || keyData === "\x1b[scrollDown") {
 					this.detailScrollOffset += pageAmount;
-					this.rebuildRightPanel();
 					return true;
 				} else if (kb.matches(keyData, "tui.select.up") || keyData === "k") {
 					this.detailScrollOffset = Math.max(0, this.detailScrollOffset - 1);
-					this.rebuildRightPanel();
 					return true;
 				} else if (kb.matches(keyData, "tui.select.down") || keyData === "j") {
 					this.detailScrollOffset++;
-					this.rebuildRightPanel();
 					return true;
 				}
 			}
@@ -259,18 +255,24 @@ export class SubagentOverlayComponent extends Container {
 		const listWidth = Math.max(20, Math.min(40, Math.floor(width * 0.3)));
 		const detailWidth = width - listWidth - 1;
 		const termHeight = process.stdout.rows || 24;
+		const sep = theme.fg("border", "│");
 
 		const leftLines = this.leftPanel.render(listWidth);
 		const rightLines = this.rightPanel.render(Math.max(1, detailWidth));
 
-		const maxLines = Math.max(leftLines.length, rightLines.length, termHeight);
-		const result: string[] = [];
+		const maxOffset = Math.max(0, rightLines.length - termHeight);
+		this.detailScrollOffset = Math.max(0, Math.min(this.detailScrollOffset, maxOffset));
 
-		for (let i = 0; i < maxLines; i++) {
+		const visibleRight = rightLines.slice(this.detailScrollOffset, this.detailScrollOffset + termHeight);
+		while (visibleRight.length < termHeight) {
+			visibleRight.push("");
+		}
+
+		const result: string[] = [];
+		for (let i = 0; i < termHeight; i++) {
 			const left = i < leftLines.length ? leftLines[i] : "";
-			const right = i < rightLines.length ? rightLines[i] : "";
+			const right = visibleRight[i] ?? "";
 			const leftPadded = padToWidth(left, listWidth);
-			const sep = theme.fg("border", "│");
 			result.push(leftPadded + sep + right);
 		}
 
