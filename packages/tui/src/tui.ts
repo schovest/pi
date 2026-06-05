@@ -683,8 +683,15 @@ export class TUI extends Container {
 		if (lines.length === 0) return "";
 		const startRow = Math.min(sel.anchorRow, sel.focusRow);
 		const endRow = Math.max(sel.anchorRow, sel.focusRow);
-		const startCol = startRow === sel.anchorRow ? sel.anchorCol : sel.focusCol;
-		const endCol = endRow === sel.anchorRow ? sel.anchorCol : sel.focusCol;
+		let startCol: number;
+		let endCol: number;
+		if (startRow === endRow) {
+			startCol = Math.min(sel.anchorCol, sel.focusCol);
+			endCol = Math.max(sel.anchorCol, sel.focusCol);
+		} else {
+			startCol = startRow === sel.anchorRow ? sel.anchorCol : sel.focusCol;
+			endCol = endRow === sel.anchorRow ? sel.anchorCol : sel.focusCol;
+		}
 		const parts: string[] = [];
 		for (let row = startRow; row <= endRow; row++) {
 			if (row < 0 || row >= lines.length) continue;
@@ -707,8 +714,15 @@ export class TUI extends Container {
 		const sel = this.selection;
 		const startRow = Math.min(sel.anchorRow, sel.focusRow);
 		const endRow = Math.max(sel.anchorRow, sel.focusRow);
-		const startCol = startRow === sel.anchorRow ? sel.anchorCol : sel.focusCol;
-		const endCol = endRow === sel.anchorRow ? sel.anchorCol : sel.focusCol;
+		let startCol: number;
+		let endCol: number;
+		if (startRow === endRow) {
+			startCol = Math.min(sel.anchorCol, sel.focusCol);
+			endCol = Math.max(sel.anchorCol, sel.focusCol);
+		} else {
+			startCol = startRow === sel.anchorRow ? sel.anchorCol : sel.focusCol;
+			endCol = endRow === sel.anchorRow ? sel.anchorCol : sel.focusCol;
+		}
 		for (let row = startRow; row <= endRow; row++) {
 			const screenRow = row - viewportTop;
 			if (screenRow < 0 || screenRow >= height) continue;
