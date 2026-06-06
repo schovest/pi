@@ -124,7 +124,7 @@ import { ScopedModelsSelectorComponent } from "./components/scoped-models-select
 import { SessionSelectorComponent } from "./components/session-selector.ts";
 import { SettingsSelectorComponent } from "./components/settings-selector.ts";
 import { SkillInvocationMessageComponent } from "./components/skill-invocation-message.ts";
-import type { SubagentDetailsData, SubagentPickerComponent } from "./components/subagent-details.ts";
+import type { SubagentDetailsData } from "./components/subagent-details.ts";
 import { SubagentOverlayComponent } from "./components/subagent-overlay.ts";
 import { SubagentsPanelComponent } from "./components/subagents-panel.ts";
 import { ToolExecutionComponent } from "./components/tool-execution.ts";
@@ -328,7 +328,6 @@ export class InteractiveMode {
 	private pendingTools = new Map<string, ToolExecutionComponent>();
 	private latestSubagentDetails: SubagentDetailsData | undefined;
 	private subagentsPanelComponent: SubagentsPanelComponent | undefined;
-	private subagentPickerComponent: SubagentPickerComponent | undefined;
 	private subagentOverlayComponent: SubagentOverlayComponent | undefined;
 	private subagentOverlayHandle: OverlayHandle | undefined;
 
@@ -3525,7 +3524,6 @@ export class InteractiveMode {
 		}
 		this.latestSubagentDetails = details;
 		this.subagentsPanelComponent?.updateSubagentDetails(details);
-		this.subagentPickerComponent?.update(details);
 		this.subagentOverlayComponent?.update(details);
 	}
 
@@ -4109,6 +4107,7 @@ export class InteractiveMode {
 		const overlay = new SubagentOverlayComponent({
 			data: this.latestSubagentDetails,
 			onClose: () => {
+				this.subagentOverlayComponent?.destroy();
 				this.subagentOverlayHandle?.hide();
 				this.subagentOverlayHandle = undefined;
 				this.subagentOverlayComponent = undefined;
@@ -4118,6 +4117,12 @@ export class InteractiveMode {
 			},
 			getChildSession: (index) => {
 				return this.latestSubagentDetails?.children?.get(index);
+			},
+			requestRender: () => {
+				this.ui.requestRender();
+			},
+			getTerminalHeight: () => {
+				return this.ui.terminal.rows;
 			},
 		});
 		this.subagentOverlayComponent = overlay;

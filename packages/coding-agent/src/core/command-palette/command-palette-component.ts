@@ -43,29 +43,30 @@ export class CommandPaletteComponent extends Container implements Focusable {
 		this.searchInput.focused = value;
 	}
 
-	handleInput(keyData: string): void {
+	handleInput(keyData: string): boolean {
 		if (this.keybindings.matches(keyData, "tui.select.up")) {
 			this.list.moveUp();
-			return;
+			return true;
 		}
 		if (this.keybindings.matches(keyData, "tui.select.down")) {
 			this.list.moveDown();
-			return;
+			return true;
 		}
 		if (this.keybindings.matches(keyData, "tui.select.confirm")) {
 			const selected = this.list.getSelectedItem();
 			if (selected) {
 				this.callbacks.onSelect(selected);
 			}
-			return;
+			return true;
 		}
 		if (this.keybindings.matches(keyData, "tui.select.cancel")) {
 			this.callbacks.onCancel();
-			return;
+			return true;
 		}
 
 		this.searchInput.handleInput(keyData);
 		this.filterItems();
+		return false;
 	}
 
 	private filterItems(): void {
