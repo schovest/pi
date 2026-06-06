@@ -52,6 +52,7 @@ export interface AppKeybindings {
 	"app.tree.filter.all": true;
 	"app.tree.filter.cycleForward": true;
 	"app.tree.filter.cycleBackward": true;
+	"app.commandPalette": true;
 }
 
 export type AppKeybinding = keyof AppKeybindings;
@@ -74,12 +75,16 @@ export const KEYBINDINGS = {
 		description: "Cycle thinking level",
 	},
 	"app.model.cycleForward": {
-		defaultKeys: "ctrl+p",
+		defaultKeys: [] as KeyId[],
 		description: "Cycle to next model",
 	},
 	"app.model.cycleBackward": {
-		defaultKeys: "shift+ctrl+p",
+		defaultKeys: [] as KeyId[],
 		description: "Cycle to previous model",
+	},
+	"app.commandPalette": {
+		defaultKeys: "ctrl+p",
+		description: "Open command palette",
 	},
 	"app.model.select": { defaultKeys: "ctrl+l", description: "Open model selector" },
 	"app.tools.expand": { defaultKeys: "ctrl+o", description: "Toggle tool output" },

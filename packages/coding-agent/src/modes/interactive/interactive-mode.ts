@@ -62,6 +62,7 @@ import {
 import { type AgentSession, type AgentSessionEvent, parseSkillBlock } from "../../core/agent-session.ts";
 import { type AgentSessionRuntime, SessionImportFileNotFoundError } from "../../core/agent-session-runtime.ts";
 import { PluginManager } from "../../core/claude-plugin-manager.ts";
+import { CommandPaletteComponent, CommandRegistry } from "../../core/command-palette/index.ts";
 import type {
 	AutocompleteProviderFactory,
 	EditorFactory,
@@ -339,6 +340,7 @@ export class InteractiveMode {
 
 	// Skill commands: command name -> skill file path
 	private skillCommands = new Map<string, string>();
+	private commandRegistry = new CommandRegistry();
 
 	// Agent subscription unsubscribe function
 	private unsubscribe?: () => void;
@@ -553,6 +555,22 @@ export class InteractiveMode {
 				getArgumentCompletions: cmd.getArgumentCompletions,
 			}));
 
+		// Register extension commands to command palette
+		for (const cmd of this.session.extensionRunner.getRegisteredCommands()) {
+			const id = `extension.${cmd.invocationName}`;
+			if (!this.commandRegistry.getAll().find((item) => item.id === id)) {
+				this.commandRegistry.register({
+					id,
+					label: `/${cmd.invocationName}`,
+					description: cmd.description,
+					category: "extension",
+					handler: () => {
+						void this.session.prompt(`/${cmd.invocationName}`, { streamingBehavior: "steer" });
+					},
+				});
+			}
+		}
+
 		// Build skill commands from session.skills (if enabled)
 		this.skillCommands.clear();
 		const skillCommandList: SlashCommand[] = [];
@@ -564,6 +582,19 @@ export class InteractiveMode {
 					name: commandName,
 					description: this.prefixAutocompleteDescription(skill.description, skill.sourceInfo),
 				});
+
+				const skillId = `skill.${commandName}`;
+				if (!this.commandRegistry.getAll().find((item) => item.id === skillId)) {
+					this.commandRegistry.register({
+						id: skillId,
+						label: `/${commandName}`,
+						description: skill.description,
+						category: "skill",
+						handler: () => {
+							void this.session.prompt(`/${commandName}`, { streamingBehavior: "steer" });
+						},
+					});
+				}
 			}
 		}
 
@@ -721,6 +752,7 @@ export class InteractiveMode {
 
 		this.setupKeyHandlers();
 		this.setupEditorSubmitHandler();
+		this.setupCommandRegistry();
 
 		this.ui.onCopySelection = async (text: string) => {
 			await copyToClipboard(text);
@@ -2480,6 +2512,7 @@ export class InteractiveMode {
 		this.defaultEditor.onAction("app.session.tree", () => this.showTreeSelector());
 		this.defaultEditor.onAction("app.session.fork", () => this.showUserMessageSelector());
 		this.defaultEditor.onAction("app.session.resume", () => this.showSessionSelector());
+		this.defaultEditor.onAction("app.commandPalette", () => this.showCommandPalette());
 
 		this.defaultEditor.onChange = (text: string) => {
 			const wasBashMode = this.isBashMode;
@@ -2493,6 +2526,391 @@ export class InteractiveMode {
 		this.defaultEditor.onPasteImage = () => {
 			this.handleClipboardImagePaste();
 		};
+	}
+
+	private setupCommandRegistry(): void {
+		const registry = this.commandRegistry;
+
+		registry.register({
+			id: "app.commandPalette",
+			label: "命令面板",
+			description: "打开命令面板",
+			category: "navigation",
+			keybinding: "ctrl+p",
+			handler: () => this.showCommandPalette(),
+		});
+
+		registry.register({
+			id: "app.model.select",
+			label: "选择模型",
+			description: "打开模型选择器",
+			category: "model",
+			keybinding: "ctrl+l",
+			handler: () => this.showModelSelector(),
+		});
+
+		registry.register({
+			id: "app.model.cycleForward",
+			label: "切换下一个模型",
+			description: "循环切换模型",
+			category: "model",
+			handler: () => {
+				void this.cycleModel("forward");
+			},
+		});
+
+		registry.register({
+			id: "app.model.cycleBackward",
+			label: "切换上一个模型",
+			description: "反向循环切换模型",
+			category: "model",
+			handler: () => {
+				void this.cycleModel("backward");
+			},
+		});
+
+		registry.register({
+			id: "app.thinking.cycle",
+			label: "切换思考级别",
+			description: "循环切换思考级别",
+			category: "settings",
+			keybinding: "shift+tab",
+			handler: () => this.cycleThinkingLevel(),
+		});
+
+		registry.register({
+			id: "app.thinking.toggle",
+			label: "切换思考块可见性",
+			description: "显示或隐藏思考过程",
+			category: "settings",
+			keybinding: "ctrl+t",
+			handler: () => this.toggleThinkingBlockVisibility(),
+		});
+
+		registry.register({
+			id: "app.tools.expand",
+			label: "展开/折叠工具输出",
+			description: "切换工具输出展开状态",
+			category: "tools",
+			keybinding: "ctrl+o",
+			handler: () => this.toggleToolOutputExpansion(),
+		});
+
+		registry.register({
+			id: "app.editor.external",
+			label: "打开外部编辑器",
+			description: "用外部编辑器编辑输入",
+			category: "tools",
+			keybinding: "ctrl+g",
+			handler: () => {
+				void this.openExternalEditor();
+			},
+		});
+
+		registry.register({
+			id: "app.message.followUp",
+			label: "追加消息",
+			description: "将消息追加到队列",
+			category: "tools",
+			keybinding: "alt+enter",
+			handler: () => {
+				void this.handleFollowUp();
+			},
+		});
+
+		registry.register({
+			id: "app.message.dequeue",
+			label: "恢复排队消息",
+			description: "将排队消息恢复到编辑器",
+			category: "tools",
+			handler: () => this.handleDequeue(),
+		});
+
+		registry.register({
+			id: "app.session.new",
+			label: "新建会话",
+			description: "创建新的对话会话",
+			category: "session",
+			handler: () => {
+				void this.handleClearCommand();
+			},
+		});
+
+		registry.register({
+			id: "app.session.tree",
+			label: "会话树",
+			description: "导航会话分支",
+			category: "session",
+			handler: () => this.showTreeSelector(),
+		});
+
+		registry.register({
+			id: "app.session.fork",
+			label: "分叉会话",
+			description: "从之前消息创建分支",
+			category: "session",
+			handler: () => this.showUserMessageSelector(),
+		});
+
+		registry.register({
+			id: "app.session.resume",
+			label: "恢复会话",
+			description: "选择并恢复历史会话",
+			category: "session",
+			handler: () => this.showSessionSelector(),
+		});
+
+		registry.register({
+			id: "app.clipboard.pasteImage",
+			label: "粘贴图片",
+			description: "从剪贴板粘贴图片",
+			category: "tools",
+			handler: () => {
+				void this.handleClipboardImagePaste();
+			},
+		});
+
+		registry.register({
+			id: "slash.settings",
+			label: "/settings",
+			description: "打开设置菜单",
+			category: "slash",
+			handler: () => this.showSettingsSelector(),
+		});
+
+		registry.register({
+			id: "slash.plugins",
+			label: "/plugins",
+			description: "管理插件",
+			category: "slash",
+			handler: () => this.handlePluginsCommand(),
+		});
+
+		registry.register({
+			id: "slash.scoped-models",
+			label: "/scoped-models",
+			description: "管理作用域模型",
+			category: "slash",
+			handler: () => {
+				void this.showModelsSelector();
+			},
+		});
+
+		registry.register({
+			id: "slash.model",
+			label: "/model",
+			description: "选择或切换模型",
+			category: "slash",
+			keybinding: "ctrl+l",
+			handler: () => {
+				void this.handleModelCommand(undefined);
+			},
+		});
+
+		registry.register({
+			id: "slash.export",
+			label: "/export",
+			description: "导出会话",
+			category: "slash",
+			handler: () => {
+				void this.handleExportCommand("/export");
+			},
+		});
+
+		registry.register({
+			id: "slash.import",
+			label: "/import",
+			description: "导入会话",
+			category: "slash",
+			handler: () => {
+				void this.handleImportCommand("/import");
+			},
+		});
+
+		registry.register({
+			id: "slash.share",
+			label: "/share",
+			description: "分享为 GitHub gist",
+			category: "slash",
+			handler: () => {
+				void this.handleShareCommand();
+			},
+		});
+
+		registry.register({
+			id: "slash.copy",
+			label: "/copy",
+			description: "复制最后消息到剪贴板",
+			category: "slash",
+			handler: () => {
+				void this.handleCopyCommand();
+			},
+		});
+
+		registry.register({
+			id: "slash.name",
+			label: "/name",
+			description: "设置会话名",
+			category: "slash",
+			handler: () => this.handleNameCommand("/name"),
+		});
+
+		registry.register({
+			id: "slash.session",
+			label: "/session",
+			description: "显示会话信息",
+			category: "slash",
+			handler: () => this.handleSessionCommand(),
+		});
+
+		registry.register({
+			id: "slash.subagents",
+			label: "/subagents",
+			description: "查看子 agent",
+			category: "slash",
+			handler: () => this.handleSubagentsCommand(),
+		});
+
+		registry.register({
+			id: "slash.agent",
+			label: "/agent",
+			description: "切换主 agent 角色",
+			category: "slash",
+			handler: () => {
+				void this.handleAgentCommand(undefined);
+			},
+		});
+
+		registry.register({
+			id: "slash.running-subagents",
+			label: "/running-subagents",
+			description: "检查运行中的子 agent",
+			category: "slash",
+			handler: () => this.showSubagentDetails(),
+		});
+
+		registry.register({
+			id: "slash.changelog",
+			label: "/changelog",
+			description: "显示更新日志",
+			category: "slash",
+			handler: () => this.handleChangelogCommand(),
+		});
+
+		registry.register({
+			id: "slash.hotkeys",
+			label: "/hotkeys",
+			description: "显示所有快捷键",
+			category: "slash",
+			handler: () => this.handleHotkeysCommand(),
+		});
+
+		registry.register({
+			id: "slash.fork",
+			label: "/fork",
+			description: "从之前消息分叉",
+			category: "slash",
+			handler: () => this.showUserMessageSelector(),
+		});
+
+		registry.register({
+			id: "slash.clone",
+			label: "/clone",
+			description: "复制当前会话",
+			category: "slash",
+			handler: () => {
+				void this.handleCloneCommand();
+			},
+		});
+
+		registry.register({
+			id: "slash.tree",
+			label: "/tree",
+			description: "会话树导航",
+			category: "slash",
+			handler: () => this.showTreeSelector(),
+		});
+
+		registry.register({
+			id: "slash.login",
+			label: "/login",
+			description: "登录认证",
+			category: "slash",
+			handler: () => this.showOAuthSelector("login"),
+		});
+
+		registry.register({
+			id: "slash.logout",
+			label: "/logout",
+			description: "登出认证",
+			category: "slash",
+			handler: () => this.showOAuthSelector("logout"),
+		});
+
+		registry.register({
+			id: "slash.new",
+			label: "/new",
+			description: "新建会话",
+			category: "slash",
+			handler: () => {
+				void this.handleClearCommand();
+			},
+		});
+
+		registry.register({
+			id: "slash.compact",
+			label: "/compact",
+			description: "手动压缩上下文",
+			category: "slash",
+			handler: () => {
+				void this.handleCompactCommand(undefined);
+			},
+		});
+
+		registry.register({
+			id: "slash.reload",
+			label: "/reload",
+			description: "热重载配置",
+			category: "slash",
+			handler: () => {
+				void this.handleReloadCommand();
+			},
+		});
+
+		registry.register({
+			id: "slash.resume",
+			label: "/resume",
+			description: "恢复其他会话",
+			category: "slash",
+			handler: () => this.showSessionSelector(),
+		});
+
+		registry.register({
+			id: "slash.quit",
+			label: "/quit",
+			description: "退出",
+			category: "slash",
+			handler: () => {
+				void this.shutdown();
+			},
+		});
+	}
+
+	private showCommandPalette(): void {
+		const palette = new CommandPaletteComponent(this.commandRegistry, this.keybindings, {
+			onSelect: (item) => {
+				handle.hide();
+				void item.handler();
+			},
+			onCancel: () => handle.hide(),
+		});
+
+		const handle = this.ui.showOverlay(palette, {
+			width: "60%",
+			minWidth: 40,
+			maxHeight: "50%",
+			anchor: "center",
+		});
 	}
 
 	private async handleClipboardImagePaste(): Promise<void> {
