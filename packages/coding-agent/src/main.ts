@@ -14,7 +14,7 @@ import { processFileArguments } from "./cli/file-processor.ts";
 import { buildInitialMessage } from "./cli/initial-message.ts";
 import { listModels } from "./cli/list-models.ts";
 import { selectSession } from "./cli/session-picker.ts";
-import { ENV_SESSION_DIR, expandTildePath, getAgentDir, getPackageDir, VERSION } from "./config.ts";
+import { ENV_SESSION_DIR, expandTildePath, getAgentDir, VERSION } from "./config.ts";
 import { type CreateAgentSessionRuntimeFactory, createAgentSessionRuntime } from "./core/agent-session-runtime.ts";
 import {
 	type AgentSessionRuntimeDiagnostic,
@@ -46,7 +46,6 @@ import { ExtensionSelectorComponent } from "./modes/interactive/components/exten
 import { initTheme, stopThemeWatcher } from "./modes/interactive/theme/theme.ts";
 import { handleConfigCommand, handlePackageCommand, handlePluginCommand } from "./package-manager-cli.ts";
 import { isLocalPath, normalizePath, resolvePath } from "./utils/paths.ts";
-import { cleanupWindowsSelfUpdateQuarantine } from "./utils/windows-self-update.ts";
 
 /**
  * Read all content from piped stdin.
@@ -479,11 +478,6 @@ export async function main(args: string[], options?: MainOptions) {
 	const offlineMode = args.includes("--offline") || isTruthyEnvFlag(process.env.PI_OFFLINE);
 	if (offlineMode) {
 		process.env.PI_OFFLINE = "1";
-		process.env.PI_SKIP_VERSION_CHECK = "1";
-	}
-
-	if (process.platform === "win32") {
-		cleanupWindowsSelfUpdateQuarantine(getPackageDir());
 	}
 
 	if (await handlePackageCommand(args)) {

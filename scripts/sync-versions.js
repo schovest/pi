@@ -52,8 +52,9 @@ for (const [dir, pkg] of Object.entries(packages)) {
 	let updated = false;
 	
 	// Check dependencies
-	if (pkg.data.dependencies) {
+		if (pkg.data.dependencies) {
 		for (const [depName, currentVersion] of Object.entries(pkg.data.dependencies)) {
+			if (currentVersion.startsWith('file:')) continue;
 			if (versionMap[depName]) {
 				const newVersion = `^${versionMap[depName]}`;
 				if (currentVersion !== newVersion) {
