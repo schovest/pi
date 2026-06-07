@@ -14,6 +14,8 @@ export interface SubagentOverlayOptions {
 	getChildSession: (index: number) => AgentSession | undefined;
 	requestRender: () => void;
 	getTerminalHeight: () => number;
+	/** Load historical subagent messages from inline session data */
+	getSubagentMessages?: (subagentEntryId: string) => AgentMessage[];
 }
 
 interface AgentListItem {
@@ -25,6 +27,8 @@ interface AgentListItem {
 	totalTokens?: number;
 	toolCount: number;
 	recentTools: string[];
+	runId?: string;
+	subagentEntryId?: string;
 }
 
 function toListItems(data: SubagentDetailsData): AgentListItem[] {
@@ -37,6 +41,8 @@ function toListItems(data: SubagentDetailsData): AgentListItem[] {
 		totalTokens: item.totalTokens,
 		toolCount: item.toolCount,
 		recentTools: item.recentTools,
+		runId: item.runId,
+		subagentEntryId: item.subagentEntryId,
 	}));
 }
 
@@ -47,6 +53,7 @@ export class SubagentOverlayComponent extends Container {
 	private getChildSession: (index: number) => AgentSession | undefined;
 	private requestRender: () => void;
 	private getTerminalHeight: () => number;
+	private getSubagentMessages?: (subagentEntryId: string) => AgentMessage[];
 
 	private selectedIndex = 0;
 	private focusedPane: "list" | "detail" = "list";
@@ -68,6 +75,7 @@ export class SubagentOverlayComponent extends Container {
 		this.getChildSession = options.getChildSession;
 		this.requestRender = options.requestRender;
 		this.getTerminalHeight = options.getTerminalHeight;
+		this.getSubagentMessages = options.getSubagentMessages;
 
 		this.leftPanel = new Container();
 		this.rightPanel = new Container();
@@ -130,22 +138,34 @@ export class SubagentOverlayComponent extends Container {
 				const pageAmount = this.getTerminalHeight() - 4;
 				if (matchesKey(keyData, "pageUp") || keyData === "\x1b[scrollUp") {
 					this.detailScrollOffset = Math.max(0, this.detailScrollOffset - pageAmount);
+					this.rebuildRightPanel();
+					this.requestRender();
 					return true;
 				} else if (matchesKey(keyData, "pageDown") || keyData === "\x1b[scrollDown") {
 					this.detailScrollOffset += pageAmount;
+					this.rebuildRightPanel();
+					this.requestRender();
 					return true;
 				} else if (matchesKey(keyData, "home") || keyData === "g") {
 					this.detailScrollOffset = 0;
+					this.rebuildRightPanel();
+					this.requestRender();
 					return true;
 				} else if (matchesKey(keyData, "end") || keyData === "G") {
 					this.detailScrollOffset = Number.MAX_SAFE_INTEGER;
 					this.clampScrollOffset();
+					this.rebuildRightPanel();
+					this.requestRender();
 					return true;
 				} else if (kb.matches(keyData, "tui.select.up") || keyData === "k") {
 					this.detailScrollOffset = Math.max(0, this.detailScrollOffset - 1);
+					this.rebuildRightPanel();
+					this.requestRender();
 					return true;
 				} else if (kb.matches(keyData, "tui.select.down") || keyData === "j") {
 					this.detailScrollOffset++;
+					this.rebuildRightPanel();
+					this.requestRender();
 					return true;
 				}
 			}
@@ -193,7 +213,7 @@ export class SubagentOverlayComponent extends Container {
 				const tools = theme.fg("muted", ` tools=${item.toolCount}`);
 				const lastTool = item.recentTools.length > 0 ? theme.fg("muted", ` -> ${item.recentTools.at(-1)}`) : "";
 				this.leftPanel.addChild(
-					new Text(`${pointer}${item.index + 1}. ${item.agent} ${status}${usage}${tools}${lastTool}`, 1, 0),
+					new Text(`${pointer}${i + 1}. ${item.agent} ${status}${usage}${tools}${lastTool}`, 1, 0),
 				);
 			}
 		}
@@ -239,7 +259,7 @@ export class SubagentOverlayComponent extends Container {
 		this.rightPanel.addChild(new Text(theme.fg("muted", `Task: ${detailsItem?.task ?? ""}`), 1, 0));
 		this.rightPanel.addChild(new Spacer(1));
 
-		const messages = this.getMessagesForAgent(item.index);
+		const messages = this.getMessagesForAgent(item);
 		// Completed subagents (no live child session) default to expanded view
 		const isCompleted = item.status !== "running" && !this.getChildSession(item.index);
 		const effectiveExpanded = this.expanded || isCompleted;
@@ -300,25 +320,34 @@ export class SubagentOverlayComponent extends Container {
 		}
 	}
 
-	private getMessagesForAgent(index: number): AgentMessage[] {
-		const child = this.getChildSession(index);
+	private getMessagesForAgent(item: AgentListItem): AgentMessage[] {
+		// 1. Live child session
+		const child = this.getChildSession(item.index);
 		if (child) {
 			return child.messages;
 		}
+		// 2. Result from current run
 		if (this.data.result) {
-			const taskResult = this.data.result.results.find((r: SubagentTaskResult) => r.index === index);
+			const taskResult = this.data.result.results.find((r: SubagentTaskResult) => r.index === item.index && (item.runId === undefined || r.events.some((e) => e.runId === item.runId)));
 			if (taskResult) {
 				return taskResult.messages;
 			}
+		}
+		// 3. Inline historical messages from parent session (by subagentEntryId)
+		if (this.getSubagentMessages && item.subagentEntryId) {
+			return this.getSubagentMessages(item.subagentEntryId);
 		}
 		return [];
 	}
 
 	/** Clamp scroll offset to valid range based on current content. */
 	private clampScrollOffset(): void {
+		// Use a reasonable width estimate (80% of terminal) for measurement.
+		// The final clamp happens in render() which uses the actual width,
+		// so this is just an approximate cap to avoid hugely inflated offsets.
 		const termHeight = this.getTerminalHeight();
-		// Render right panel to measure content height
-		const rightLines = this.rightPanel.render(1);
+		const estimatedWidth = Math.max(40, Math.floor(process.stdout.columns * 0.7));
+		const rightLines = this.rightPanel.render(estimatedWidth);
 		const maxOffset = Math.max(0, rightLines.length - termHeight);
 		this.detailScrollOffset = Math.max(0, Math.min(this.detailScrollOffset, maxOffset));
 	}
@@ -334,6 +363,11 @@ export class SubagentOverlayComponent extends Container {
 
 		const maxOffset = Math.max(0, rightLines.length - termHeight);
 		const scrollOffset = Math.max(0, Math.min(this.detailScrollOffset, maxOffset));
+		// Sync the stored offset to the clamped value so that subsequent
+		// scroll operations (PageUp/k) start from the visually correct position.
+		// Without this, a stale inflated offset (e.g. from clampScrollOffset
+		// using width=1) causes PageUp to appear unresponsive.
+		this.detailScrollOffset = scrollOffset;
 
 		const visibleRight = rightLines.slice(scrollOffset, scrollOffset + termHeight);
 		while (visibleRight.length < termHeight) {

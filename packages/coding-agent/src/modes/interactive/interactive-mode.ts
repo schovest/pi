@@ -3494,7 +3494,10 @@ export class InteractiveMode {
 		}
 		this.latestSubagentDetails = details;
 		this.subagentsPanelComponent?.updateSubagentDetails(details);
-		this.subagentOverlayComponent?.update(details);
+		// Include historical entries when updating overlay
+		const historicalEntries = this.sessionManager.loadSubagentRunEntries();
+		const dataWithHistory: SubagentDetailsData = { ...details, historicalEntries };
+		this.subagentOverlayComponent?.update(dataWithHistory);
 	}
 
 	private renderSubagentMessages(messages: AgentMessage[], container: Container, expanded: boolean): void {
@@ -4064,18 +4067,26 @@ export class InteractiveMode {
 	// ==================== Subagent Alternate Screen ====================
 
 	private showSubagentDetails(): void {
-		if (!this.latestSubagentDetails) {
+		// Load historical subagent entries from session persistence
+		const historicalEntries = this.sessionManager.loadSubagentRunEntries();
+
+		if (!this.latestSubagentDetails && historicalEntries.length === 0) {
 			this.showStatus("No subagent details available");
 			return;
 		}
 
+		const data: SubagentDetailsData = this.latestSubagentDetails
+			? { ...this.latestSubagentDetails, historicalEntries }
+			: { events: [], historicalEntries };
+
 		if (this.subagentOverlayHandle) {
+			this.subagentOverlayComponent?.update(data);
 			this.subagentOverlayHandle.focus();
 			return;
 		}
 
 		const overlay = new SubagentOverlayComponent({
-			data: this.latestSubagentDetails,
+			data,
 			onClose: () => {
 				this.subagentOverlayComponent?.destroy();
 				this.subagentOverlayHandle?.hide();
@@ -4093,6 +4104,9 @@ export class InteractiveMode {
 			},
 			getTerminalHeight: () => {
 				return this.ui.terminal.rows;
+			},
+			getSubagentMessages: (subagentEntryId: string) => {
+				return this.sessionManager.getSubagentMessages(subagentEntryId);
 			},
 		});
 		this.subagentOverlayComponent = overlay;

@@ -1,6 +1,6 @@
 {
 	"name": "@earendil-works/pi-plugins",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"description": "Built-in plugins for Pi distributions",
 	"private": true,
 	"type": "module",
