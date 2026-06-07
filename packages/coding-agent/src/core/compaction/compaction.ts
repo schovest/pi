@@ -77,6 +77,9 @@ function extractFileOperations(
  * Returns undefined for entries that don't contribute to LLM context.
  */
 function getMessageFromEntry(entry: SessionEntry): AgentMessage | undefined {
+	if (entry.type === "subagent_run") {
+		return undefined;
+	}
 	if (entry.type === "message") {
 		return entry.message;
 	}

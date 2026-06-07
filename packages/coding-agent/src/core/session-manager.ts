@@ -1,4 +1,4 @@
-import { type AgentMessage, uuidv7 } from "@earendil-works/pi-agent-core";
+import { type AgentMessage, type SubagentRunEntry, uuidv7 } from "@earendil-works/pi-agent-core";
 import type { ImageContent, Message, TextContent } from "@earendil-works/pi-ai";
 import { randomUUID } from "crypto";
 import {
@@ -144,7 +144,8 @@ export type SessionEntry =
 	| CustomEntry
 	| CustomMessageEntry
 	| LabelEntry
-	| SessionInfoEntry;
+	| SessionInfoEntry
+	| SubagentRunEntry;
 
 /** Raw file entry (includes header) */
 export type FileEntry = SessionHeader | SessionEntry;
@@ -840,7 +841,11 @@ export class SessionManager {
 		for (const entry of this.fileEntries) {
 			if (entry.type === "session") continue;
 			this.byId.set(entry.id, entry);
-			this.leafId = entry.id;
+			// subagent_run entries are detached records — they must not
+			// become the session leaf, or resume will lose the conversation.
+			if (entry.type !== "subagent_run") {
+				this.leafId = entry.id;
+			}
 			if (entry.type === "label") {
 				if (entry.label) {
 					this.labelsById.set(entry.targetId, entry.label);
@@ -881,6 +886,50 @@ export class SessionManager {
 
 	getSessionFile(): string | undefined {
 		return this.sessionFile;
+	}
+
+	/** Load all subagent_run entries from the current session. */
+	loadSubagentRunEntries(): SubagentRunEntry[] {
+		return this.fileEntries.filter(
+			(e): e is SubagentRunEntry => e.type === "subagent_run",
+		) as SubagentRunEntry[];
+	}
+
+	/** Append subagent messages as children of a SubagentRunEntry.
+	 *  Each message entry's parentId points to the SubagentRunEntry,
+	 *  forming an independent subtree that getBranch(leafId) won't traverse.
+	 *  Does NOT update leafId. */
+	appendSubagentMessages(subagentEntryId: string, messages: AgentMessage[]): void {
+		for (const message of messages) {
+			const entry: SessionMessageEntry = {
+				type: "message",
+				id: generateId(this.byId),
+				parentId: subagentEntryId,
+				timestamp: new Date().toISOString(),
+				message: message as Message,
+			};
+			this.fileEntries.push(entry);
+			this.byId.set(entry.id, entry);
+			// 不更新 leafId — 子树消息不影响主链
+			this._persist(entry);
+		}
+	}
+
+	/** Get all messages for a subagent run by its SubagentRunEntry id.
+	 *  Scans fileEntries for message entries whose parentId equals subagentEntryId,
+	 *  sorts by timestamp, and returns the extracted AgentMessages. */
+	getSubagentMessages(subagentEntryId: string): AgentMessage[] {
+		const messages: { ts: number; msg: AgentMessage }[] = [];
+		for (const entry of this.fileEntries) {
+			if (entry.type === "message" && entry.parentId === subagentEntryId) {
+				messages.push({
+					ts: new Date(entry.timestamp).getTime(),
+					msg: (entry as SessionMessageEntry).message,
+				});
+			}
+		}
+		messages.sort((a, b) => a.ts - b.ts);
+		return messages.map((m) => m.msg);
 	}
 
 	_persist(entry: SessionEntry): void {
@@ -1012,6 +1061,37 @@ export class SessionManager {
 		};
 		this._appendEntry(entry);
 		return entry.id;
+	}
+
+	/** Append a subagent_run reference entry. Returns entry id.
+	 *  Does NOT advance leafId — subagent_run is a detached record
+	 *  that should not affect the main conversation chain. */
+	appendSubagentRunEntry(entry: {
+		runId: string;
+		index: number;
+		agent: string;
+		task: string;
+		status: "success" | "failed" | "aborted";
+		model?: string;
+		thinking?: string;
+		totalTokens?: number;
+		toolCount: number;
+		outputSummary?: string;
+		error?: string;
+	}): string {
+		const previousLeafId = this.leafId;
+		const subagentEntry: SubagentRunEntry = {
+			type: "subagent_run",
+			id: generateId(this.byId),
+			parentId: this.leafId,
+			timestamp: new Date().toISOString(),
+			...entry,
+		};
+		// Use _appendEntry but then restore leafId — subagent_run must not
+		// become the session leaf, or resume will lose the conversation.
+		this._appendEntry(subagentEntry);
+		this.leafId = previousLeafId;
+		return subagentEntry.id;
 	}
 
 	/** Get the current session name from the latest session_info entry, if any. */
@@ -1380,6 +1460,16 @@ export class SessionManager {
 		// If no sessionDir provided, derive from file's parent directory
 		const dir = sessionDir ? normalizePath(sessionDir) : resolve(resolvedPath, "..");
 		return new SessionManager(cwd, dir, resolvedPath, true);
+	}
+
+	/** Create a SessionManager with a specific file path. */
+	static createWithFile(
+		cwd: string,
+		sessionFile: string,
+		sessionDir: string,
+		options?: NewSessionOptions,
+	): SessionManager {
+		return new SessionManager(cwd, sessionDir, sessionFile, true, options);
 	}
 
 	/**

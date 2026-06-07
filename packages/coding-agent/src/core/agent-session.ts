@@ -987,7 +987,7 @@ export class AgentSession {
 		return this._runningSubagents.size;
 	}
 
-	/** @internal Create an isolated in-memory child session for a subagent task. */
+	/** @internal Create an isolated child session for a subagent task. */
 	createSubagentChildSession(options: {
 		model: Model<any>;
 		thinkingLevel: ThinkingLevel;

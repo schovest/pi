@@ -211,6 +211,10 @@ function textFromToolResult(result: unknown): string | undefined {
 	return summarizeUnknown(text);
 }
 
+function countToolCalls(events: SubagentRunEvent[]): number {
+	return events.filter((e) => e.currentTool && e.currentToolArgs).length;
+}
+
 async function runOne(
 	session: AgentSession,
 	runId: string,
@@ -285,6 +289,23 @@ async function runOne(
 				outputSummary: output.slice(0, 240),
 			}),
 		);
+
+		// Write a reference entry in the parent session, then inline the messages
+		const subagentEntryId = session.sessionManager.appendSubagentRunEntry({
+			runId,
+			index: resolved.index,
+			agent: resolved.definition.name,
+			task: resolved.task.task,
+			status,
+			model: formatModel(resolved.model),
+			thinking: resolved.thinking,
+			totalTokens: usage?.totalTokens,
+			toolCount: countToolCalls(events),
+			outputSummary: output.slice(0, 240) || undefined,
+			error,
+		});
+		session.sessionManager.appendSubagentMessages(subagentEntryId, messages);
+
 		return {
 			index: resolved.index,
 			agent: resolved.definition.name,
@@ -302,6 +323,21 @@ async function runOne(
 		const message = error instanceof Error ? error.message : String(error);
 		const status = options.signal?.aborted ? "aborted" : "failed";
 		emit(createEvent(runId, resolved, status, { error: message }));
+
+		// Write a reference entry in the parent session for failed/aborted runs, then inline the messages
+		const subagentEntryId = session.sessionManager.appendSubagentRunEntry({
+			runId,
+			index: resolved.index,
+			agent: resolved.definition.name,
+			task: resolved.task.task,
+			status,
+			model: formatModel(resolved.model),
+			thinking: resolved.thinking,
+			toolCount: countToolCalls(events),
+			error: message,
+		});
+		session.sessionManager.appendSubagentMessages(subagentEntryId, [...child.messages]);
+
 		return {
 			index: resolved.index,
 			agent: resolved.definition.name,

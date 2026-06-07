@@ -401,6 +401,21 @@ export interface SessionInfoEntry extends SessionTreeEntryBase {
 	name?: string;
 }
 
+export interface SubagentRunEntry extends SessionTreeEntryBase {
+	type: "subagent_run";
+	runId: string;
+	index: number;
+	agent: string;
+	task: string;
+	status: "success" | "failed" | "aborted";
+	model?: string;
+	thinking?: string;
+	totalTokens?: number;
+	toolCount: number;
+	outputSummary?: string;
+	error?: string;
+}
+
 export interface LeafEntry extends SessionTreeEntryBase {
 	type: "leaf";
 	targetId: string | null;
@@ -417,6 +432,7 @@ export type SessionTreeEntry =
 	| CustomMessageEntry
 	| LabelEntry
 	| SessionInfoEntry
+	| SubagentRunEntry
 	| LeafEntry;
 
 export interface SessionContext {

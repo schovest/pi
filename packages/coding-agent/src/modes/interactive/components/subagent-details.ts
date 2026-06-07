@@ -1,6 +1,7 @@
 import { Container, getKeybindings, Spacer, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import type { AgentSession } from "../../../core/agent-session.ts";
 import type { SubagentRunEvent, SubagentRunResult, SubagentTaskResult } from "../../../core/subagents/types.ts";
+import type { SubagentRunEntry } from "@earendil-works/pi-agent-core";
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { keyHint, rawKeyHint } from "./keybinding-hints.ts";
@@ -9,6 +10,8 @@ export interface SubagentDetailsData {
 	result?: SubagentRunResult;
 	events: SubagentRunEvent[];
 	children?: Map<number, AgentSession>;
+	/** Historical subagent run entries loaded from session persistence */
+	historicalEntries?: SubagentRunEntry[];
 }
 
 export interface SubagentDetailsItem {
@@ -25,6 +28,9 @@ export interface SubagentDetailsItem {
 	recentTools: string[];
 	outputSummary?: string;
 	events: SubagentRunEvent[];
+	runId?: string;
+	subagentEntryId?: string;  // SubagentRunEntry.id，用于 getSubagentMessages
+	timestamp?: string;  // ISO timestamp for chronological sorting
 }
 
 function formatToolArgs(toolName: string, argsJson: string | undefined): string {
@@ -119,34 +125,91 @@ function latestEvents(events: SubagentRunEvent[]): SubagentDetailsItem[] {
 				recentTools: extractRecentTools(itemEvents, 3),
 				outputSummary: latestDefined(itemEvents, (candidate) => candidate.outputSummary),
 				events: itemEvents,
+				runId: event.runId,
+				timestamp: new Date(event.timestamp).toISOString(),
 			};
 		});
 }
 
 export function resultItems(data: SubagentDetailsData): SubagentDetailsItem[] {
 	const latest = latestByIndex(data.events);
+	let items: SubagentDetailsItem[];
+
 	if (!data.result) {
-		return latestEvents(data.events);
+		items = latestEvents(data.events);
+	} else {
+		items = data.result.results.map((result: SubagentTaskResult) => {
+			const latestEvent = latest.get(result.index);
+			const resultEvents =
+				result.events.length > 0 ? result.events : data.events.filter((event) => event.index === result.index);
+			// Extract runId from events (all events in one call share the same runId prefix)
+			const eventRunId = resultEvents.length > 0 ? resultEvents[0].runId : undefined;
+			// Use earliest event timestamp as the start time
+			const startTimestamp = resultEvents.length > 0
+				? new Date(Math.min(...resultEvents.map((e) => e.timestamp))).toISOString()
+				: undefined;
+			return {
+				index: result.index,
+				agent: result.agent,
+				task: result.task,
+				status: latestEvent?.status ?? result.status,
+				model: latestEvent?.model ?? result.model,
+				thinking: latestEvent?.thinking ?? result.thinking,
+				output: result.output,
+				error: latestEvent?.error ?? result.error,
+				totalTokens: latestEvent?.usage?.totalTokens ?? result.usage?.totalTokens,
+				toolCount: countToolCalls(resultEvents),
+				recentTools: extractRecentTools(resultEvents, 3),
+				outputSummary: latestDefined(resultEvents, (event) => event.outputSummary),
+				events: resultEvents,
+				runId: eventRunId,
+				timestamp: startTimestamp,
+			};
+		});
 	}
-	return data.result.results.map((result: SubagentTaskResult) => {
-		const latestEvent = latest.get(result.index);
-		const resultEvents =
-			result.events.length > 0 ? result.events : data.events.filter((event) => event.index === result.index);
-		return {
-			index: result.index,
-			agent: result.agent,
-			task: result.task,
-			status: latestEvent?.status ?? result.status,
-			model: latestEvent?.model ?? result.model,
-			thinking: latestEvent?.thinking ?? result.thinking,
-			output: result.output,
-			error: latestEvent?.error ?? result.error,
-			totalTokens: latestEvent?.usage?.totalTokens ?? result.usage?.totalTokens,
-			toolCount: countToolCalls(resultEvents),
-			recentTools: extractRecentTools(resultEvents, 3),
-			outputSummary: latestDefined(resultEvents, (event) => event.outputSummary),
-			events: resultEvents,
-		};
+
+	// Add historical entries not already covered by live data.
+	// Use runId:index for dedup: different subagent calls have different runIds,
+	// so entries from previous calls are not mistakenly skipped by matching on
+	// the non-unique task index alone. Same runId + same index = same subagent run.
+	if (data.historicalEntries && data.historicalEntries.length > 0) {
+		const liveKeys = new Set(
+			items
+				.filter((item) => item.runId !== undefined)
+				.map((item) => `${item.runId}:${item.index}`),
+		);
+		for (const entry of data.historicalEntries) {
+			const key = `${entry.runId}:${entry.index}`;
+			if (!liveKeys.has(key)) {
+				items.push({
+					index: entry.index,
+					agent: entry.agent,
+					task: entry.task,
+					status: entry.status,
+					model: entry.model,
+					thinking: entry.thinking,
+					error: entry.error,
+					totalTokens: entry.totalTokens,
+					toolCount: entry.toolCount,
+					recentTools: [],
+					outputSummary: entry.outputSummary,
+					events: [],
+					runId: entry.runId,
+					subagentEntryId: entry.id,
+					timestamp: entry.timestamp,
+				});
+			}
+		}
+	}
+
+	// Sort by creation time descending (newest first), fallback to index for items without timestamp
+	return items.sort((a, b) => {
+		if (a.timestamp && b.timestamp) {
+			return b.timestamp.localeCompare(a.timestamp);
+		}
+		if (a.timestamp) return -1;
+		if (b.timestamp) return 1;
+		return b.index - a.index;
 	});
 }
 

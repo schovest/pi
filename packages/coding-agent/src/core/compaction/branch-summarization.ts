@@ -165,6 +165,7 @@ function getMessageFromEntry(entry: SessionEntry): AgentMessage | undefined {
 		case "custom":
 		case "label":
 		case "session_info":
+		case "subagent_run":
 			return undefined;
 	}
 }
