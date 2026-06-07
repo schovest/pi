@@ -143,9 +143,7 @@ AgentSession 自动持久化 + 事件通知
 
 ## 交流风格
 
-- 中文回复，短、直接、技术化
-- 先回答问题，再执行命令
-- 不用表情符号、夸张语气或客套填充
+- 用中文进行回复，要求：短、直接、技术化
 - 反馈分析时先明确"同意"或"不同意"，再说明改动
 - 不默认按上游贡献流程处理；除非用户明确要求，不创建上游 issue/PR/release
 
@@ -189,24 +187,35 @@ AgentSession 自动持久化 + 事件通知
 
 ### Git
 
-- 多 agent 会话可能并行修改不同文件
+- 使用worktree来开发项目，worktree目录为./.worktree
 - 只提交当前会话修改的文件；用显式路径 stage（`git add path1 path2`）
 - 禁止 `git add -A`、`git add .`、`git reset --hard`、`git checkout .`、`git clean -fd`、`git stash`、`git commit --no-verify`
 - 提交前 `git status` 确认只 stage 自己的文件
 - 只解决自己修改过的文件里的冲突；冲突在他人文件时停止并询问
 - 不 force push
-- 除非用户要求，不 commit
+- 除非用户要求，**不主动合并分支到`main`分支**
 
 ### 构建与测试
 
+#### 构建
+
 - Node dist：`npm run build`
 - Bun 单文件二进制：从 `packages/coding-agent` 运行 `npm run build:binary`
+- 打包为可发行文件：从 `packages/coding-agent` 运行 `npm run build:tgz`
+
+#### 测试
+
+- 进行全部测试用例测试：项目根目录运行 `npm test`
 - TUI 测试用受控 tmux 会话
 
 ### Changelog
 
 - 只在用户明确要求时修改 `packages/*/CHANGELOG.md`
 - 新条目放入 `## [Unreleased]`，不修改已发布版本段落
+
+## 更新覆盖
+
+项目中发生变更与 `AGENTS.md` 不一致的可对 `AGENTS.md` 修改，但需要主动告知用户变更内容
 
 ## 用户覆盖
 
