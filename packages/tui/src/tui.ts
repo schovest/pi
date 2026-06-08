@@ -282,7 +282,6 @@ export class TUI extends Container {
 	private previousViewportTop = 0; // Track previous viewport top for resize-aware cursor moves
 	private fullRedrawCount = 0;
 	private stopped = false;
-	private forceFullRender = false;
 	private fixedBottomCount = 0;
 	// biome-ignore lint/correctness/noUnusedPrivateClassMembers: reserved for future mouse coordinate mapping
 	private currentScrollableViewportTop = 0;
@@ -563,17 +562,19 @@ export class TUI extends Container {
 				this.requestRender();
 				if (consumed) return;
 			}
-			// Aggregate scroll delta for debouncing
+			// Aggregate scroll delta for debouncing: first event flushes immediately,
+			// subsequent events within the debounce window are accumulated and flushed once
 			const delta = event.button === 64 ? AUTO_SCROLL_ROWS : -AUTO_SCROLL_ROWS;
 			this.pendingScrollDelta += delta;
-			// Flush any pending scroll immediately and start debounce timer
-			this.flushPendingScroll();
 			if (!this.scrollDebounceTimer) {
+				// First event: flush immediately for responsive feel
+				this.flushPendingScroll();
 				this.scrollDebounceTimer = setTimeout(() => {
 					this.scrollDebounceTimer = null;
 					this.flushPendingScroll();
 				}, TUI.SCROLL_DEBOUNCE_MS);
 			}
+			// Otherwise: delta is accumulated, will be flushed when timer fires
 			return;
 		}
 		if (event.button !== 0) return;
@@ -644,7 +645,6 @@ export class TUI extends Container {
 			if (this.scrollOffset === 0) this.autoFollow = true;
 		}
 		this.onScrollOffsetChange?.(this.scrollOffset);
-		this.forceFullRender = true;
 		this.requestRender();
 	}
 
@@ -656,7 +656,6 @@ export class TUI extends Container {
 		this.scrollOffset = offset;
 		this.autoFollow = offset === 0;
 		this.onScrollOffsetChange?.(offset);
-		this.forceFullRender = true;
 		this.requestRender();
 	}
 
@@ -664,7 +663,6 @@ export class TUI extends Container {
 		this.scrollOffset = 0;
 		this.autoFollow = true;
 		this.onScrollOffsetChange?.(0);
-		this.forceFullRender = true;
 		this.requestRender();
 	}
 
@@ -678,7 +676,6 @@ export class TUI extends Container {
 		if (value) {
 			this.scrollOffset = 0;
 			this.onScrollOffsetChange?.(0);
-			this.forceFullRender = true;
 			this.requestRender();
 		}
 	}
@@ -698,7 +695,6 @@ export class TUI extends Container {
 				if (this.selection) {
 					this.selection.focusRow = 0;
 				}
-				this.forceFullRender = true;
 				this.requestRender();
 			}
 		}, AUTO_SCROLL_INTERVAL_MS);
@@ -1298,7 +1294,6 @@ export class TUI extends Container {
 		if (this.stopped || this.renderingSuspended) return;
 		const width = this.terminal.columns;
 		const height = this.terminal.rows;
-		this.forceFullRender = false;
 
 		// Render all children to get full content
 		const childLines: string[][] = [];
@@ -1370,15 +1365,19 @@ export class TUI extends Container {
 
 		const renderChanged = (): void => {
 			this.fullRedrawCount += 1;
-			// Sync mode + clear screen: \x1b[?2026h defers display until \x1b[?2026l,
-			// so the clear-and-redraw appears as a single atomic update on terminals
-			// that support sync mode. On terminals without sync support, there may be
-			// a brief flicker, but content is always correct with no residual artifacts.
-			let buffer = "\x1b[?2026h\x1b[2J\x1b[H";
+			// Use sync mode + absolute positioning with per-line clear (no full screen clear).
+			// \x1b[?2026h defers display until \x1b[?2026l, making the overwrite
+			// appear atomic on supporting terminals. Each line is positioned absolutely
+			// and cleared with \x1b[2K before writing, so no residual content persists
+			// and no full-screen clear is needed (which causes flicker).
+			let buffer = "\x1b[?2026h";
 			buffer += this.deleteKittyImages(this.previousKittyImageIds);
 			for (let i = 0; i < newLines.length; i++) {
-				if (i > 0) buffer += "\r\n";
-				buffer += newLines[i];
+				buffer += `\x1b[${i + 1};1H\x1b[2K${newLines[i]}`;
+			}
+			// Clear any remaining lines from previous render beyond current content
+			for (let i = newLines.length; i < this.maxLinesRendered; i++) {
+				buffer += `\x1b[${i + 1};1H\x1b[2K`;
 			}
 			buffer += "\x1b[?2026l";
 			this.terminal.write(buffer);
