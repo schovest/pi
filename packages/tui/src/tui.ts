@@ -1370,20 +1370,19 @@ export class TUI extends Container {
 			// \x1b[K clears to end-of-line after each line to remove residual content
 			// from previous renders, replacing the flicker-causing \x1b[2J clear screen.
 			// Uses sequential \r\n output (like the original) for minimal bandwidth.
-			let buffer = "\x1b[?2026h\x1b[H";
+			let buffer = `\x1b[?2026h${TUI.CURSOR_HIDE_PREFIX}\x1b[H`;
 			buffer += this.deleteKittyImages(this.previousKittyImageIds);
 			for (let i = 0; i < newLines.length; i++) {
 				if (i > 0) buffer += "\r\n";
 				buffer += newLines[i];
 				buffer += "\x1b[K";
 			}
+			buffer += this.buildHardwareCursorSequence(cursorPos, newLines.length);
 			buffer += "\x1b[?2026l";
 			this.terminal.write(buffer);
 			this.cursorRow = Math.max(0, newLines.length - 1);
-			this.hardwareCursorRow = this.cursorRow;
 			this.maxLinesRendered = newLines.length;
 			this.previousViewportTop = scrollableViewportTop;
-			this.positionHardwareCursor(cursorPos, newLines.length);
 			this.previousLines = newLines;
 			this.previousKittyImageIds = this.collectKittyImageIds(newLines);
 			this.previousWidth = width;
@@ -1426,7 +1425,10 @@ export class TUI extends Container {
 		if (firstChanged !== -1) lastChanged = this.expandLastChangedForKittyImages(firstChanged, lastChanged);
 
 		if (firstChanged === -1) {
-			this.positionHardwareCursor(cursorPos, newLines.length);
+			// No content changed, but cursor position may have — wrap in
+			// sync mode so the cursor move is atomic with the frame.
+			const seq = this.buildHardwareCursorSequence(cursorPos, newLines.length);
+			this.terminal.write(`\x1b[?2026h${TUI.CURSOR_HIDE_PREFIX}${seq}\x1b[?2026l`);
 			this.previousViewportTop = scrollableViewportTop;
 			this.previousHeight = height;
 			return;
@@ -1437,22 +1439,21 @@ export class TUI extends Container {
 			return;
 		}
 
-		let buffer = "\x1b[?2026h";
+		let buffer = `\x1b[?2026h${TUI.CURSOR_HIDE_PREFIX}`;
 		buffer += this.deleteChangedKittyImages(firstChanged, lastChanged);
 		const renderEnd = Math.min(lastChanged, newLines.length - 1);
 		for (let i = firstChanged; i <= renderEnd; i++) {
-			buffer += `\x1b[${i + 1};1H\x1b[2K${newLines[i]}`;
-		}
+				buffer += `\x1b[${i + 1};1H\x1b[2K\x1b[0m${newLines[i]}`;
+			}
 		if (newLines.length < this.previousLines.length) {
 			for (let i = newLines.length; i < this.previousLines.length; i++) {
 				buffer += `\x1b[${i + 1};1H\x1b[2K`;
 			}
 		}
+		buffer += this.buildHardwareCursorSequence(cursorPos, newLines.length);
 		buffer += "\x1b[?2026l";
 		this.terminal.write(buffer);
 		this.cursorRow = Math.max(0, newLines.length - 1);
-		this.hardwareCursorRow = this.cursorRow;
-		this.positionHardwareCursor(cursorPos, newLines.length);
 		this.previousLines = newLines;
 		this.previousKittyImageIds = this.collectKittyImageIds(newLines);
 		this.previousWidth = width;
@@ -1461,26 +1462,37 @@ export class TUI extends Container {
 	}
 
 	/**
-	 * Position the hardware cursor for IME candidate window.
+	 * Build escape sequences for positioning the hardware cursor.
+	 * Returned string should be appended to the render buffer *before*
+	 * the sync-mode terminator (\x1b[?2026l) so the cursor state change
+	 * is atomic with the content update and never causes a visible flash.
 	 * @param cursorPos The cursor position extracted from rendered output, or null
 	 * @param totalLines Total number of rendered lines
 	 */
-	private positionHardwareCursor(cursorPos: { row: number; col: number } | null, totalLines: number): void {
+	private buildHardwareCursorSequence(cursorPos: { row: number; col: number } | null, totalLines: number): string {
 		if (!cursorPos || totalLines <= 0) {
-			this.terminal.hideCursor();
-			return;
+			return "\x1b[?25l";
 		}
 
 		const targetRow = Math.max(0, Math.min(cursorPos.row, totalLines - 1));
 		const targetCol = Math.max(0, cursorPos.col);
 
-		this.terminal.write(`\x1b[${targetRow + 1};${targetCol + 1}H`);
-
 		this.hardwareCursorRow = targetRow;
+
 		if (this.showHardwareCursor) {
-			this.terminal.showCursor();
-		} else {
-			this.terminal.hideCursor();
+			return `\x1b[${targetRow + 1};${targetCol + 1}H\x1b[?25h`;
 		}
+		// Hide then move — both inside the sync-mode buffer so the
+		// terminal never shows the cursor at an intermediate position.
+		return `\x1b[?25l\x1b[${targetRow + 1};${targetCol + 1}H`;
 	}
+
+	/**
+	 * Cursor-hide prefix to place at the start of every render buffer,
+	 * before any content updates. Guarantees the hardware cursor is
+	 * invisible before the terminal processes line changes, which
+	 * prevents the cursor from briefly appearing at stale positions
+	 * on terminals with imperfect sync-mode support.
+	 */
+	private static readonly CURSOR_HIDE_PREFIX = "\x1b[?25l";
 }
