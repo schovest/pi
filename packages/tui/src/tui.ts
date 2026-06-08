@@ -1373,6 +1373,7 @@ export class TUI extends Container {
 			this.fullRedrawCount += 1;
 			// Use sync mode + cursor home + overwrite all lines (no clear screen)
 			// This avoids the visible blank frame caused by \x1b[2J
+			const prevMaxLines = this.maxLinesRendered;
 			let buffer = "\x1b[?2026h\x1b[H";
 			buffer += this.deleteKittyImages(this.previousKittyImageIds);
 			for (let i = 0; i < newLines.length; i++) {
@@ -1381,15 +1382,15 @@ export class TUI extends Container {
 				// Clear to end of line to remove any leftover content
 				buffer += "\x1b[K";
 			}
-			// Clear any remaining lines from previous render
-			for (let i = newLines.length; i < this.maxLinesRendered; i++) {
+			// Clear any remaining lines from previous render that are beyond current content
+			for (let i = newLines.length; i < prevMaxLines; i++) {
 				buffer += "\r\n\x1b[2K";
 			}
 			buffer += "\x1b[?2026l";
 			this.terminal.write(buffer);
 			this.cursorRow = Math.max(0, newLines.length - 1);
 			this.hardwareCursorRow = this.cursorRow;
-			this.maxLinesRendered = Math.max(this.maxLinesRendered, newLines.length);
+			this.maxLinesRendered = newLines.length;
 			this.previousViewportTop = scrollableViewportTop;
 			this.positionHardwareCursor(cursorPos, newLines.length);
 			this.previousLines = newLines;
@@ -1418,9 +1419,20 @@ export class TUI extends Container {
 
 		// Detect pure scroll: viewport top changed but fixed lines unchanged
 		const viewportDelta = scrollableViewportTop - this.previousViewportTop;
+		// Check if fixed bottom lines have changed
+		let fixedLinesChanged = false;
+		if (fixedHeight > 0 && this.previousLines.length === newLines.length) {
+			for (let i = scrollableViewport; i < newLines.length; i++) {
+				if (newLines[i] !== this.previousLines[i]) {
+					fixedLinesChanged = true;
+					break;
+				}
+			}
+		}
 		const isPureScroll =
 			viewportDelta !== 0 &&
 			!wasForceFullRender &&
+			!fixedLinesChanged &&
 			this.overlayStack.length === 0 &&
 			fixedHeight === height - scrollableViewport &&
 			newLines.length === this.previousLines.length;
@@ -1458,6 +1470,11 @@ export class TUI extends Container {
 					for (let i = 0; i < absDelta; i++) {
 						buffer += `\x1b[${i + 1};1H\x1b[2K${newLines[i]}`;
 					}
+				}
+				// Always redraw fixed bottom lines to ensure they stay correct
+				// (scroll region operations should not affect them, but redraw ensures consistency)
+				for (let i = scrollableViewport; i < newLines.length; i++) {
+					buffer += `\x1b[${i + 1};1H\x1b[2K${newLines[i]}`;
 				}
 				// Reset scroll region to full screen
 				if (fixedHeight > 0) {
