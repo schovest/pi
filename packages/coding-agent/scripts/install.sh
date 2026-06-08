@@ -41,3 +41,21 @@ echo "Linked pi to $BINDIR/pi"
 if [ -f "$PREFIX/bin/fd" ]; then
 	echo "Linked fd to $BINDIR/fd"
 fi
+
+# Install context-mode plugin
+echo "Installing context-mode plugin..."
+
+if command -v npm &>/dev/null; then
+	npm install -g context-mode 2>/dev/null && echo "npm: installed context-mode globally" \
+		|| echo "npm: warning - global install failed (may need sudo or npm not configured)"
+else
+	echo "npm: warning - npm not found, skipping global install of context-mode"
+fi
+
+# Use the just-installed pi binary directly
+if [ -x "$BINDIR/pi" ]; then
+	"$BINDIR/pi" install npm:context-mode 2>/dev/null && echo "pi: installed context-mode plugin" \
+		|| echo "pi: warning - pi install npm:context-mode failed"
+else
+	echo "pi: warning - pi binary not found at $BINDIR/pi, skipping plugin install"
+fi
