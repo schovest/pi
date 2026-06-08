@@ -15,6 +15,7 @@ import {
 	normalizeTerminalOutput,
 	sliceByColumn,
 	sliceWithWidth,
+	snapColToGraphemeBoundary,
 	stripAnsi,
 	visibleWidth,
 } from "./utils.ts";
@@ -580,7 +581,9 @@ export class TUI extends Container {
 		if (event.button !== 0) return;
 		if (event.type === "mouseDown") {
 			const screenRow = event.row - 1;
-			const screenCol = event.col - 1;
+			const rawCol = event.col - 1;
+			const line = this.previousLines[screenRow];
+			const screenCol = line != null ? snapColToGraphemeBoundary(line, rawCol) : rawCol;
 			this.selection = {
 				active: true,
 				anchorRow: screenRow,
@@ -591,7 +594,9 @@ export class TUI extends Container {
 			this.requestRender();
 		} else if (event.type === "mouseMove" && this.selection) {
 			const screenRow = event.row - 1;
-			const screenCol = event.col - 1;
+			const rawCol = event.col - 1;
+			const line = this.previousLines[screenRow];
+			const screenCol = line != null ? snapColToGraphemeBoundary(line, rawCol) : rawCol;
 			this.selection.focusRow = screenRow;
 			this.selection.focusCol = screenCol;
 			if (event.row <= 1) {

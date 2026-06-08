@@ -1024,6 +1024,45 @@ export function truncateToWidth(
 }
 
 /**
+ * Snap a visible column position to the nearest grapheme cluster boundary.
+ *
+ * When a mouse click lands on the second column of a wide character (e.g. CJK
+ * character occupying columns 2-3, click at column 3), the column does not
+ * correspond to a real character start. This function walks the line's
+ * grapheme clusters and returns the start column of the grapheme that contains
+ * the given column, ensuring the column always points to a valid character
+ * boundary.
+ *
+ * @param line - The line of text (may contain ANSI codes)
+ * @param col - The visible column to snap
+ * @returns The nearest grapheme-start column that is <= col
+ */
+export function snapColToGraphemeBoundary(line: string, col: number): number {
+	if (col <= 0) return 0;
+	let currentCol = 0;
+	let i = 0;
+	while (i < line.length) {
+		const ansi = extractAnsiCode(line, i);
+		if (ansi) {
+			i += ansi.length;
+			continue;
+		}
+		let textEnd = i;
+		while (textEnd < line.length && !extractAnsiCode(line, textEnd)) textEnd++;
+		for (const { segment } of graphemeSegmenter.segment(line.slice(i, textEnd))) {
+			const w = graphemeWidth(segment);
+			if (currentCol + w > col) {
+				// col falls within this grapheme — snap to its start
+				return currentCol;
+			}
+			currentCol += w;
+		}
+		i = textEnd;
+	}
+	return currentCol;
+}
+
+/**
  * Extract a range of visible columns from a line. Handles ANSI codes and wide chars.
  * @param strict - If true, exclude wide chars at boundary that would extend past the range
  */
