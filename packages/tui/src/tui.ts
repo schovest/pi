@@ -1298,7 +1298,6 @@ export class TUI extends Container {
 		if (this.stopped || this.renderingSuspended) return;
 		const width = this.terminal.columns;
 		const height = this.terminal.rows;
-		const wasForceFullRender = this.forceFullRender;
 		this.forceFullRender = false;
 
 		// Render all children to get full content
@@ -1371,19 +1370,15 @@ export class TUI extends Container {
 
 		const renderChanged = (): void => {
 			this.fullRedrawCount += 1;
-			// Use sync mode + overwrite all lines with absolute positioning (no clear screen)
-			// This avoids the visible blank frame caused by \x1b[2J
-			// Each line is positioned absolutely and cleared before writing,
-			// so no content from previous renders can persist
-			const prevMaxLines = this.maxLinesRendered;
-			let buffer = "\x1b[?2026h";
+			// Sync mode + clear screen: \x1b[?2026h defers display until \x1b[?2026l,
+			// so the clear-and-redraw appears as a single atomic update on terminals
+			// that support sync mode. On terminals without sync support, there may be
+			// a brief flicker, but content is always correct with no residual artifacts.
+			let buffer = "\x1b[?2026h\x1b[2J\x1b[H";
 			buffer += this.deleteKittyImages(this.previousKittyImageIds);
 			for (let i = 0; i < newLines.length; i++) {
-				buffer += `\x1b[${i + 1};1H\x1b[2K${newLines[i]}`;
-			}
-			// Clear any remaining lines from previous render that are beyond current content
-			for (let i = newLines.length; i < prevMaxLines; i++) {
-				buffer += `\x1b[${i + 1};1H\x1b[2K`;
+				if (i > 0) buffer += "\r\n";
+				buffer += newLines[i];
 			}
 			buffer += "\x1b[?2026l";
 			this.terminal.write(buffer);
@@ -1414,83 +1409,6 @@ export class TUI extends Container {
 		if (this.clearOnShrink && newLines.length < this.maxLinesRendered && this.overlayStack.length === 0) {
 			renderChanged();
 			return;
-		}
-
-		// Detect pure scroll: viewport top changed but fixed lines unchanged
-		const viewportDelta = scrollableViewportTop - this.previousViewportTop;
-		// Check if fixed bottom lines have changed
-		let fixedLinesChanged = false;
-		if (fixedHeight > 0 && this.previousLines.length === newLines.length) {
-			for (let i = scrollableViewport; i < newLines.length; i++) {
-				if (newLines[i] !== this.previousLines[i]) {
-					fixedLinesChanged = true;
-					break;
-				}
-			}
-		}
-		const isPureScroll =
-			viewportDelta !== 0 &&
-			!wasForceFullRender &&
-			!fixedLinesChanged &&
-			this.overlayStack.length === 0 &&
-			fixedHeight === height - scrollableViewport &&
-			newLines.length === this.previousLines.length;
-
-		if (isPureScroll && viewportDelta !== 0) {
-			const absDelta = Math.abs(viewportDelta);
-			// Only use native scroll when the delta is small relative to viewport
-			// (large jumps still benefit from full overwrite)
-			if (absDelta <= scrollableViewport) {
-				const scrollUp = viewportDelta > 0; // viewport moved down in content = content scrolls up
-				let buffer = "\x1b[?2026h";
-				// Set scroll region to scrollable area only (preserve fixed bottom)
-				if (fixedHeight > 0) {
-					buffer += `\x1b[1;${scrollableViewport}r`;
-				}
-				// Move cursor to top of scroll region and scroll
-				buffer += `\x1b[1;1H`;
-				if (scrollUp) {
-					// Content scrolls up: new lines appear at bottom of scrollable area
-					buffer += `\x1b[${absDelta}S`;
-				} else {
-					// Content scrolls down: new lines appear at top of scrollable area
-					buffer += `\x1b[${absDelta}T`;
-				}
-				// Draw only the newly revealed lines
-				if (scrollUp) {
-					// New lines at bottom of scrollable viewport
-					const startRow = scrollableViewport - absDelta;
-					for (let i = 0; i < absDelta; i++) {
-						const row = startRow + i;
-						buffer += `\x1b[${row + 1};1H\x1b[2K${newLines[row]}`;
-					}
-				} else {
-					// New lines at top of scrollable viewport
-					for (let i = 0; i < absDelta; i++) {
-						buffer += `\x1b[${i + 1};1H\x1b[2K${newLines[i]}`;
-					}
-				}
-				// Always redraw fixed bottom lines to ensure they stay correct
-				// (scroll region operations should not affect them, but redraw ensures consistency)
-				for (let i = scrollableViewport; i < newLines.length; i++) {
-					buffer += `\x1b[${i + 1};1H\x1b[2K${newLines[i]}`;
-				}
-				// Reset scroll region to full screen
-				if (fixedHeight > 0) {
-					buffer += `\x1b[r`;
-				}
-				buffer += "\x1b[?2026l";
-				this.terminal.write(buffer);
-				this.cursorRow = Math.max(0, newLines.length - 1);
-				this.hardwareCursorRow = this.cursorRow;
-				this.positionHardwareCursor(cursorPos, newLines.length);
-				this.previousLines = newLines;
-				this.previousKittyImageIds = this.collectKittyImageIds(newLines);
-				this.previousWidth = width;
-				this.previousHeight = height;
-				this.previousViewportTop = scrollableViewportTop;
-				return;
-			}
 		}
 
 		let firstChanged = -1;
