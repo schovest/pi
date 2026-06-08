@@ -726,15 +726,16 @@ export class TUI extends Container {
 		const parts: string[] = [];
 		for (let row = startRow; row <= endRow; row++) {
 			if (row < 0 || row >= lines.length) continue;
-			const line = stripAnsi(lines[row]);
+			const line = lines[row];
 			if (row === startRow && row === endRow) {
-				parts.push(line.slice(startCol, endCol + 1));
+				parts.push(stripAnsi(sliceByColumn(line, startCol, endCol - startCol + 1)));
 			} else if (row === startRow) {
-				parts.push(line.slice(startCol));
+				const lineW = visibleWidth(line);
+				parts.push(stripAnsi(sliceByColumn(line, startCol, lineW - startCol)));
 			} else if (row === endRow) {
-				parts.push(line.slice(0, endCol + 1));
+				parts.push(stripAnsi(sliceByColumn(line, 0, endCol + 1)));
 			} else {
-				parts.push(line);
+				parts.push(stripAnsi(line));
 			}
 		}
 		return parts.join("\n");
@@ -1443,8 +1444,8 @@ export class TUI extends Container {
 		buffer += this.deleteChangedKittyImages(firstChanged, lastChanged);
 		const renderEnd = Math.min(lastChanged, newLines.length - 1);
 		for (let i = firstChanged; i <= renderEnd; i++) {
-				buffer += `\x1b[${i + 1};1H\x1b[2K\x1b[0m${newLines[i]}`;
-			}
+			buffer += `\x1b[${i + 1};1H\x1b[2K\x1b[0m${newLines[i]}`;
+		}
 		if (newLines.length < this.previousLines.length) {
 			for (let i = newLines.length; i < this.previousLines.length; i++) {
 				buffer += `\x1b[${i + 1};1H\x1b[2K`;
