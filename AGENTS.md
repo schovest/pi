@@ -187,13 +187,13 @@ AgentSession 自动持久化 + 事件通知
 
 ### Git
 
-- 使用worktree来开发项目，worktree目录为./.worktree
 - 只提交当前会话修改的文件；用显式路径 stage（`git add path1 path2`）
 - 禁止 `git add -A`、`git add .`、`git reset --hard`、`git checkout .`、`git clean -fd`、`git stash`、`git commit --no-verify`
 - 提交前 `git status` 确认只 stage 自己的文件
 - 只解决自己修改过的文件里的冲突；冲突在他人文件时停止并询问
 - 不 force push
 - 除非用户要求，**不主动合并分支到`main`分支**
+- **升级版本必须打tag**
 
 ### 构建与测试
 
