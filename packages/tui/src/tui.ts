@@ -1365,19 +1365,17 @@ export class TUI extends Container {
 
 		const renderChanged = (): void => {
 			this.fullRedrawCount += 1;
-			// Use sync mode + absolute positioning with per-line clear (no full screen clear).
-			// \x1b[?2026h defers display until \x1b[?2026l, making the overwrite
-			// appear atomic on supporting terminals. Each line is positioned absolutely
-			// and cleared with \x1b[2K before writing, so no residual content persists
-			// and no full-screen clear is needed (which causes flicker).
-			let buffer = "\x1b[?2026h";
+			// Sync mode + cursor home + sequential line output (no full screen clear).
+			// \x1b[?2026h defers display until \x1b[?2026l for atomic update.
+			// \x1b[K clears to end-of-line after each line to remove residual content
+			// from previous renders, replacing the flicker-causing \x1b[2J clear screen.
+			// Uses sequential \r\n output (like the original) for minimal bandwidth.
+			let buffer = "\x1b[?2026h\x1b[H";
 			buffer += this.deleteKittyImages(this.previousKittyImageIds);
 			for (let i = 0; i < newLines.length; i++) {
-				buffer += `\x1b[${i + 1};1H\x1b[2K${newLines[i]}`;
-			}
-			// Clear any remaining lines from previous render beyond current content
-			for (let i = newLines.length; i < this.maxLinesRendered; i++) {
-				buffer += `\x1b[${i + 1};1H\x1b[2K`;
+				if (i > 0) buffer += "\r\n";
+				buffer += newLines[i];
+				buffer += "\x1b[K";
 			}
 			buffer += "\x1b[?2026l";
 			this.terminal.write(buffer);
