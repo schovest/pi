@@ -1310,6 +1310,15 @@ export interface ExtensionAPI {
 
 	/** Shared event bus for extension communication. */
 	events: EventBus;
+
+	/**
+	 * Convert session branch entries to LLM-compatible Messages.
+	 *
+	 * Filters to message-type entries and applies the same transformation
+	 * pipeline used by the main agent loop (bash execution formatting,
+	 * custom message handling, etc.).
+	 */
+	convertToLlm(entries: SessionEntry[]): import("@earendil-works/pi-ai").Message[];
 }
 
 // ============================================================================

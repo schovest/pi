@@ -27,6 +27,7 @@ import { resolvePath } from "../../utils/paths.ts";
 import { createEventBus, type EventBus } from "../event-bus.ts";
 import type { ExecOptions } from "../exec.ts";
 import { execCommand } from "../exec.ts";
+import { convertToLlm } from "../messages.ts";
 import { createSyntheticSourceInfo } from "../source-info.ts";
 import type {
 	Extension,
@@ -323,6 +324,17 @@ function createExtensionAPI(
 		},
 
 		events: eventBus,
+
+		convertToLlm(entries: unknown[]): import("@earendil-works/pi-ai").Message[] {
+			runtime.assertActive();
+			const agentMessages = entries
+				.filter(
+					(e): e is Record<string, unknown> =>
+						typeof e === "object" && e !== null && (e as Record<string, unknown>).type === "message",
+				)
+				.map((e) => (e as Record<string, unknown>).message as import("@earendil-works/pi-agent-core").AgentMessage);
+			return convertToLlm(agentMessages);
+		},
 	} as ExtensionAPI;
 
 	return api;

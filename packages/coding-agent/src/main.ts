@@ -600,7 +600,7 @@ export async function main(args: string[], options?: MainOptions) {
 				additionalSkillPaths: resolvedSkillPaths,
 				additionalPromptTemplatePaths: resolvedPromptTemplatePaths,
 				additionalThemePaths: resolvedThemePaths,
-				enabledBuiltinPlugins: parsed.noMcp ? ["todo", "ask-user-question", "tps"] : ["mcp", "todo", "ask-user-question", "tps"],
+				disabledBuiltinPlugins: parsed.noMcp ? ["mcp"] : [],
 				noExtensions: parsed.noExtensions,
 				noSkills: parsed.noSkills,
 				noPromptTemplates: parsed.noPromptTemplates,

@@ -124,7 +124,7 @@ export interface DefaultResourceLoaderOptions {
 	additionalPromptTemplatePaths?: string[];
 	additionalThemePaths?: string[];
 	extensionFactories?: ExtensionFactory[];
-	enabledBuiltinPlugins?: string[];
+	disabledBuiltinPlugins?: string[];
 	noExtensions?: boolean;
 	noSkills?: boolean;
 	noPromptTemplates?: boolean;
@@ -164,7 +164,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 	private additionalPromptTemplatePaths: string[];
 	private additionalThemePaths: string[];
 	private extensionFactories: ExtensionFactory[];
-	private enabledBuiltinPlugins: string[];
+	private disabledBuiltinPlugins: string[];
 	private noExtensions: boolean;
 	private noSkills: boolean;
 	private noPromptTemplates: boolean;
@@ -228,7 +228,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 		this.additionalPromptTemplatePaths = options.additionalPromptTemplatePaths ?? [];
 		this.additionalThemePaths = options.additionalThemePaths ?? [];
 		this.extensionFactories = options.extensionFactories ?? [];
-		this.enabledBuiltinPlugins = options.enabledBuiltinPlugins ?? [];
+		this.disabledBuiltinPlugins = options.disabledBuiltinPlugins ?? [];
 		this.noExtensions = options.noExtensions ?? false;
 		this.noSkills = options.noSkills ?? false;
 		this.noPromptTemplates = options.noPromptTemplates ?? false;
@@ -814,9 +814,9 @@ export class DefaultResourceLoader implements ResourceLoader {
 		const errors: Array<{ path: string; error: string }> = [];
 
 		if (!this.noExtensions) {
-			const enabledPluginIds = new Set(this.enabledBuiltinPlugins);
+			const disabledIds = new Set(this.disabledBuiltinPlugins);
 			for (const plugin of BUILTIN_PLUGINS) {
-				if (!enabledPluginIds.has(plugin.id)) continue;
+				if (disabledIds.has(plugin.id)) continue;
 				const extensionPath = `<builtin:${plugin.id}>`;
 				try {
 					const extension = await loadExtensionFromFactory(

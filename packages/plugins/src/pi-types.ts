@@ -1,9 +1,10 @@
 import type { AgentToolResult, AgentToolUpdateCallback } from "@earendil-works/pi-agent-core";
-import type { Api, ImageContent, Model, TextContent } from "@earendil-works/pi-ai";
+import type { Api, ImageContent, Message, Model, TextContent } from "@earendil-works/pi-ai";
 import type { Component, TUI } from "@earendil-works/pi-tui";
 
 export type { AgentToolResult, AgentToolUpdateCallback };
 export type { Component };
+export type { Message };
 
 // ---------------------------------------------------------------------------
 // Theme — subset of coding-agent Theme used by builtin plugins
@@ -106,6 +107,32 @@ export interface ToolInfo {
 }
 
 // ---------------------------------------------------------------------------
+// SessionEntry — subset used by builtin plugins (btw snapshot logic)
+// ---------------------------------------------------------------------------
+
+export interface SessionEntry {
+	type: string;
+	id: string;
+	parentId: string | null;
+	timestamp: string;
+}
+
+export interface SessionMessageEntry extends SessionEntry {
+	type: "message";
+	// biome-ignore lint/suspicious/noExplicitAny: AgentMessage is opaque at this layer
+	message: any;
+}
+
+// ---------------------------------------------------------------------------
+// ExtensionCommandContext — extended context for command handlers
+// ---------------------------------------------------------------------------
+
+export interface ExtensionCommandContext extends ExtensionContext {
+	/** Wait for the agent to finish streaming */
+	waitForIdle(): Promise<void>;
+}
+
+// ---------------------------------------------------------------------------
 // ExtensionUIContext
 // ---------------------------------------------------------------------------
 
@@ -121,10 +148,7 @@ export interface ExtensionUIContext {
 	 */
 	setWidget(
 		key: string,
-		content:
-			| string[]
-			| ((tui: TUI, theme: Theme) => Component & { dispose?(): void })
-			| undefined,
+		content: string[] | ((tui: TUI, theme: Theme) => Component & { dispose?(): void }) | undefined,
 		options?: { placement?: "aboveEditor" | "belowEditor" },
 	): void;
 	custom<T = unknown>(
@@ -188,6 +212,7 @@ export interface ExtensionAPI {
 	on(event: "session_tree", handler: (event: unknown, ctx: ExtensionContext) => void | Promise<void>): void;
 	on(event: "agent_start", handler: (event: unknown, ctx: ExtensionContext) => void | Promise<void>): void;
 	on(event: "tool_execution_end", handler: (event: unknown, ctx: ExtensionContext) => void | Promise<void>): void;
+	on(event: "message_end", handler: (event: unknown, ctx: ExtensionContext) => void | Promise<void>): void;
 
 	// Tool registration
 	registerTool(tool: unknown): void;
@@ -197,7 +222,7 @@ export interface ExtensionAPI {
 		name: string,
 		options: {
 			description?: string;
-			handler: (args: string, ctx: ExtensionContext) => Promise<void>;
+			handler: (args: string, ctx: ExtensionCommandContext) => Promise<void>;
 		},
 	): void;
 
@@ -240,4 +265,7 @@ export interface ExtensionAPI {
 
 	// Shared event bus for extension communication
 	events: EventBus;
+
+	// Message conversion — converts session branch entries to LLM-compatible Messages
+	convertToLlm(entries: SessionEntry[]): Message[];
 }

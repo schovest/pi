@@ -220,8 +220,8 @@ Project skill`,
 			expect(extensionsResult.extensions[0].path).toBe(join(cwd, ".pi", "extensions", "shared.ts"));
 		});
 
-		it("should load enabled built-in plugins from the plugin registry", async () => {
-			const loader = new DefaultResourceLoader({ cwd, agentDir, enabledBuiltinPlugins: ["mcp"] });
+		it("should load built-in plugins except disabled ones", async () => {
+			const loader = new DefaultResourceLoader({ cwd, agentDir, disabledBuiltinPlugins: [] });
 			await loader.reload();
 
 			const extensionsResult = loader.getExtensions();
@@ -233,7 +233,7 @@ Project skill`,
 			const loader = new DefaultResourceLoader({
 				cwd,
 				agentDir,
-				enabledBuiltinPlugins: ["mcp"],
+				disabledBuiltinPlugins: [],
 				noExtensions: true,
 			});
 			await loader.reload();
