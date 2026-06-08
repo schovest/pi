@@ -1371,20 +1371,19 @@ export class TUI extends Container {
 
 		const renderChanged = (): void => {
 			this.fullRedrawCount += 1;
-			// Use sync mode + cursor home + overwrite all lines (no clear screen)
+			// Use sync mode + overwrite all lines with absolute positioning (no clear screen)
 			// This avoids the visible blank frame caused by \x1b[2J
+			// Each line is positioned absolutely and cleared before writing,
+			// so no content from previous renders can persist
 			const prevMaxLines = this.maxLinesRendered;
-			let buffer = "\x1b[?2026h\x1b[H";
+			let buffer = "\x1b[?2026h";
 			buffer += this.deleteKittyImages(this.previousKittyImageIds);
 			for (let i = 0; i < newLines.length; i++) {
-				if (i > 0) buffer += "\r\n";
-				buffer += newLines[i];
-				// Clear to end of line to remove any leftover content
-				buffer += "\x1b[K";
+				buffer += `\x1b[${i + 1};1H\x1b[2K${newLines[i]}`;
 			}
 			// Clear any remaining lines from previous render that are beyond current content
 			for (let i = newLines.length; i < prevMaxLines; i++) {
-				buffer += "\r\n\x1b[2K";
+				buffer += `\x1b[${i + 1};1H\x1b[2K`;
 			}
 			buffer += "\x1b[?2026l";
 			this.terminal.write(buffer);
