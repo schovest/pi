@@ -282,9 +282,9 @@ export class TUI extends Container {
 	private previousViewportTop = 0; // Track previous viewport top for resize-aware cursor moves
 	private fullRedrawCount = 0;
 	private stopped = false;
-	// biome-ignore lint/correctness/noUnusedPrivateClassMembers: used in doRender/setScrollOffset/handleMouseEvent
 	private forceFullRender = false;
 	private fixedBottomCount = 0;
+	// biome-ignore lint/correctness/noUnusedPrivateClassMembers: reserved for future mouse coordinate mapping
 	private currentScrollableViewportTop = 0;
 	private selection: SelectionState | null = null;
 	private scrollOffset = 0;
@@ -292,6 +292,10 @@ export class TUI extends Container {
 	private previousScrollableLineCount = 0;
 	private autoScrollTimer: ReturnType<typeof setInterval> | null = null;
 	private mouseListenerRemover?: () => void;
+	// Scroll event debouncing: aggregate consecutive wheel events
+	private pendingScrollDelta = 0;
+	private scrollDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+	private static readonly SCROLL_DEBOUNCE_MS = 8;
 	onCopySelection?: (text: string) => void;
 	onScrollOffsetChange?: (offset: number) => void;
 
@@ -512,6 +516,10 @@ export class TUI extends Container {
 			clearTimeout(this.renderTimer);
 			this.renderTimer = undefined;
 		}
+		if (this.scrollDebounceTimer) {
+			clearTimeout(this.scrollDebounceTimer);
+			this.scrollDebounceTimer = null;
+		}
 		this.clearAutoScrollTimer();
 		this.removeMouseListener();
 		// Move cursor to the end of the content to prevent overwriting/artifacts on exit
@@ -548,7 +556,6 @@ export class TUI extends Container {
 	}
 
 	handleMouseEvent(event: MouseEvent): void {
-		const height = this.terminal.rows;
 		if (event.type === "mouseWheel") {
 			if (this.focusedComponent?.handleInput) {
 				const direction = event.button === 64 ? "scrollUp" : "scrollDown";
@@ -556,16 +563,17 @@ export class TUI extends Container {
 				this.requestRender();
 				if (consumed) return;
 			}
-			if (event.button === 64) {
-				this.autoFollow = false;
-				this.scrollOffset = Math.min(this.getMaxScrollOffset(), this.scrollOffset + AUTO_SCROLL_ROWS);
-			} else if (event.button === 65) {
-				this.scrollOffset = Math.max(0, this.scrollOffset - AUTO_SCROLL_ROWS);
-				if (this.scrollOffset === 0) this.autoFollow = true;
+			// Aggregate scroll delta for debouncing
+			const delta = event.button === 64 ? AUTO_SCROLL_ROWS : -AUTO_SCROLL_ROWS;
+			this.pendingScrollDelta += delta;
+			// Flush any pending scroll immediately and start debounce timer
+			this.flushPendingScroll();
+			if (!this.scrollDebounceTimer) {
+				this.scrollDebounceTimer = setTimeout(() => {
+					this.scrollDebounceTimer = null;
+					this.flushPendingScroll();
+				}, TUI.SCROLL_DEBOUNCE_MS);
 			}
-			this.onScrollOffsetChange?.(this.scrollOffset);
-			this.forceFullRender = true;
-			this.requestRender();
 			return;
 		}
 		if (event.button !== 0) return;
@@ -621,6 +629,23 @@ export class TUI extends Container {
 		}
 		const scrollableViewport = Math.max(0, height - fixedLines);
 		return Math.max(0, scrollableLines - scrollableViewport);
+	}
+
+	/** Flush pending scroll delta and trigger a single render */
+	private flushPendingScroll(): void {
+		if (this.pendingScrollDelta === 0) return;
+		const delta = this.pendingScrollDelta;
+		this.pendingScrollDelta = 0;
+		if (delta > 0) {
+			this.autoFollow = false;
+			this.scrollOffset = Math.min(this.getMaxScrollOffset(), this.scrollOffset + delta);
+		} else {
+			this.scrollOffset = Math.max(0, this.scrollOffset + delta);
+			if (this.scrollOffset === 0) this.autoFollow = true;
+		}
+		this.onScrollOffsetChange?.(this.scrollOffset);
+		this.forceFullRender = true;
+		this.requestRender();
 	}
 
 	getScrollOffset(): number {
@@ -1273,6 +1298,7 @@ export class TUI extends Container {
 		if (this.stopped || this.renderingSuspended) return;
 		const width = this.terminal.columns;
 		const height = this.terminal.rows;
+		const wasForceFullRender = this.forceFullRender;
 		this.forceFullRender = false;
 
 		// Render all children to get full content
@@ -1345,17 +1371,25 @@ export class TUI extends Container {
 
 		const renderChanged = (): void => {
 			this.fullRedrawCount += 1;
-			let buffer = "\x1b[?2026h\x1b[2J\x1b[H\x1b[3J";
+			// Use sync mode + cursor home + overwrite all lines (no clear screen)
+			// This avoids the visible blank frame caused by \x1b[2J
+			let buffer = "\x1b[?2026h\x1b[H";
 			buffer += this.deleteKittyImages(this.previousKittyImageIds);
 			for (let i = 0; i < newLines.length; i++) {
 				if (i > 0) buffer += "\r\n";
 				buffer += newLines[i];
+				// Clear to end of line to remove any leftover content
+				buffer += "\x1b[K";
+			}
+			// Clear any remaining lines from previous render
+			for (let i = newLines.length; i < this.maxLinesRendered; i++) {
+				buffer += "\r\n\x1b[2K";
 			}
 			buffer += "\x1b[?2026l";
 			this.terminal.write(buffer);
 			this.cursorRow = Math.max(0, newLines.length - 1);
 			this.hardwareCursorRow = this.cursorRow;
-			this.maxLinesRendered = newLines.length;
+			this.maxLinesRendered = Math.max(this.maxLinesRendered, newLines.length);
 			this.previousViewportTop = scrollableViewportTop;
 			this.positionHardwareCursor(cursorPos, newLines.length);
 			this.previousLines = newLines;
@@ -1380,6 +1414,67 @@ export class TUI extends Container {
 		if (this.clearOnShrink && newLines.length < this.maxLinesRendered && this.overlayStack.length === 0) {
 			renderChanged();
 			return;
+		}
+
+		// Detect pure scroll: viewport top changed but fixed lines unchanged
+		const viewportDelta = scrollableViewportTop - this.previousViewportTop;
+		const isPureScroll =
+			viewportDelta !== 0 &&
+			!wasForceFullRender &&
+			this.overlayStack.length === 0 &&
+			fixedHeight === height - scrollableViewport &&
+			newLines.length === this.previousLines.length;
+
+		if (isPureScroll && viewportDelta !== 0) {
+			const absDelta = Math.abs(viewportDelta);
+			// Only use native scroll when the delta is small relative to viewport
+			// (large jumps still benefit from full overwrite)
+			if (absDelta <= scrollableViewport) {
+				const scrollUp = viewportDelta > 0; // viewport moved down in content = content scrolls up
+				let buffer = "\x1b[?2026h";
+				// Set scroll region to scrollable area only (preserve fixed bottom)
+				if (fixedHeight > 0) {
+					buffer += `\x1b[1;${scrollableViewport}r`;
+				}
+				// Move cursor to top of scroll region and scroll
+				buffer += `\x1b[1;1H`;
+				if (scrollUp) {
+					// Content scrolls up: new lines appear at bottom of scrollable area
+					buffer += `\x1b[${absDelta}S`;
+				} else {
+					// Content scrolls down: new lines appear at top of scrollable area
+					buffer += `\x1b[${absDelta}T`;
+				}
+				// Draw only the newly revealed lines
+				if (scrollUp) {
+					// New lines at bottom of scrollable viewport
+					const startRow = scrollableViewport - absDelta;
+					for (let i = 0; i < absDelta; i++) {
+						const row = startRow + i;
+						buffer += `\x1b[${row + 1};1H\x1b[2K${newLines[row]}`;
+					}
+				} else {
+					// New lines at top of scrollable viewport
+					for (let i = 0; i < absDelta; i++) {
+						buffer += `\x1b[${i + 1};1H\x1b[2K${newLines[i]}`;
+					}
+				}
+				// Reset scroll region to full screen
+				if (fixedHeight > 0) {
+					buffer += `\x1b[r`;
+				}
+				buffer += "\x1b[?2026l";
+				this.terminal.write(buffer);
+				this.cursorRow = Math.max(0, newLines.length - 1);
+				this.hardwareCursorRow = this.cursorRow;
+				this.positionHardwareCursor(cursorPos, newLines.length);
+				this.previousLines = newLines;
+				this.previousKittyImageIds = this.collectKittyImageIds(newLines);
+				this.previousWidth = width;
+				this.previousHeight = height;
+				this.previousViewportTop = scrollableViewportTop;
+				return;
+			}
 		}
 
 		let firstChanged = -1;
