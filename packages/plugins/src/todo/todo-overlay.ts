@@ -9,8 +9,8 @@
  * from `tool_execution_end` (branch is stale; `message_end` runs after).
  */
 
-import type { ExtensionUIContext, Theme } from "../pi-types.ts";
 import { type TUI, truncateToWidth } from "@earendil-works/pi-tui";
+import type { ExtensionUIContext, Theme } from "../pi-types.ts";
 import { formatStatusLabel, t } from "./state/i18n-bridge.js";
 import { selectHasActive, selectOverlayLayout, selectShowTaskIds, selectTodoCounts } from "./state/selectors.js";
 import { getState } from "./state/store.js";

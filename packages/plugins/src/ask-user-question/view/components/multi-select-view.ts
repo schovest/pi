@@ -1,5 +1,5 @@
-import type { Theme } from "../../../pi-types.ts";
 import { truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+import type { Theme } from "../../../pi-types.ts";
 import { displayLabel } from "../../state/i18n-bridge.js";
 import type { QuestionData } from "../../tool/types.js";
 import type { StatefulView } from "../stateful-view.js";
@@ -37,10 +37,7 @@ export class MultiSelectView implements StatefulView<MultiSelectViewProps> {
 	private readonly theme: Theme;
 	private readonly question: QuestionData;
 
-	constructor(
-		theme: Theme,
-		question: QuestionData,
-	) {
+	constructor(theme: Theme, question: QuestionData) {
 		this.theme = theme;
 		this.question = question;
 		this.props = { rows: [], nextActive: false, nextLabel: displayLabel("next") };

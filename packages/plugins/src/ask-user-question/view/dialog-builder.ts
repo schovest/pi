@@ -1,5 +1,5 @@
-import { DynamicBorder, type Theme } from "../../pi-types.ts";
 import { type Component, Container, type Input, Spacer } from "@earendil-works/pi-tui";
+import { DynamicBorder, type Theme } from "../../pi-types.ts";
 import type { QuestionnaireState } from "../state/state.js";
 import type { QuestionData } from "../tool/types.js";
 import type { ChatRowView } from "./components/chat-row-view.js";

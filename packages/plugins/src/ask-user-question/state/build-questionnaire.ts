@@ -1,5 +1,5 @@
-import type { Theme, MarkdownTheme } from "../../pi-types.ts";
 import { Input } from "@earendil-works/pi-tui";
+import type { MarkdownTheme, Theme } from "../../pi-types.ts";
 import type { QuestionData } from "../tool/types.js";
 import {
 	type BoundGlobalBinding,

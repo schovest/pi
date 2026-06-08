@@ -1,5 +1,5 @@
-import type { Theme } from "../../pi-types.ts";
 import { type Component, Container, type Input, Spacer, Text, truncateToWidth } from "@earendil-works/pi-tui";
+import type { Theme } from "../../pi-types.ts";
 import { t } from "../state/i18n-bridge.js";
 import { formatAnswerScalar } from "../tool/format-answer.js";
 import type { QuestionData } from "../tool/types.js";
@@ -36,10 +36,7 @@ class OneLineClippedText implements Component {
 	private readonly text: string;
 	private readonly paddingLeft: number;
 
-	constructor(
-		text: string,
-		paddingLeft: number = 0,
-	) {
+	constructor(text: string, paddingLeft: number = 0) {
 		this.text = text;
 		this.paddingLeft = paddingLeft;
 	}

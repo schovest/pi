@@ -1,5 +1,5 @@
-import type { Theme } from "../../pi-types.ts";
 import { Text } from "@earendil-works/pi-tui";
+import type { Theme } from "../../pi-types.ts";
 import { formatStatusLabel } from "../state/i18n-bridge.js";
 import { selectTaskSubjectById } from "../state/selectors.js";
 import type { TaskState } from "../state/state.js";

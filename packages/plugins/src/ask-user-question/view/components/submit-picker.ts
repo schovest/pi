@@ -1,5 +1,5 @@
-import type { Theme } from "../../../pi-types.ts";
 import { truncateToWidth } from "@earendil-works/pi-tui";
+import type { Theme } from "../../../pi-types.ts";
 import { t } from "../../state/i18n-bridge.js";
 import type { StatefulView } from "../stateful-view.js";
 
