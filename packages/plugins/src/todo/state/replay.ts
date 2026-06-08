@@ -1,5 +1,5 @@
-import type { TaskDetails } from "../tool/types.js";
-import { EMPTY_STATE, type TaskState } from "./state.js";
+import type { TaskDetails } from "../tool/types.ts";
+import { EMPTY_STATE, type TaskState } from "./state.ts";
 
 /**
  * Discriminator for `details` envelopes that match the persisted `TaskDetails`

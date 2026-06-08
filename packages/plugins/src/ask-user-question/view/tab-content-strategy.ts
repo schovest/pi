@@ -1,10 +1,10 @@
 import { type Component, Container, type Input, Spacer, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import type { Theme } from "../../pi-types.ts";
-import { t } from "../state/i18n-bridge.js";
-import { formatAnswerScalar } from "../tool/format-answer.js";
-import type { QuestionData } from "../tool/types.js";
-import type { ChatRowView } from "./components/chat-row-view.js";
-import type { PreviewPane, PreviewPaneProps } from "./components/preview/preview-pane.js";
+import { t } from "../state/i18n-bridge.ts";
+import { formatAnswerScalar } from "../tool/format-answer.ts";
+import type { QuestionData } from "../tool/types.ts";
+import type { ChatRowView } from "./components/chat-row-view.ts";
+import type { PreviewPane, PreviewPaneProps } from "./components/preview/preview-pane.ts";
 import {
 	type DialogState,
 	HINT_PART_CANCEL,
@@ -17,9 +17,9 @@ import {
 	INCOMPLETE_WARNING_PREFIX,
 	READY_PROMPT,
 	REVIEW_HEADING,
-} from "./dialog-builder.js";
-import type { StatefulView } from "./stateful-view.js";
-import type { TabComponents } from "./tab-components.js";
+} from "./dialog-builder.ts";
+import type { StatefulView } from "./stateful-view.ts";
+import type { TabComponents } from "./tab-components.ts";
 
 const NOTES_HEADER = "Notes:";
 

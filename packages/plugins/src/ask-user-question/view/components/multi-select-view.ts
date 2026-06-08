@@ -1,8 +1,8 @@
 import { truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import type { Theme } from "../../../pi-types.ts";
-import { displayLabel } from "../../state/i18n-bridge.js";
-import type { QuestionData } from "../../tool/types.js";
-import type { StatefulView } from "../stateful-view.js";
+import { displayLabel } from "../../state/i18n-bridge.ts";
+import type { QuestionData } from "../../tool/types.ts";
+import type { StatefulView } from "../stateful-view.ts";
 
 const ACTIVE_POINTER = "❯ ";
 const INACTIVE_POINTER = "  ";

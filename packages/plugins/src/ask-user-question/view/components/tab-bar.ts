@@ -1,6 +1,6 @@
 import { truncateToWidth } from "@earendil-works/pi-tui";
 import type { Theme } from "../../../pi-types.ts";
-import type { StatefulView } from "../stateful-view.js";
+import type { StatefulView } from "../stateful-view.ts";
 
 /**
  * Per-tick projection of TabBar state. The selector

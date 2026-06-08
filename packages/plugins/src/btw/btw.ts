@@ -26,7 +26,7 @@ import type {
 	SessionEntry,
 	SessionMessageEntry,
 } from "../pi-types.ts";
-import { showBtwOverlay } from "./btw-ui.js";
+import { showBtwOverlay } from "./btw-ui.ts";
 
 // ---------------------------------------------------------------------------
 // Constants — flat named consts, grouped by concern (advisor pattern, b9428e9)
@@ -290,10 +290,8 @@ export async function executeBtw(
 
 export function registerMessageEndSnapshot(pi: ExtensionAPI): void {
 	pi.on("message_end", async (event, ctx) => {
-		// biome-ignore lint/suspicious/noExplicitAny: event is unknown from ExtensionAPI on() handler
 		const msg = (event as any).message;
 		if (msg?.role !== "assistant") return;
-		// biome-ignore lint/suspicious/noExplicitAny: AssistantMessage is opaque at this layer
 		if ((msg as any).stopReason === "toolUse") return;
 		const branch = ctx.sessionManager.getBranch() as SessionEntry[];
 		setSnapshot(ctx, { messages: branchToMessages(pi, branch) });

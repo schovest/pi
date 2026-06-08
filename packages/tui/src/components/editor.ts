@@ -537,7 +537,8 @@ export class Editor implements Component, Focusable {
 		return result;
 	}
 
-	handleInput(data: string): void {
+	// biome-ignore lint/suspicious/noConfusingVoidType: matches Component interface
+	handleInput(data: string): boolean | void {
 		const kb = getKeybindings();
 
 		// Handle character jump mode (awaiting next character to jump to)

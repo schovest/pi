@@ -7,14 +7,14 @@
  */
 
 import type { ExtensionAPI } from "../pi-types.ts";
-import { registerAskUserQuestionTool } from "./ask-user-question.js";
+import { registerAskUserQuestionTool } from "./ask-user-question.ts";
 
 export {
 	ASK_USER_PROMPT_EVENT,
 	type AskUserPromptEventPayload,
 	type AskUserPromptOption,
 	type AskUserPromptQuestion,
-} from "./events.js";
+} from "./events.ts";
 
 export default function (pi: ExtensionAPI) {
 	registerAskUserQuestionTool(pi);

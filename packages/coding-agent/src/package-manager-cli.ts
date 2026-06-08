@@ -1,11 +1,6 @@
 import chalk from "chalk";
 import { selectConfig } from "./cli/config-selector.ts";
-import {
-	APP_NAME,
-	getAgentDir,
-	PACKAGE_NAME,
-	VERSION,
-} from "./config.ts";
+import { APP_NAME, getAgentDir } from "./config.ts";
 import { PluginManager } from "./core/claude-plugin-manager.ts";
 import { DefaultPackageManager } from "./core/package-manager.ts";
 import { SettingsManager } from "./core/settings-manager.ts";
@@ -13,8 +8,6 @@ import { SettingsManager } from "./core/settings-manager.ts";
 export type PackageCommand = "install" | "remove" | "update" | "list";
 
 type UpdateTarget = { type: "all" } | { type: "extensions"; source?: string };
-
-
 
 interface PackageCommandOptions {
 	command: PackageCommand;
@@ -204,8 +197,7 @@ function parsePackageCommand(args: string[]): PackageCommandOptions | undefined 
 			updateTarget = { type: "extensions", source: extensionFlagSource };
 		} else if (source) {
 			if (extensionsFlag) {
-				conflictingOptions =
-					conflictingOptions ?? "positional update targets cannot be combined with --extensions";
+				conflictingOptions = conflictingOptions ?? "positional update targets cannot be combined with --extensions";
 			}
 			updateTarget = { type: "extensions", source };
 		} else if (extensionsFlag) {

@@ -3,7 +3,7 @@
  * All i18n dynamic imports have been removed for the builtin plugin architecture.
  */
 
-import { ROW_INTENT_META, type SentinelKind } from "./row-intent.js";
+import { ROW_INTENT_META, type SentinelKind } from "./row-intent.ts";
 
 export function t(_key: string, fallback: string): string {
 	return fallback;

@@ -11,10 +11,10 @@
 
 import { type TUI, truncateToWidth } from "@earendil-works/pi-tui";
 import type { ExtensionUIContext, Theme } from "../pi-types.ts";
-import { formatStatusLabel, t } from "./state/i18n-bridge.js";
-import { selectHasActive, selectOverlayLayout, selectShowTaskIds, selectTodoCounts } from "./state/selectors.js";
-import { getState } from "./state/store.js";
-import { formatOverlayTaskLine } from "./view/format.js";
+import { formatStatusLabel, t } from "./state/i18n-bridge.ts";
+import { selectHasActive, selectOverlayLayout, selectShowTaskIds, selectTodoCounts } from "./state/selectors.ts";
+import { getState } from "./state/store.ts";
+import { formatOverlayTaskLine } from "./view/format.ts";
 
 const WIDGET_KEY = "rpiv-todos";
 const MAX_WIDGET_LINES = 12;

@@ -33,8 +33,6 @@ import {
 	type Component,
 	Container,
 	fuzzyFilter,
-	getCapabilities,
-	hyperlink,
 	Loader,
 	type LoaderIndicatorOptions,
 	Markdown,

@@ -1,7 +1,7 @@
-import type { Task, TaskAction, TaskMutationParams, TaskStatus } from "../tool/types.js";
-import { isTransitionValid } from "./invariants.js";
-import type { TaskState } from "./state.js";
-import { detectCycle } from "./task-graph.js";
+import type { Task, TaskAction, TaskMutationParams, TaskStatus } from "../tool/types.ts";
+import { isTransitionValid } from "./invariants.ts";
+import type { TaskState } from "./state.ts";
+import { detectCycle } from "./task-graph.ts";
 
 /**
  * Reducer outcome. Closed tagged union — adding a new action requires extending

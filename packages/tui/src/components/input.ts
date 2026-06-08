@@ -45,7 +45,8 @@ export class Input implements Component, Focusable {
 		this.cursor = Math.min(this.cursor, value.length);
 	}
 
-	handleInput(data: string): void {
+	// biome-ignore lint/suspicious/noConfusingVoidType: matches Component interface
+	handleInput(data: string): boolean | void {
 		// Handle bracketed paste mode
 		// Start of paste: \x1b[200~
 		// End of paste: \x1b[201~
@@ -99,7 +100,7 @@ export class Input implements Component, Focusable {
 
 		// New line
 		if (kb.matches(data, "tui.input.newLine")) {
-			this.value = this.value.slice(0, this.cursor) + "\n" + this.value.slice(this.cursor);
+			this.value = `${this.value.slice(0, this.cursor)}\n${this.value.slice(this.cursor)}`;
 			this.cursor += 1;
 			return;
 		}

@@ -6,7 +6,7 @@
  * fallback string, and `formatStatusLabel` resolves status labels directly.
  */
 
-import type { TaskStatus } from "../tool/types.js";
+import type { TaskStatus } from "../tool/types.ts";
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
 	pending: "Pending",

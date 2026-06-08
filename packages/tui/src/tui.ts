@@ -2,9 +2,6 @@
  * Minimal TUI implementation with differential rendering
  */
 
-import * as fs from "node:fs";
-import * as os from "node:os";
-import * as path from "node:path";
 import { performance } from "node:perf_hooks";
 import { isKeyRelease, matchesKey } from "./keys.ts";
 import type { MouseEvent } from "./stdin-buffer.ts";
@@ -58,6 +55,7 @@ export interface Component {
 	 * Return true to indicate the input was consumed and should not be processed further.
 	 * Return void or false to allow TUI to handle the input as a fallback.
 	 */
+	// biome-ignore lint/suspicious/noConfusingVoidType: void is intentional - implementations may return nothing or boolean
 	handleInput?(data: string): boolean | void;
 
 	/**
@@ -275,11 +273,13 @@ export class TUI extends Container {
 	private renderTimer: NodeJS.Timeout | undefined;
 	private lastRenderAt = 0;
 	private static readonly MIN_RENDER_INTERVAL_MS = 16;
+	// biome-ignore lint/correctness/noUnusedPrivateClassMembers: used in render and cursor positioning
 	private cursorRow = 0; // Logical cursor row (end of rendered content)
 	private hardwareCursorRow = 0; // Actual terminal cursor row (may differ due to IME positioning)
 	private showHardwareCursor = process.env.PI_HARDWARE_CURSOR === "1";
 	private clearOnShrink = process.env.PI_CLEAR_ON_SHRINK === "1"; // Clear empty rows when content shrinks (default: off)
 	private maxLinesRendered = 0; // Track terminal's working area (max lines ever rendered)
+	// biome-ignore lint/correctness/noUnusedPrivateClassMembers: used in scroll calculations
 	private previousViewportTop = 0; // Track previous viewport top for resize-aware cursor moves
 	private fullRedrawCount = 0;
 	private stopped = false;

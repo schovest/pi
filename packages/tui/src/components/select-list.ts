@@ -109,7 +109,8 @@ export class SelectList implements Component {
 		return lines;
 	}
 
-	handleInput(keyData: string): void {
+	// biome-ignore lint/suspicious/noConfusingVoidType: matches Component interface
+	handleInput(keyData: string): boolean | void {
 		const kb = getKeybindings();
 		// Up arrow - wrap to bottom when at top
 		if (kb.matches(keyData, "tui.select.up")) {
@@ -134,6 +135,7 @@ export class SelectList implements Component {
 				this.onCancel();
 			}
 		}
+		return undefined;
 	}
 
 	private renderItem(

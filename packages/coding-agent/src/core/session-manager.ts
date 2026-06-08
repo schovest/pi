@@ -890,9 +890,7 @@ export class SessionManager {
 
 	/** Load all subagent_run entries from the current session. */
 	loadSubagentRunEntries(): SubagentRunEntry[] {
-		return this.fileEntries.filter(
-			(e): e is SubagentRunEntry => e.type === "subagent_run",
-		) as SubagentRunEntry[];
+		return this.fileEntries.filter((e): e is SubagentRunEntry => e.type === "subagent_run") as SubagentRunEntry[];
 	}
 
 	/** Append subagent messages as children of a SubagentRunEntry.

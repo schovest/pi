@@ -1,5 +1,5 @@
-import { t } from "../state/i18n-bridge.js";
-import type { QuestionAnswer } from "./types.js";
+import { t } from "../state/i18n-bridge.ts";
+import type { QuestionAnswer } from "./types.ts";
 
 /**
  * Continuation message used in the LLM-facing envelope. Two-sentence imperative form

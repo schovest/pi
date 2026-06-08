@@ -1,21 +1,21 @@
 import type { MarkdownTheme } from "@earendil-works/pi-tui";
 import type { Theme } from "../../../../pi-types.ts";
-import { t } from "../../../state/i18n-bridge.js";
-import type { QuestionData } from "../../../tool/types.js";
+import { t } from "../../../state/i18n-bridge.ts";
+import type { QuestionData } from "../../../tool/types.ts";
 import {
 	MAX_PREVIEW_HEIGHT_SIDE_BY_SIDE,
 	MAX_PREVIEW_HEIGHT_STACKED,
 	MarkdownContentCache,
 	NOTES_AFFORDANCE_OVERHEAD,
-} from "./markdown-content-cache.js";
+} from "./markdown-content-cache.ts";
 import {
 	BORDER_HORIZONTAL_OVERHEAD,
 	BORDER_INNER_PADDING_HORIZONTAL,
 	BORDER_VERTICAL_OVERHEAD,
 	computeBoxDimensions,
 	renderBorderedBox,
-} from "./preview-box-renderer.js";
-import type { PreviewLayoutMode } from "./preview-layout-decider.js";
+} from "./preview-box-renderer.ts";
+import type { PreviewLayoutMode } from "./preview-layout-decider.ts";
 
 /**
  * Affordance text shown below the bordered preview when focused on a preview-bearing option.

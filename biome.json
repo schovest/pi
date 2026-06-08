@@ -32,6 +32,7 @@
 			"!**/test-sessions.ts",
 			"!**/models.generated.ts",
 			"!packages/mom/data/**/*",
+			"!!.worktrees/**/*",
 			"!!**/node_modules"
 		]
 	}

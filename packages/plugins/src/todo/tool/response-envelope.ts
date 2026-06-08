@@ -1,7 +1,7 @@
-import type { TaskState } from "../state/state.js";
-import type { Op } from "../state/state-reducer.js";
-import { deriveBlocks } from "../state/task-graph.js";
-import type { Task, TaskAction, TaskDetails, TaskMutationParams } from "./types.js";
+import type { TaskState } from "../state/state.ts";
+import type { Op } from "../state/state-reducer.ts";
+import { deriveBlocks } from "../state/task-graph.ts";
+import type { Task, TaskAction, TaskDetails, TaskMutationParams } from "./types.ts";
 
 /**
  * Format a single task as a `[status] #id subject [(activeForm)] [⛓ #dep,…]`

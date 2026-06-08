@@ -165,7 +165,8 @@ export class SettingsList implements Component {
 		return lines;
 	}
 
-	handleInput(data: string): void {
+	// biome-ignore lint/suspicious/noConfusingVoidType: matches Component interface
+	handleInput(data: string): boolean | void {
 		// If submenu is active, delegate all input to it
 		// The submenu's onCancel (triggered by escape) will call done() which closes it
 		if (this.submenuComponent) {

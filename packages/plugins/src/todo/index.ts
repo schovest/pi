@@ -20,10 +20,10 @@
  */
 
 import type { ExtensionAPI } from "../pi-types.ts";
-import { replayFromBranch } from "./state/replay.js";
-import { replaceState } from "./state/store.js";
-import { registerTodosCommand, registerTodoTool, TOOL_NAME } from "./todo.js";
-import { TodoOverlay } from "./todo-overlay.js";
+import { replayFromBranch } from "./state/replay.ts";
+import { replaceState } from "./state/store.ts";
+import { registerTodosCommand, registerTodoTool, TOOL_NAME } from "./todo.ts";
+import { TodoOverlay } from "./todo-overlay.ts";
 
 // i18n removed — extension always uses English UI via the i18n-bridge fallback.
 
@@ -85,7 +85,6 @@ export default function (pi: ExtensionAPI) {
 	// Reads getTodos() at render time; do NOT call replayFromBranch here
 	// (branch is stale — message_end runs after tool_execution_end).
 	pi.on("tool_execution_end", async (event) => {
-		// biome-ignore lint/suspicious/noExplicitAny: event is unknown from ExtensionAPI on() handler
 		if ((event as any).toolName !== TOOL_NAME || (event as any).isError) return;
 		todoOverlay?.update();
 	});

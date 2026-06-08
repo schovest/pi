@@ -328,7 +328,10 @@ export class SubagentOverlayComponent extends Container {
 		}
 		// 2. Result from current run
 		if (this.data.result) {
-			const taskResult = this.data.result.results.find((r: SubagentTaskResult) => r.index === item.index && (item.runId === undefined || r.events.some((e) => e.runId === item.runId)));
+			const taskResult = this.data.result.results.find(
+				(r: SubagentTaskResult) =>
+					r.index === item.index && (item.runId === undefined || r.events.some((e) => e.runId === item.runId)),
+			);
 			if (taskResult) {
 				return taskResult.messages;
 			}

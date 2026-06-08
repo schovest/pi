@@ -13,13 +13,13 @@
  */
 
 import type { ExtensionAPI } from "../pi-types.ts";
-import { loadConfig, validateGuidanceFields } from "./config.js";
-import { formatStatusLabel, t } from "./state/i18n-bridge.js";
-import { replayFromBranch } from "./state/replay.js";
-import { selectTasksByStatus, selectTodoCounts, selectVisibleTasks } from "./state/selectors.js";
-import { applyTaskMutation } from "./state/state-reducer.js";
-import { commitState, getState, replaceState } from "./state/store.js";
-import { buildToolResult } from "./tool/response-envelope.js";
+import { loadConfig, validateGuidanceFields } from "./config.ts";
+import { formatStatusLabel, t } from "./state/i18n-bridge.ts";
+import { replayFromBranch } from "./state/replay.ts";
+import { selectTasksByStatus, selectTodoCounts, selectVisibleTasks } from "./state/selectors.ts";
+import { applyTaskMutation } from "./state/state-reducer.ts";
+import { commitState, getState, replaceState } from "./state/store.ts";
+import { buildToolResult } from "./tool/response-envelope.ts";
 import {
 	COMMAND_NAME,
 	ERR_REQUIRES_INTERACTIVE,
@@ -28,8 +28,8 @@ import {
 	TOOL_LABEL,
 	TOOL_NAME,
 	TodoParamsSchema,
-} from "./tool/types.js";
-import { formatCommandTaskLine, renderTodoCall, renderTodoResult } from "./view/format.js";
+} from "./tool/types.ts";
+import { formatCommandTaskLine, renderTodoCall, renderTodoResult } from "./view/format.ts";
 
 // English fallbacks for localized /todos section headers — the box-drawing
 // decoration is part of the localized string so translators can adjust spacing.
@@ -42,12 +42,12 @@ const SECTION_COMPLETED = "── Completed ──";
 // importing from `./todo.js`. New code may opt into deeper imports.
 // ---------------------------------------------------------------------------
 
-export { isTransitionValid } from "./state/invariants.js";
-export { applyTaskMutation } from "./state/state-reducer.js";
-export { __resetState, getNextId, getTodos } from "./state/store.js";
-export { deriveBlocks, detectCycle } from "./state/task-graph.js";
-export type { Task, TaskAction, TaskDetails, TaskStatus } from "./tool/types.js";
-export { TOOL_NAME } from "./tool/types.js";
+export { isTransitionValid } from "./state/invariants.ts";
+export { applyTaskMutation } from "./state/state-reducer.ts";
+export { __resetState, getNextId, getTodos } from "./state/store.ts";
+export { deriveBlocks, detectCycle } from "./state/task-graph.ts";
+export type { Task, TaskAction, TaskDetails, TaskStatus } from "./tool/types.ts";
+export { TOOL_NAME } from "./tool/types.ts";
 
 /**
  * Backward-compat replay shim. Pre-refactor `reconstructTodoState(ctx)`
@@ -84,19 +84,16 @@ export function registerTodoTool(pi: ExtensionAPI): void {
 		promptGuidelines: guidance.promptGuidelines ?? DEFAULT_PROMPT_GUIDELINES,
 		parameters: TodoParamsSchema,
 
-		// biome-ignore lint/suspicious/noExplicitAny: registerTool callback params are unknown
 		async execute(_toolCallId: any, params: any, _signal: any, _onUpdate: any, _ctx: any) {
 			const result = applyTaskMutation(getState(), params.action, params as TaskMutationParams);
 			commitState(result.state);
 			return buildToolResult(params.action, params as TaskMutationParams, result.state, result.op);
 		},
 
-		// biome-ignore lint/suspicious/noExplicitAny: registerTool callback params are unknown
 		renderCall(args: any, theme: any, _context: any) {
 			return renderTodoCall(args as never, theme, getState());
 		},
 
-		// biome-ignore lint/suspicious/noExplicitAny: registerTool callback params are unknown
 		renderResult(result: any, _opts: any, theme: any, _context: any) {
 			return renderTodoResult(result, theme);
 		},

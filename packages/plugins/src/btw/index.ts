@@ -6,7 +6,7 @@
  */
 
 import type { ExtensionAPI } from "../pi-types.ts";
-import { registerBtwCommand, registerInvalidationHooks, registerMessageEndSnapshot } from "./btw.js";
+import { registerBtwCommand, registerInvalidationHooks, registerMessageEndSnapshot } from "./btw.ts";
 
 export default function (pi: ExtensionAPI): void {
 	registerBtwCommand(pi);

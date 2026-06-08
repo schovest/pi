@@ -1,15 +1,15 @@
 import { getKeybindings, type Input } from "@earendil-works/pi-tui";
 import type { Theme } from "../../pi-types.ts";
-import type { QuestionData, QuestionnaireResult, QuestionParams } from "../tool/types.js";
-import type { WrappingSelectItem } from "../view/components/wrapping-select.js";
-import { COLLAPSED_HINT } from "../view/dialog-builder.js";
-import type { QuestionnairePropsAdapter } from "../view/props-adapter.js";
-import { buildQuestionnaire } from "./build-questionnaire.js";
-import { displayLabel, t } from "./i18n-bridge.js";
-import { type QuestionnaireAction, routeKey } from "./key-router.js";
-import { computeFocusedOptionHasPreview } from "./selectors/derivations.js";
-import type { QuestionnaireRuntime, QuestionnaireState } from "./state.js";
-import { type ApplyContext, type Effect, reduce } from "./state-reducer.js";
+import type { QuestionData, QuestionnaireResult, QuestionParams } from "../tool/types.ts";
+import type { WrappingSelectItem } from "../view/components/wrapping-select.ts";
+import { COLLAPSED_HINT } from "../view/dialog-builder.ts";
+import type { QuestionnairePropsAdapter } from "../view/props-adapter.ts";
+import { buildQuestionnaire } from "./build-questionnaire.ts";
+import { displayLabel, t } from "./i18n-bridge.ts";
+import { type QuestionnaireAction, routeKey } from "./key-router.ts";
+import { computeFocusedOptionHasPreview } from "./selectors/derivations.ts";
+import type { QuestionnaireRuntime, QuestionnaireState } from "./state.ts";
+import { type ApplyContext, type Effect, reduce } from "./state-reducer.ts";
 
 // Module-level constant; reused for cursor-end mutations after setValue rehydration.
 // Ctrl-E → tui.editor.cursorLineEnd (public path; pi-tui keybindings.js:25-28).

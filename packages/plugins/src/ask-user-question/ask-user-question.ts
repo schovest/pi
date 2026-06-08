@@ -1,20 +1,19 @@
 import type { ExtensionAPI } from "../pi-types.ts";
-import { loadConfig, validateGuidanceFields } from "./config.js";
-import { ASK_USER_PROMPT_EVENT, type AskUserPromptEventPayload } from "./events.js";
-import { displayLabel } from "./state/i18n-bridge.js";
-import { sentinelsToAppend } from "./state/row-intent.js";
-import { buildQuestionnaireResponse, buildToolResult } from "./tool/response-envelope.js";
+import { loadConfig, validateGuidanceFields } from "./config.ts";
+import { ASK_USER_PROMPT_EVENT, type AskUserPromptEventPayload } from "./events.ts";
+import { displayLabel } from "./state/i18n-bridge.ts";
+import { sentinelsToAppend } from "./state/row-intent.ts";
+import { buildQuestionnaireResponse, buildToolResult } from "./tool/response-envelope.ts";
 import {
 	MAX_OPTIONS,
 	MAX_QUESTIONS,
 	MIN_OPTIONS,
 	type QuestionData,
-	type QuestionnaireResult,
 	type QuestionParams,
 	QuestionParamsSchema,
-} from "./tool/types.js";
-import { validateQuestionnaire } from "./tool/validate-questionnaire.js";
-import type { WrappingSelectItem } from "./view/components/wrapping-select.js";
+} from "./tool/types.ts";
+import { validateQuestionnaire } from "./tool/validate-questionnaire.ts";
+import type { WrappingSelectItem } from "./view/components/wrapping-select.ts";
 
 function emitAskUserPromptEvent(pi: ExtensionAPI, params: QuestionParams): void {
 	const payload: AskUserPromptEventPayload = {
@@ -83,13 +82,7 @@ Preview content is rendered as markdown in a monospace box. Multi-line text with
 		promptGuidelines: guidance.promptGuidelines ?? DEFAULT_PROMPT_GUIDELINES,
 		parameters: QuestionParamsSchema,
 
-		async execute(
-			_toolCallId: any, // biome-ignore lint/suspicious/noExplicitAny: registerTool callback params are unknown
-			params: any, // biome-ignore lint/suspicious/noExplicitAny: registerTool callback params are unknown
-			_signal: any, // biome-ignore lint/suspicious/noExplicitAny: registerTool callback params are unknown
-			_onUpdate: any, // biome-ignore lint/suspicious/noExplicitAny: registerTool callback params are unknown
-			ctx: any, // biome-ignore lint/suspicious/noExplicitAny: registerTool callback params are unknown
-		) {
+		async execute(_toolCallId: any, params: any, _signal: any, _onUpdate: any, ctx: any) {
 			const typed = params as unknown as QuestionParams;
 			if (!ctx.hasUI) return buildToolResult(ERROR_NO_UI, { answers: [], cancelled: true, error: "no_ui" });
 
@@ -109,10 +102,9 @@ Preview content is rendered as markdown in a monospace box. Multi-line text with
 
 			// Lazy — QuestionnaireSession pulls the ~560ms view/TUI render graph;
 			// load it only when the tool runs, not at extension registration.
-			const { QuestionnaireSession } = await import("./state/questionnaire-session.js");
+			const { QuestionnaireSession } = await import("./state/questionnaire-session.ts");
 
 			const result = await ctx.ui.custom(
-				// biome-ignore lint/suspicious/noExplicitAny: registerTool/ui.custom callback params are unknown
 				(tui: any, theme: any, _kb: any, done: any) => {
 					const session = new QuestionnaireSession({
 						tui,

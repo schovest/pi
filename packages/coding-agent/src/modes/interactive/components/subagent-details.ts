@@ -1,7 +1,7 @@
+import type { SubagentRunEntry } from "@earendil-works/pi-agent-core";
 import { Container, getKeybindings, Spacer, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import type { AgentSession } from "../../../core/agent-session.ts";
 import type { SubagentRunEvent, SubagentRunResult, SubagentTaskResult } from "../../../core/subagents/types.ts";
-import type { SubagentRunEntry } from "@earendil-works/pi-agent-core";
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { keyHint, rawKeyHint } from "./keybinding-hints.ts";
@@ -29,8 +29,8 @@ export interface SubagentDetailsItem {
 	outputSummary?: string;
 	events: SubagentRunEvent[];
 	runId?: string;
-	subagentEntryId?: string;  // SubagentRunEntry.id，用于 getSubagentMessages
-	timestamp?: string;  // ISO timestamp for chronological sorting
+	subagentEntryId?: string; // SubagentRunEntry.id，用于 getSubagentMessages
+	timestamp?: string; // ISO timestamp for chronological sorting
 }
 
 function formatToolArgs(toolName: string, argsJson: string | undefined): string {
@@ -145,9 +145,10 @@ export function resultItems(data: SubagentDetailsData): SubagentDetailsItem[] {
 			// Extract runId from events (all events in one call share the same runId prefix)
 			const eventRunId = resultEvents.length > 0 ? resultEvents[0].runId : undefined;
 			// Use earliest event timestamp as the start time
-			const startTimestamp = resultEvents.length > 0
-				? new Date(Math.min(...resultEvents.map((e) => e.timestamp))).toISOString()
-				: undefined;
+			const startTimestamp =
+				resultEvents.length > 0
+					? new Date(Math.min(...resultEvents.map((e) => e.timestamp))).toISOString()
+					: undefined;
 			return {
 				index: result.index,
 				agent: result.agent,
@@ -174,9 +175,7 @@ export function resultItems(data: SubagentDetailsData): SubagentDetailsItem[] {
 	// the non-unique task index alone. Same runId + same index = same subagent run.
 	if (data.historicalEntries && data.historicalEntries.length > 0) {
 		const liveKeys = new Set(
-			items
-				.filter((item) => item.runId !== undefined)
-				.map((item) => `${item.runId}:${item.index}`),
+			items.filter((item) => item.runId !== undefined).map((item) => `${item.runId}:${item.index}`),
 		);
 		for (const entry of data.historicalEntries) {
 			const key = `${entry.runId}:${entry.index}`;

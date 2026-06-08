@@ -1,9 +1,9 @@
 import { Text } from "@earendil-works/pi-tui";
 import type { Theme } from "../../pi-types.ts";
-import { formatStatusLabel } from "../state/i18n-bridge.js";
-import { selectTaskSubjectById } from "../state/selectors.js";
-import type { TaskState } from "../state/state.js";
-import type { Task, TaskAction, TaskDetails, TaskMutationParams, TaskStatus } from "../tool/types.js";
+import { formatStatusLabel } from "../state/i18n-bridge.ts";
+import { selectTaskSubjectById } from "../state/selectors.ts";
+import type { TaskState } from "../state/state.ts";
+import type { Task, TaskAction, TaskDetails, TaskMutationParams, TaskStatus } from "../tool/types.ts";
 
 // Re-export so legacy import paths (todo.ts, tests) continue to resolve;
 // the canonical definition lives in the i18n bridge.

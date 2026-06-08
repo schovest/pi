@@ -119,7 +119,6 @@ export interface SessionEntry {
 
 export interface SessionMessageEntry extends SessionEntry {
 	type: "message";
-	// biome-ignore lint/suspicious/noExplicitAny: AgentMessage is opaque at this layer
 	message: any;
 }
 
