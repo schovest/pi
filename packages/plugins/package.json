@@ -1,41 +1,41 @@
 {
-  "name": "@earendil-works/pi-plugins",
-  "version": "0.3.2",
-  "description": "Built-in plugins for Pi distributions",
-  "private": true,
-  "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    }
-  },
-  "files": [
-    "dist",
-    "README.md"
-  ],
-  "scripts": {
-    "clean": "shx rm -rf dist",
-    "build": "tsgo -p tsconfig.build.json && npm run copy-assets",
-    "check": "tsgo -p tsconfig.build.json --noEmit",
-    "copy-assets": "shx mkdir -p dist/mcp/adapter && shx cp src/mcp/adapter/app-bridge.bundle.js dist/mcp/adapter/ && shx mkdir -p dist/btw/prompts && shx cp src/btw/prompts/btw-system.txt dist/btw/prompts/"
-  },
-  "dependencies": {
-    "@earendil-works/pi-agent-core": "^0.2.0",
-    "@earendil-works/pi-ai": "^0.2.0",
-    "@earendil-works/pi-tui": "^0.2.0",
-    "@modelcontextprotocol/ext-apps": "1.2.2",
-    "@modelcontextprotocol/sdk": "1.29.0",
-    "open": "10.2.0",
-    "recheck": "4.5.0",
-    "typebox": "1.1.38",
-    "zod": "3.25.76"
-  },
-  "devDependencies": {
-    "shx": "0.4.0",
-    "typescript": "5.9.3"
-  },
-  "license": "MIT"
+	"name": "@earendil-works/pi-plugins",
+	"version": "0.4.0",
+	"description": "Built-in plugins for Pi distributions",
+	"private": true,
+	"type": "module",
+	"main": "./dist/index.js",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"import": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"scripts": {
+		"clean": "shx rm -rf dist",
+		"build": "tsgo -p tsconfig.build.json && npm run copy-assets",
+		"check": "tsgo -p tsconfig.build.json --noEmit",
+		"copy-assets": "shx mkdir -p dist/mcp/adapter && shx cp src/mcp/adapter/app-bridge.bundle.js dist/mcp/adapter/ && shx mkdir -p dist/btw/prompts && shx cp src/btw/prompts/btw-system.txt dist/btw/prompts/"
+	},
+	"dependencies": {
+		"@earendil-works/pi-agent-core": "^0.4.0",
+		"@earendil-works/pi-ai": "^0.4.0",
+		"@earendil-works/pi-tui": "^0.4.0",
+		"@modelcontextprotocol/ext-apps": "1.2.2",
+		"@modelcontextprotocol/sdk": "1.29.0",
+		"open": "10.2.0",
+		"recheck": "4.5.0",
+		"typebox": "1.1.38",
+		"zod": "3.25.76"
+	},
+	"devDependencies": {
+		"shx": "0.4.0",
+		"typescript": "5.9.3"
+	},
+	"license": "MIT"
 }
