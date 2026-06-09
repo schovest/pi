@@ -229,6 +229,36 @@ npx vitest run packages/<pkg>/test/specific.test.ts
 - 除非用户要求，**不主动合并分支到`main`分支**
 - **升级版本必须打tag**
 
+#### 版本升级流程
+
+所有包使用 lockstep 版本号，统一升降。流程：
+
+```bash
+# 1. 升级版本号（所有 workspace 包统一）
+npm version <patch|minor|major> -ws --no-git-tag-version
+
+# 2. 同步包间依赖版本（将 ^0.x.0 更新为新版本）
+node scripts/sync-versions.js
+
+# 3. 更新 root package.json 版本号（手动编辑）
+
+# 4. 更新 lockfile
+npm install --package-lock-only --ignore-scripts
+
+# 5. 更新 shrinkwrap
+node scripts/generate-coding-agent-shrinkwrap.mjs
+
+# 6. 构建并打包 tgz
+cd packages/coding-agent && npm run build:tgz
+
+# 7. 提交并打 tag
+git add <相关文件>
+git commit -m "chore: bump version to x.y.z"
+git tag vx.y.z
+```
+
+注意：`npm version -ws` 会因远程仓库无对应版本报 ETARGET 错误，不影响本地版本号更新，可忽略。
+
 ### 构建与测试
 
 #### 构建
