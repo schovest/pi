@@ -1069,6 +1069,7 @@ export class SessionManager {
 		index: number;
 		agent: string;
 		task: string;
+		title?: string;
 		status: "success" | "failed" | "aborted";
 		model?: string;
 		thinking?: string;

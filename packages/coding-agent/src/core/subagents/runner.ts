@@ -21,6 +21,7 @@ interface ResolvedTask {
 	index: number;
 	definition: SubagentDefinition;
 	task: SubagentTask;
+	title: string;
 	model: Model<any>;
 	thinking: ThinkingLevel;
 	tools: string[];
@@ -153,6 +154,7 @@ async function resolveTask(
 		index,
 		definition,
 		task,
+		title: task.title,
 		model,
 		thinking,
 		tools: task.tools ?? definition.tools ?? ["read", "bash", "edit", "write"],
@@ -171,6 +173,7 @@ function createEvent(
 		index: resolved.index,
 		agent: resolved.definition.name,
 		task: resolved.task.task,
+		title: resolved.title,
 		status,
 		model: formatModel(resolved.model),
 		thinking: resolved.thinking,
@@ -296,6 +299,7 @@ async function runOne(
 			index: resolved.index,
 			agent: resolved.definition.name,
 			task: resolved.task.task,
+			title: resolved.title,
 			status,
 			model: formatModel(resolved.model),
 			thinking: resolved.thinking,
@@ -310,6 +314,7 @@ async function runOne(
 			index: resolved.index,
 			agent: resolved.definition.name,
 			task: resolved.task.task,
+			title: resolved.title,
 			status,
 			output,
 			model: formatModel(resolved.model),
@@ -330,6 +335,7 @@ async function runOne(
 			index: resolved.index,
 			agent: resolved.definition.name,
 			task: resolved.task.task,
+			title: resolved.title,
 			status,
 			model: formatModel(resolved.model),
 			thinking: resolved.thinking,
@@ -342,6 +348,7 @@ async function runOne(
 			index: resolved.index,
 			agent: resolved.definition.name,
 			task: resolved.task.task,
+			title: resolved.title,
 			status,
 			output: "",
 			model: formatModel(resolved.model),

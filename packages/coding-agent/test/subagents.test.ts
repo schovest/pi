@@ -91,7 +91,15 @@ describe("AgentSession subagents", () => {
 
 			const result = await harness.session.runSubagents(
 				{
-					tasks: [{ agent: "worker", task: "make a plan", model: "faux/parent", thinking: "xhigh" }],
+					tasks: [
+						{
+							agent: "worker",
+							task: "make a plan",
+							title: "make a plan",
+							model: "faux/parent",
+							thinking: "xhigh",
+						},
+					],
 					subagentScope: "user",
 				},
 				{ agentDir },
@@ -131,6 +139,7 @@ describe("AgentSession subagents", () => {
 				tasks: Array.from({ length: 6 }, (_, index) => ({
 					agent: "worker",
 					task: `task ${index}`,
+					title: `task ${index}`,
 					tools: [],
 				})),
 			});
@@ -161,9 +170,9 @@ describe("AgentSession subagents", () => {
 
 			const result = await harness.session.runSubagents({
 				chain: [
-					{ agent: "worker", task: "one", tools: [] },
-					{ agent: "worker", task: "review {previous}", tools: [] },
-					{ agent: "worker", task: "three", tools: [] },
+					{ agent: "worker", task: "one", title: "one", tools: [] },
+					{ agent: "worker", task: "review {previous}", title: "review", tools: [] },
+					{ agent: "worker", task: "three", title: "three", tools: [] },
 				],
 			});
 
@@ -191,7 +200,7 @@ describe("AgentSession subagents", () => {
 
 			const controller = new AbortController();
 			const promise = harness.session.runSubagents(
-				{ tasks: [{ agent: "worker", task: "slow", tools: [] }] },
+				{ tasks: [{ agent: "worker", task: "slow", title: "slow", tools: [] }] },
 				{ signal: controller.signal },
 			);
 			controller.abort();
@@ -283,7 +292,9 @@ describe("AgentSession subagents", () => {
 			const events: SubagentRunEvent[] = [];
 
 			const result = await harness.session.runSubagents(
-				{ tasks: [{ agent: "worker", task: "via api", tools: ["capture"] }] } satisfies SubagentRunRequest,
+				{
+					tasks: [{ agent: "worker", task: "via api", title: "via api", tools: ["capture"] }],
+				} satisfies SubagentRunRequest,
 				{ onEvent: (event) => events.push(event) },
 			);
 

@@ -69,6 +69,7 @@ describe("SubagentsPanelComponent", () => {
 						index: 0,
 						agent: "explorer",
 						task: "inspect files",
+						title: "inspect files",
 						status: "pending",
 						timestamp: 1,
 					},
@@ -77,6 +78,7 @@ describe("SubagentsPanelComponent", () => {
 						index: 0,
 						agent: "explorer",
 						task: "inspect files",
+						title: "inspect files",
 						status: "running",
 						currentTool: "grep",
 						currentToolArgs: '{"pattern":"TODO"}',
@@ -87,6 +89,7 @@ describe("SubagentsPanelComponent", () => {
 						index: 0,
 						agent: "explorer",
 						task: "inspect files",
+						title: "inspect files",
 						status: "failed",
 						currentTool: "grep",
 						usage: {

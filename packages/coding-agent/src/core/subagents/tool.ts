@@ -24,6 +24,7 @@ function createTaskSchema(subagentNames: string[]) {
 	return Type.Object({
 		agent: createSubagentNameSchema(subagentNames),
 		task: Type.String(),
+		title: Type.String({ description: "Short display title summarizing this subagent task, 2-6 words" }),
 		model: Type.Optional(Type.String()),
 		thinking: Type.Optional(ThinkingSchema),
 		tools: Type.Optional(Type.Array(Type.String())),
@@ -42,6 +43,7 @@ function createSubagentToolSchema(subagentNames: string[]) {
 type SubagentTaskInput = {
 	agent: string;
 	task: string;
+	title: string;
 	model?: string;
 	thinking?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
 	tools?: string[];
@@ -105,6 +107,10 @@ function truncate(text: string, maxLength: number): string {
 	return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
 }
 
+function displayTitle(item: { title?: string; task: string }): string {
+	return item.title ?? item.task.slice(0, 7);
+}
+
 function toolCallCount(events: SubagentRunEvent[]): number {
 	return events.filter((e) => e.currentTool && e.currentToolArgs).length;
 }
@@ -125,7 +131,7 @@ function resultText(result: SubagentRunResult): string {
 		.map((item) => {
 			const tokens = item.usage ? ` tokens=${item.usage.totalTokens}` : "";
 			const tools = ` tools=${toolCallCount(item.events)}`;
-			const heading = `${item.index + 1}. ${item.agent}: ${item.status} ${item.model ?? ""} thinking=${item.thinking ?? "default"}${tokens}${tools}`;
+			const heading = `${item.index + 1}. ${displayTitle(item)}: ${item.status} ${item.model ?? ""} thinking=${item.thinking ?? "default"}${tokens}${tools}`;
 			const recent = recentToolCalls(item.events, 3);
 			const body = item.error ? `Error: ${item.error}` : item.output;
 			const parts = [heading];
@@ -144,7 +150,7 @@ function renderDetails(details: SubagentToolDetails | undefined, _expanded: bool
 		const lines = details.result.results.map((result) => {
 			const usage = result.usage ? ` tokens=${result.usage.totalTokens}` : "";
 			const tools = ` tools=${toolCallCount(result.events)}`;
-			const base = `${result.index + 1}. ${result.agent}: ${result.status} ${result.model ?? ""} thinking=${result.thinking ?? "default"}${usage}${tools}`;
+			const base = `${result.index + 1}. ${displayTitle(result)}: ${result.status} ${result.model ?? ""} thinking=${result.thinking ?? "default"}${usage}${tools}`;
 			const recent = recentToolCalls(result.events, 3);
 			return recent ? `${base}\n${recent}` : base;
 		});
@@ -159,7 +165,7 @@ function renderDetails(details: SubagentToolDetails | undefined, _expanded: bool
 		.map((event) => {
 			const itemEvents = details.events.filter((e) => e.index === event.index);
 			const tools = ` tools=${toolCallCount(itemEvents)}`;
-			const base = `${event.index + 1}. ${event.agent}: ${event.status} ${event.model ?? ""} thinking=${event.thinking ?? "default"}${tools}`;
+			const base = `${event.index + 1}. ${displayTitle(event)}: ${event.status} ${event.model ?? ""} thinking=${event.thinking ?? "default"}${tools}`;
 			const recent = recentToolCalls(itemEvents, 3);
 			return recent ? `${base}\n${recent}` : base;
 		})
@@ -192,6 +198,7 @@ export function createSubagentToolDefinition(session: AgentSession) {
 			usageGuidance,
 			"Use subagent for independent subtasks that benefit from a focused agent role.",
 			"Do not use subagent recursively from inside subagents.",
+			"Each task must include a concise title (2-6 words) summarizing what it does, e.g. '搜索数据库配置' or 'fix login CSS'. The title is displayed in the UI to identify subagent runs.",
 		],
 		parameters: createSubagentToolSchema(subagentNames),
 		executionMode: "parallel",

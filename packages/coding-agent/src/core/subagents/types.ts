@@ -21,6 +21,7 @@ export interface SubagentDefinition {
 export interface SubagentTask {
 	agent: string;
 	task: string;
+	title: string;
 	model?: string;
 	thinking?: ThinkingLevel;
 	tools?: string[];
@@ -41,6 +42,7 @@ export interface SubagentRunEvent {
 	index: number;
 	agent: string;
 	task: string;
+	title: string;
 	status: SubagentRunStatus;
 	model?: string;
 	thinking?: ThinkingLevel;
@@ -57,6 +59,7 @@ export interface SubagentTaskResult {
 	index: number;
 	agent: string;
 	task: string;
+	title: string;
 	status: Exclude<SubagentRunStatus, "pending" | "running">;
 	output: string;
 	model?: string;

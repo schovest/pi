@@ -5,7 +5,13 @@ import type { SubagentTaskResult } from "../../../core/subagents/types.ts";
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { rawKeyHint } from "./keybinding-hints.ts";
-import { resultItems, type SubagentDetailsData, type SubagentDetailsItem, statusColor } from "./subagent-details.ts";
+import {
+	displayTitle,
+	resultItems,
+	type SubagentDetailsData,
+	type SubagentDetailsItem,
+	statusColor,
+} from "./subagent-details.ts";
 
 export interface SubagentOverlayOptions {
 	data: SubagentDetailsData;
@@ -21,6 +27,8 @@ export interface SubagentOverlayOptions {
 interface AgentListItem {
 	index: number;
 	agent: string;
+	title?: string;
+	task: string;
 	status: string;
 	model?: string;
 	thinking?: string;
@@ -35,6 +43,8 @@ function toListItems(data: SubagentDetailsData): AgentListItem[] {
 	return resultItems(data).map((item: SubagentDetailsItem) => ({
 		index: item.index,
 		agent: item.agent,
+		title: item.title,
+		task: item.task,
 		status: item.status,
 		model: item.model,
 		thinking: item.thinking,
@@ -213,7 +223,7 @@ export class SubagentOverlayComponent extends Container {
 				const tools = theme.fg("muted", ` tools=${item.toolCount}`);
 				const lastTool = item.recentTools.length > 0 ? theme.fg("muted", ` -> ${item.recentTools.at(-1)}`) : "";
 				this.leftPanel.addChild(
-					new Text(`${pointer}${i + 1}. ${item.agent} ${status}${usage}${tools}${lastTool}`, 1, 0),
+					new Text(`${pointer}${i + 1}. ${displayTitle(item)} ${status}${usage}${tools}${lastTool}`, 1, 0),
 				);
 			}
 		}
@@ -249,9 +259,12 @@ export class SubagentOverlayComponent extends Container {
 		this.rightPanel.addChild(new DynamicBorder());
 		this.rightPanel.addChild(
 			new Text(
-				theme.bold(`${item.agent}`) +
+				theme.bold(`${displayTitle(item)}`) +
 					` ${status}` +
-					theme.fg("muted", `${usage} model=${item.model ?? "default"} thinking=${item.thinking ?? "default"}`),
+					theme.fg(
+						"muted",
+						`${usage} model=${item.model ?? "default"} thinking=${item.thinking ?? "default"} agent=${item.agent}`,
+					),
 				1,
 				0,
 			),

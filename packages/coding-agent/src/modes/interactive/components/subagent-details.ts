@@ -18,6 +18,7 @@ export interface SubagentDetailsItem {
 	index: number;
 	agent: string;
 	task: string;
+	title?: string;
 	status: string;
 	model?: string;
 	thinking?: string;
@@ -71,6 +72,10 @@ function truncate(text: string, maxLength: number): string {
 	return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
 }
 
+export function displayTitle(item: { title?: string; task: string }): string {
+	return item.title ?? item.task.slice(0, 7);
+}
+
 function countToolCalls(events: SubagentRunEvent[]): number {
 	return events.filter((e) => e.currentTool && e.currentToolArgs).length;
 }
@@ -115,6 +120,7 @@ function latestEvents(events: SubagentRunEvent[]): SubagentDetailsItem[] {
 			return {
 				index: event.index,
 				agent: event.agent,
+				title: event.title,
 				task: event.task,
 				status: event.status,
 				model: event.model,
@@ -152,6 +158,7 @@ export function resultItems(data: SubagentDetailsData): SubagentDetailsItem[] {
 			return {
 				index: result.index,
 				agent: result.agent,
+				title: result.title,
 				task: result.task,
 				status: latestEvent?.status ?? result.status,
 				model: latestEvent?.model ?? result.model,
@@ -183,6 +190,7 @@ export function resultItems(data: SubagentDetailsData): SubagentDetailsItem[] {
 				items.push({
 					index: entry.index,
 					agent: entry.agent,
+					title: entry.title,
 					task: entry.task,
 					status: entry.status,
 					model: entry.model,
@@ -313,7 +321,11 @@ export class SubagentPickerComponent extends Container {
 				const tools = theme.fg("muted", ` tools=${item.toolCount}`);
 				const lastTool = item.recentTools.length > 0 ? theme.fg("muted", ` → ${item.recentTools.at(-1)}`) : "";
 				this.addChild(
-					new Text(`${pointer}${item.index + 1}. ${item.agent} ${status}${usage}${tools}${lastTool}`, 1, 0),
+					new Text(
+						`${pointer}${item.index + 1}. ${displayTitle(item)} ${status}${usage}${tools}${lastTool}`,
+						1,
+						0,
+					),
 				);
 			}
 		}
@@ -361,7 +373,7 @@ export class SubagentRunViewComponent {
 	render(width: number): string[] {
 		const item = this.getSelectedItem();
 		const lines: string[] = [];
-		lines.push(theme.fg("accent", theme.bold(`Subagent ${item?.agent ?? ""}`)).trimEnd());
+		lines.push(theme.fg("accent", theme.bold(`Subagent ${item ? displayTitle(item) : ""}`)).trimEnd());
 		lines.push(theme.fg("muted", "Esc returns to the main Agent"));
 		lines.push("");
 
