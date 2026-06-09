@@ -626,7 +626,7 @@ export class TUI extends Container {
 			this.clearAutoScrollTimer();
 			this.selection = null;
 			this.requestRender();
-			if (text && this.onCopySelection) {
+			if (text.trim() && this.onCopySelection) {
 				this.onCopySelection(text);
 			}
 		}
