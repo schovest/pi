@@ -4130,6 +4130,12 @@ export class InteractiveMode {
 			maxHeight: "100%",
 			margin: 0,
 			background: theme.getBgAnsi("toolPendingBg"),
+			selectionClip: (_screenRow: number) => {
+				const termWidth = this.ui.terminal.columns;
+				const listWidth = SubagentOverlayComponent.getListWidth(termWidth);
+				// Right panel starts after listWidth + separator (│), skip the separator column
+				return { col: listWidth + 1, width: termWidth - listWidth - 1 };
+			},
 		});
 	}
 

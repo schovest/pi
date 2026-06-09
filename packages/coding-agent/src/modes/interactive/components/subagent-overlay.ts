@@ -355,8 +355,13 @@ export class SubagentOverlayComponent extends Container {
 		this.detailScrollOffset = Math.max(0, Math.min(this.detailScrollOffset, maxOffset));
 	}
 
+	/** Calculate the left panel (list) width for a given total width. */
+	static getListWidth(width: number): number {
+		return Math.max(20, Math.min(40, Math.floor(width * 0.3)));
+	}
+
 	render(width: number): string[] {
-		const listWidth = Math.max(20, Math.min(40, Math.floor(width * 0.3)));
+		const listWidth = SubagentOverlayComponent.getListWidth(width);
 		const detailWidth = width - listWidth - 1;
 		const termHeight = this.getTerminalHeight();
 		const sep = theme.fg("border", "│");

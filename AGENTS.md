@@ -168,11 +168,45 @@ AgentSession 自动持久化 + 事件通知
 - 代码改动后运行 `npm run check`（完整输出，不 tail），修复所有 errors/warnings/infos
 - 文档或纯说明文件改动通常不需要跑 check
 - 不主动运行 `npm test` 或完整 vitest suite（可能触发 e2e 和真实 provider）
-- 非 e2e 测试用 `./test.sh`；单文件从对应 package 运行：
-  `node ../../node_modules/vitest/dist/cli.js --run test/specific.test.ts`
-- `packages/coding-agent/test/suite/` 用 `harness.ts` + faux provider，不调真实 provider
 - 修改测试文件后必须运行对应测试并迭代到通过
 - 临时脚本写到 `/tmp`，运行后删除
+
+#### 类型检查
+
+```bash
+# 完整类型检查（包含 biome + pinned-deps + ts-imports + shrinkwrap + tsgo）
+npm run check
+
+# 仅 TypeScript 类型检查（更快，跳过 lint/shrinkwrap）
+npx tsgo --noEmit
+
+# 排除已知错误（packages/ai/test/ 有预存的模型类型错误，与业务无关）
+npx tsgo --noEmit 2>&1 | grep -v "packages/ai/test/"
+```
+
+#### 单元测试
+
+```bash
+# 项目根目录运行（Node 原生 test runner，适用于使用 node:test 的测试文件）
+node --test packages/<pkg>/test/specific.test.ts
+
+# 项目根目录运行（vitest，适用于使用 vitest 断言的测试文件）
+npx vitest run packages/<pkg>/test/specific.test.ts
+
+# 注意：不要从子包目录直接调用 vitest CLI，路径解析会出错。
+# 以下命令**不可用**：
+#   cd packages/tui && node ../../node_modules/vitest/dist/cli.js --run test/foo.ts  ❌
+# 必须从项目根目录运行：
+#   npx vitest run packages/tui/test/foo.ts  ✅
+```
+
+**判断用哪种 runner**：
+- 测试文件 `import { describe, it } from "node:test"` → `node --test`
+- 测试文件 `import { describe, it } from "vitest"` 或使用 `expect()` → `npx vitest run`
+
+#### 已知可忽略的测试错误
+
+- `packages/ai/test/` 下的 TS2345 错误：预存的 `"gpt-4o"` 模型类型不匹配，与业务改动无关
 
 ### 依赖安全
 
@@ -207,6 +241,7 @@ AgentSession 自动持久化 + 事件通知
 
 - 进行全部测试用例测试：项目根目录运行 `npm test`
 - TUI 测试用受控 tmux 会话
+- `packages/coding-agent/test/suite/` 用 `harness.ts` + faux provider，不调真实 provider
 
 ### Changelog
 

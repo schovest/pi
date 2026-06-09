@@ -196,6 +196,14 @@ export interface OverlayOptions {
 	nonCapturing?: boolean;
 	/** ANSI background sequence to fill behind overlay lines (e.g., "\x1b[48;5;235m") */
 	background?: string;
+	/**
+	 * Restrict text selection (copy/highlight) to a specific column region within the overlay.
+	 * Called per screen row during selection extraction and highlight rendering.
+	 * Returns `{ col, width }` for the selectable region, or null to allow the full row.
+	 * This is used by overlays with internal column splits (e.g., left list + right detail)
+	 * to prevent the non-detail sidebar from being included in copy/highlight operations.
+	 */
+	selectionClip?: (screenRow: number) => { col: number; width: number } | null;
 }
 
 /**
@@ -292,6 +300,14 @@ export class TUI extends Container {
 	private previousScrollableLineCount = 0;
 	private autoScrollTimer: ReturnType<typeof setInterval> | null = null;
 	private mouseListenerRemover?: () => void;
+	// Cached overlay layouts from the most recent render, used for selection clip
+	private renderedOverlayLayouts: {
+		row: number;
+		col: number;
+		width: number;
+		height: number;
+		selectionClip?: (screenRow: number) => { col: number; width: number } | null;
+	}[] = [];
 	// Scroll event debouncing: aggregate consecutive wheel events
 	private pendingScrollDelta = 0;
 	private scrollDebounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -732,18 +748,42 @@ export class TUI extends Container {
 		for (let row = startRow; row <= endRow; row++) {
 			if (row < 0 || row >= lines.length) continue;
 			const line = lines[row];
-			if (row === startRow && row === endRow) {
-				parts.push(stripAnsi(sliceByColumn(line, startCol, endCol - startCol + 1)));
-			} else if (row === startRow) {
-				const lineW = visibleWidth(line);
-				parts.push(stripAnsi(sliceByColumn(line, startCol, lineW - startCol)));
-			} else if (row === endRow) {
-				parts.push(stripAnsi(sliceByColumn(line, 0, endCol + 1)));
-			} else {
-				parts.push(stripAnsi(line));
+			// Apply selectionClip from overlays that cover this row
+			const clip = this.getSelectionClipForRow(row);
+			const rowStartCol = row === startRow ? startCol : 0;
+			const rowEndCol = row === endRow ? endCol : visibleWidth(line) - 1;
+			let clipStart = rowStartCol;
+			let clipEnd = rowEndCol;
+			if (clip) {
+				// Clip the selection range to the selectable region within the overlay
+				clipStart = Math.max(clipStart, clip.col);
+				clipEnd = Math.min(clipEnd, clip.col + clip.width - 1);
 			}
+			if (clipStart > clipEnd) continue;
+			parts.push(stripAnsi(sliceByColumn(line, clipStart, clipEnd - clipStart + 1)));
 		}
 		return parts.join("\n");
+	}
+
+	/**
+	 * Get the selection clip region for a given screen row.
+	 * If any overlay with a selectionClip callback covers this row,
+	 * returns the clip region to restrict selection to that area.
+	 */
+	private getSelectionClipForRow(screenRow: number): { col: number; width: number } | null {
+		for (const layout of this.renderedOverlayLayouts) {
+			// Check if this screen row falls within the overlay's row range
+			if (screenRow >= layout.row && screenRow < layout.row + layout.height) {
+				if (layout.selectionClip) {
+					const clip = layout.selectionClip(screenRow);
+					if (clip) {
+						// Adjust clip col to be relative to the overlay's position
+						return { col: layout.col + clip.col, width: clip.width };
+					}
+				}
+			}
+		}
+		return null;
 	}
 
 	private applySelectionHighlight(newLines: string[], viewportTop: number, height: number): void {
@@ -767,14 +807,24 @@ export class TUI extends Container {
 			const line = newLines[row];
 			if (isImageLine(line)) continue;
 			const lineVisibleWidth = visibleWidth(line);
-			const colStart = row === startRow ? Math.min(startCol, lineVisibleWidth) : 0;
-			const colEnd = row === endRow ? Math.min(endCol, lineVisibleWidth - 1) : lineVisibleWidth - 1;
+			let colStart = row === startRow ? Math.min(startCol, lineVisibleWidth) : 0;
+			let colEnd = row === endRow ? Math.min(endCol, lineVisibleWidth - 1) : lineVisibleWidth - 1;
+			// Apply selectionClip from overlays that cover this row
+			const clip = this.getSelectionClipForRow(row);
+			if (clip) {
+				colStart = Math.max(colStart, clip.col);
+				colEnd = Math.min(colEnd, clip.col + clip.width - 1);
+			}
 			if (colStart > colEnd) continue;
 			const before = sliceByColumn(line, 0, colStart, true);
 			const highlighted = sliceByColumn(line, colStart, colEnd - colStart + 1);
 			const after =
 				colEnd + 1 < lineVisibleWidth ? sliceByColumn(line, colEnd + 1, lineVisibleWidth - colEnd - 1) : "";
-			newLines[row] = `${before}\x1b[7m${highlighted}\x1b[27m${after}`;
+			// Preserve reverse video across SGR resets inside the highlighted region.
+			// \x1b[0m resets ALL attributes including \x1b[7m (reverse video),
+			// which would break the selection highlight. Re-apply \x1b[7m after each reset.
+			const preservedHighlight = highlighted.replace(/\x1b\[0m/g, "\x1b[0m\x1b[7m");
+			newLines[row] = `${before}\x1b[7m${preservedHighlight}\x1b[27m${after}`;
 		}
 	}
 
@@ -1063,11 +1113,21 @@ export class TUI extends Container {
 
 	/** Composite all overlays into content lines (sorted by focusOrder, higher = on top). */
 	private compositeOverlays(lines: string[], termWidth: number, termHeight: number): string[] {
-		if (this.overlayStack.length === 0) return lines;
+		if (this.overlayStack.length === 0) {
+			this.renderedOverlayLayouts = [];
+			return lines;
+		}
 		const result = [...lines];
 
 		// Pre-render all visible overlays and calculate positions
-		const rendered: { overlayLines: string[]; row: number; col: number; w: number; background?: string }[] = [];
+		const rendered: {
+			overlayLines: string[];
+			row: number;
+			col: number;
+			w: number;
+			background?: string;
+			selectionClip?: (screenRow: number) => { col: number; width: number } | null;
+		}[] = [];
 		let minLinesNeeded = result.length;
 
 		const visibleEntries = this.overlayStack.filter((e) => this.isOverlayVisible(e));
@@ -1090,9 +1150,25 @@ export class TUI extends Container {
 			// Get final row/col with actual overlay height
 			const { row, col } = this.resolveOverlayLayout(options, overlayLines.length, termWidth, termHeight);
 
-			rendered.push({ overlayLines, row, col, w: width, background: options?.background });
+			rendered.push({
+				overlayLines,
+				row,
+				col,
+				w: width,
+				background: options?.background,
+				selectionClip: options?.selectionClip,
+			});
 			minLinesNeeded = Math.max(minLinesNeeded, row + overlayLines.length);
 		}
+
+		// Cache overlay layouts for selection clip calculations
+		this.renderedOverlayLayouts = rendered.map(({ row, col, w, overlayLines, selectionClip }) => ({
+			row,
+			col,
+			width: w,
+			height: overlayLines.length,
+			selectionClip,
+		}));
 
 		// Pad to at least terminal height so overlays have screen-relative positions.
 		// Excludes maxLinesRendered: the historical high-water mark caused self-reinforcing
