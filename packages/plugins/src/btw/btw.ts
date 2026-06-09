@@ -19,13 +19,7 @@ import {
 	type StopReason,
 	type UserMessage,
 } from "@earendil-works/pi-ai";
-import type {
-	ExtensionAPI,
-	ExtensionCommandContext,
-	ExtensionContext,
-	SessionEntry,
-	SessionMessageEntry,
-} from "../pi-types.ts";
+import type { ExtensionAPI, ExtensionCommandContext, ExtensionContext, SessionEntry } from "../pi-types.ts";
 import { showBtwOverlay } from "./btw-ui.ts";
 
 // ---------------------------------------------------------------------------
@@ -74,8 +68,7 @@ interface BtwState {
 }
 
 function branchToMessages(pi: ExtensionAPI, branch: SessionEntry[]): Message[] {
-	const agentMessages = branch.filter((e): e is SessionMessageEntry => e.type === "message").map((e) => e.message);
-	return pi.convertToLlm(agentMessages);
+	return pi.convertToLlm(branch);
 }
 
 // ---------------------------------------------------------------------------

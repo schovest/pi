@@ -220,13 +220,7 @@ export class SubagentOverlayComponent extends Container {
 		}
 
 		this.leftPanel.addChild(new Spacer(1));
-		this.leftPanel.addChild(
-			new Text(
-				`${rawKeyHint("↑↓/j/k", "nav")}  ${rawKeyHint("Esc", "close")}`,
-				1,
-				0,
-			),
-		);
+		this.leftPanel.addChild(new Text(`${rawKeyHint("↑↓/j/k", "nav")}  ${rawKeyHint("Esc", "close")}`, 1, 0));
 		this.leftPanel.addChild(new DynamicBorder());
 	}
 

@@ -110,12 +110,12 @@ export class BtwOverlayController implements Component {
 			return;
 		}
 		if (matchesKey(data, Key.up)) {
-			this.scrollOffset = Math.max(0, this.scrollOffset - 1);
+			this.scrollOffset = this.scrollOffset + 1;
 			this.tui.requestRender();
 			return;
 		}
 		if (matchesKey(data, Key.down)) {
-			this.scrollOffset = this.scrollOffset + 1;
+			this.scrollOffset = Math.max(0, this.scrollOffset - 1);
 			this.tui.requestRender();
 			return;
 		}
