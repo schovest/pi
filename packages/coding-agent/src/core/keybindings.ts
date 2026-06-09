@@ -105,7 +105,7 @@ export const KEYBINDINGS = {
 		description: "Queue follow-up message",
 	},
 	"app.message.dequeue": {
-		defaultKeys: "alt+up",
+		defaultKeys: "ctrl+up",
 		description: "Restore queued messages",
 	},
 	"app.clipboard.pasteImage": {

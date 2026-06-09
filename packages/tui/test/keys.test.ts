@@ -481,6 +481,13 @@ describe("matchesKey", () => {
 		it("should match alt+arrows", () => {
 			assert.strictEqual(matchesKey("\x1bp", "alt+up"), true);
 			assert.strictEqual(matchesKey("\x1bp", "up"), false);
+			// CSI modifier sequences (standard xterm/VTE encoding for Alt+Arrow)
+			assert.strictEqual(matchesKey("\x1b[1;3A", "alt+up"), true);
+			assert.strictEqual(matchesKey("\x1b[1;3A", "up"), false);
+			assert.strictEqual(matchesKey("\x1b[1;3B", "alt+down"), true);
+			assert.strictEqual(matchesKey("\x1b[1;3B", "down"), false);
+			// Legacy ESC+letter sequences for Alt+Arrow
+			assert.strictEqual(matchesKey("\x1bn", "alt+down"), true);
 		});
 
 		it("should match rxvt modifier sequences", () => {
@@ -605,6 +612,10 @@ describe("parseKey", () => {
 			assert.strictEqual(parseKey("\x1b[E"), "clear");
 			assert.strictEqual(parseKey("\x1b[2^"), "ctrl+insert");
 			assert.strictEqual(parseKey("\x1bp"), "alt+up");
+			assert.strictEqual(parseKey("\x1bn"), "alt+down");
+			// CSI modifier sequences (standard xterm/VTE encoding)
+			assert.strictEqual(parseKey("\x1b[1;3A"), "alt+up");
+			assert.strictEqual(parseKey("\x1b[1;3B"), "alt+down");
 		});
 
 		it("should parse double bracket pageUp", () => {

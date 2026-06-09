@@ -478,6 +478,8 @@ const LEGACY_SEQUENCE_KEY_IDS: Record<string, KeyId> = {
 	"\x1bf": "alt+right",
 	"\x1bp": "alt+up",
 	"\x1bn": "alt+down",
+	"\x1b[1;3A": "alt+up",
+	"\x1b[1;3B": "alt+down",
 } as const;
 
 type LegacyModifierKey = keyof typeof LEGACY_SHIFT_SEQUENCES;
@@ -1043,7 +1045,12 @@ export function matchesKey(data: string, keyId: KeyId): boolean {
 
 		case "up":
 			if (modifier === MODIFIERS.alt) {
-				return data === "\x1bp" || matchesKittySequence(data, ARROW_CODEPOINTS.up, MODIFIERS.alt);
+				return (
+					data === "\x1b[1;3A" ||
+					data === "\x1bp" ||
+					matchesKittySequence(data, ARROW_CODEPOINTS.up, MODIFIERS.alt) ||
+					matchesModifyOtherKeys(data, ARROW_CODEPOINTS.up, MODIFIERS.alt)
+				);
 			}
 			if (modifier === 0) {
 				return (
@@ -1058,7 +1065,12 @@ export function matchesKey(data: string, keyId: KeyId): boolean {
 
 		case "down":
 			if (modifier === MODIFIERS.alt) {
-				return data === "\x1bn" || matchesKittySequence(data, ARROW_CODEPOINTS.down, MODIFIERS.alt);
+				return (
+					data === "\x1b[1;3B" ||
+					data === "\x1bn" ||
+					matchesKittySequence(data, ARROW_CODEPOINTS.down, MODIFIERS.alt) ||
+					matchesModifyOtherKeys(data, ARROW_CODEPOINTS.down, MODIFIERS.alt)
+				);
 			}
 			if (modifier === 0) {
 				return (
