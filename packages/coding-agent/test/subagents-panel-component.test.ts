@@ -10,9 +10,9 @@ function render(component: SubagentsPanelComponent): string {
 
 const subagents: SubagentDefinition[] = [
 	{
-		name: "scout",
-		description: "Builtin scout",
-		prompt: "Gather context before implementation. Keep the report short.",
+		name: "explorer",
+		description: "Builtin explorer",
+		prompt: "Fast parallel search for discovery. Returns locations and summaries.",
 		scope: "builtin",
 		tools: ["read", "grep"],
 	},
@@ -27,11 +27,11 @@ const subagents: SubagentDefinition[] = [
 		tools: ["read", "write"],
 	},
 	{
-		name: "reviewer",
-		description: "Project reviewer",
+		name: "auditor",
+		description: "Project auditor",
 		prompt: "Review the patch for regressions.",
 		scope: "project",
-		sourcePath: "/repo/.pi/agents/reviewer.md",
+		sourcePath: "/repo/.pi/agents/auditor.md",
 		tools: ["read"],
 	},
 ];
@@ -47,15 +47,15 @@ describe("SubagentsPanelComponent", () => {
 		const text = render(component);
 
 		expect(text).toContain("Subagents");
-		expect(text).toContain("scout");
+		expect(text).toContain("explorer");
 		expect(text).toContain("builtin");
 		expect(text).toContain("Builtin definitions are compiled into this Pi distribution.");
 		expect(text).toContain("architect");
 		expect(text).toContain("user");
 		expect(text).toContain("/home/test/.pi/agent/agents/architect.md");
-		expect(text).toContain("reviewer");
+		expect(text).toContain("auditor");
 		expect(text).toContain("project");
-		expect(text).toContain("/repo/.pi/agents/reviewer.md");
+		expect(text).toContain("/repo/.pi/agents/auditor.md");
 	});
 
 	it("shows lifecycle status, task, tool, tokens, error, and recent events", () => {
@@ -67,7 +67,7 @@ describe("SubagentsPanelComponent", () => {
 					{
 						runId: "run",
 						index: 0,
-						agent: "scout",
+						agent: "explorer",
 						task: "inspect files",
 						status: "pending",
 						timestamp: 1,
@@ -75,7 +75,7 @@ describe("SubagentsPanelComponent", () => {
 					{
 						runId: "run",
 						index: 0,
-						agent: "scout",
+						agent: "explorer",
 						task: "inspect files",
 						status: "running",
 						currentTool: "grep",
@@ -85,7 +85,7 @@ describe("SubagentsPanelComponent", () => {
 					{
 						runId: "run",
 						index: 0,
-						agent: "scout",
+						agent: "explorer",
 						task: "inspect files",
 						status: "failed",
 						currentTool: "grep",
@@ -124,7 +124,7 @@ describe("SubagentsPanelComponent", () => {
 			onClose: () => {},
 		});
 
-		expect(render(component)).toContain("No subagent run captured for scout.");
+		expect(render(component)).toContain("No subagent run captured for explorer.");
 	});
 
 	it("updates details when navigating between agents", () => {
@@ -134,7 +134,7 @@ describe("SubagentsPanelComponent", () => {
 			onClose: () => {},
 		});
 
-		expect(render(component)).toContain("Gather context before implementation.");
+		expect(render(component)).toContain("Fast parallel search for discovery. Returns locations and summaries.");
 
 		component.handleInput("j");
 		const text = render(component);

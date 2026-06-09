@@ -128,8 +128,8 @@ Subagents run focused child `AgentSession` instances in memory and return ordere
 ```typescript
 const result = await session.runSubagents({
   tasks: [
-    { agent: "scout", task: "Find settings-related code", tools: ["read", "grep", "find"] },
-    { agent: "reviewer", task: "Review the current diff", thinking: "high" },
+    { agent: "explorer", task: "Find settings-related code", tools: ["read", "grep", "find"] },
+    { agent: "worker", task: "Review the current diff", thinking: "high" },
   ],
 });
 ```

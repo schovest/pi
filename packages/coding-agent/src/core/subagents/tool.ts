@@ -185,7 +185,7 @@ export function createSubagentToolDefinition(session: AgentSession) {
 		label: "subagent",
 		description: `Run one or more specialized in-memory subagents. ${parameterSummary} ${usageGuidance}`,
 		promptSnippet:
-			"subagent - run specialized in-memory subagents for scouting, planning, reviewing, or focused work.",
+			"subagent - run specialized in-memory subagents: explorer for fast search/discovery, worker for unit-scoped execution.",
 		promptGuidelines: [
 			`Available subagents for the subagent tool: ${agentSummary}`,
 			`Subagent parameter options: ${parameterSummary}`,

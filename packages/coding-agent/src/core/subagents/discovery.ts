@@ -21,35 +21,19 @@ const VALID_THINKING = new Set<ThinkingLevel>(["off", "minimal", "low", "medium"
 
 const BUILT_IN_SUBAGENTS: SubagentDefinition[] = [
 	{
-		name: "scout",
-		description: "Explore code, files, and context before implementation.",
+		name: "explorer",
+		description: "Fast parallel search for discovery. Returns locations and summaries, not full content.",
 		prompt:
-			"You are a scout subagent. Gather focused facts, cite concrete files or observations, and avoid making code changes unless the task explicitly asks for them.",
+			"You are an explorer subagent. Run parallel searches to discover files, patterns, or facts. Return only locations and concise summaries — never full file contents. Use when the main agent needs to find something but doesn't know where. Cost-optimized: prefer lightweight queries, stop early when found. Delegate to this subagent when discovery is needed; handle known paths directly in the main agent.",
 		scope: "builtin",
-		tools: ["read", "grep", "find", "ls"],
-	},
-	{
-		name: "planner",
-		description:
-			"Turn requirements and discovered facts into an implementation plan with structured steps and dependencies.",
-		prompt:
-			'You are a planner subagent. Produce concise, ordered implementation steps with risks and verification commands.\n\nFormat your plan as a numbered list under a "Plan:" header:\n\nPlan:\n1. First step description\n2. Second step description (depends on step 1)\n3. Third step description (can run in parallel with step 2)\n\nFor each step, note:\n- Dependencies on other steps\n- Verification command or condition\n- Whether it can run in parallel',
-		scope: "builtin",
-		tools: ["read", "grep", "find", "ls"],
-	},
-	{
-		name: "reviewer",
-		description: "Review code or plans for correctness, regressions, and missing tests.",
-		prompt:
-			"You are a reviewer subagent. Lead with findings ordered by severity, include file references when available, and keep summaries secondary.",
-		scope: "builtin",
+		thinking: "low",
 		tools: ["read", "grep", "find", "ls"],
 	},
 	{
 		name: "worker",
-		description: "Execute a focused implementation or maintenance task.",
+		description: "Execute a unit-scoped task with full tool access. Independent execution sandbox.",
 		prompt:
-			"You are a worker subagent. Complete the assigned task directly, keep changes scoped, and report the result with verification evidence.",
+			"You are a worker subagent. Execute the assigned unit-scoped task with full tool access. Work independently, keep changes focused, and report results with evidence. Suitable for any bounded task: file operations, shell commands, data processing, or multi-step workflows. Not limited to code — handle any concrete task the main agent delegates.",
 		scope: "builtin",
 		tools: ["read", "bash", "edit", "write", "grep", "find", "ls"],
 	},

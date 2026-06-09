@@ -6,10 +6,8 @@ Subagent 是一种任务委托机制，允许主 agent 将任务分配给专门�
 
 | Agent | 描述 | 默认工具 |
 |-------|------|----------|
-| `scout` | 只读探索，收集上下文 | read, grep, find, ls |
-| `planner` | 创建实现计划 | read, grep, find, ls |
-| `reviewer` | 代码和计划审查 | read, grep, find, ls |
-| `worker` | 执行实现任务 | read, bash, edit, write, grep, find, ls |
+| `explorer` | 快速并行搜索，返回定位和摘要 | read, grep, find, ls |
+| `worker` | 单元化任务执行，拥有全部权限 | read, bash, edit, write, grep, find, ls |
 
 ## 自定义 Agent
 
@@ -20,7 +18,7 @@ Subagent 是一种任务委托机制，允许主 agent 将任务分配给专门�
 
 ```markdown
 ---
-description: 审查补丁的专注 reviewer
+description: 审查补丁的专注审计员
 model: anthropic/claude-sonnet-4-5
 thinking: high
 tools: [read, grep, find, ls]
@@ -46,7 +44,7 @@ Frontmatter 中的 `model` 和 `thinking` 可被任务参数覆盖。
 
 ```json
 {
-  "agent": "reviewer",
+"agent": "worker",
   "task": "审查当前变更集",
   "thinking": "high"
 }
@@ -59,8 +57,8 @@ Frontmatter 中的 `model` 和 `thinking` 可被任务参数覆盖。
 ```json
 {
   "tasks": [
-    { "agent": "scout", "task": "查找 settings 相关文件", "tools": ["read", "grep", "find"] },
-    { "agent": "reviewer", "task": "审查测试覆盖", "tools": ["read", "grep"] }
+    { "agent": "explorer", "task": "查找 settings 相关文件", "tools": ["read", "grep", "find"] },
+    { "agent": "worker", "task": "审查测试覆盖", "tools": ["read", "grep"] }
   ]
 }
 ```
@@ -72,8 +70,8 @@ Frontmatter 中的 `model` 和 `thinking` 可被任务参数覆盖。
 ```json
 {
   "chain": [
-    { "agent": "scout", "task": "总结认证流程" },
-    { "agent": "planner", "task": "基于此上下文规划安全重构：{previous}" }
+    { "agent": "explorer", "task": "总结认证流程" },
+    { "agent": "worker", "task": "基于此上下文规划安全重构：{previous}" }
   ]
 }
 ```
@@ -236,8 +234,8 @@ pi
 ```json
 {
   "chain": [
-    { "agent": "scout", "task": "查找认证相关代码" },
-    { "agent": "planner", "task": "基于以下上下文规划重构：\n{previous}" },
+    { "agent": "explorer", "task": "查找认证相关代码" },
+    { "agent": "worker", "task": "基于以下上下文规划重构：\n{previous}" },
     { "agent": "worker", "task": "执行以下计划：\n{previous}" }
   ]
 }
@@ -261,7 +259,7 @@ const { session } = await createAgentSession();
 
 // 运行 subagent
 const result = await session.runSubagents({
-  agent: "planner",
+  agent: "worker",
   task: "规划 subagent 发现的最小实现",
   thinking: "medium",
 });

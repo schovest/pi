@@ -16,10 +16,10 @@ describe("SubagentDetailsComponent", () => {
 			results: [
 				{
 					index: 0,
-					agent: "scout",
+					agent: "explorer",
 					task: "inspect files",
 					status: "success",
-					output: "scout output",
+					output: "explorer output",
 					model: "faux/one",
 					thinking: "low",
 					usage: {
@@ -35,7 +35,7 @@ describe("SubagentDetailsComponent", () => {
 						{
 							runId: "run",
 							index: 0,
-							agent: "scout",
+							agent: "explorer",
 							task: "inspect files",
 							status: "running",
 							model: "faux/one",
@@ -47,7 +47,7 @@ describe("SubagentDetailsComponent", () => {
 				},
 				{
 					index: 1,
-					agent: "reviewer",
+					agent: "worker",
 					task: "review patch",
 					status: "failed",
 					output: "",
@@ -67,7 +67,7 @@ describe("SubagentDetailsComponent", () => {
 						{
 							runId: "run",
 							index: 1,
-							agent: "reviewer",
+							agent: "worker",
 							task: "review patch",
 							status: "failed",
 							model: "faux/two",
@@ -87,8 +87,8 @@ describe("SubagentDetailsComponent", () => {
 			() => {},
 		);
 		const rendered = stripAnsi(component.render(120).join("\n"));
-		expect(rendered).toContain("scout");
-		expect(rendered).toContain("reviewer");
+		expect(rendered).toContain("explorer");
+		expect(rendered).toContain("worker");
 		expect(rendered).toContain("Select a subagent");
 
 		component.handleInput("j");
@@ -105,10 +105,10 @@ describe("SubagentDetailsComponent", () => {
 			results: [
 				{
 					index: 0,
-					agent: "scout",
+					agent: "explorer",
 					task: "inspect files",
 					status: "success",
-					output: "scout output",
+					output: "explorer output",
 					model: "faux/one",
 					thinking: "low",
 					usage: {
@@ -124,7 +124,7 @@ describe("SubagentDetailsComponent", () => {
 						{
 							runId: "run",
 							index: 0,
-							agent: "scout",
+							agent: "explorer",
 							task: "inspect files",
 							status: "running",
 							model: "faux/one",
@@ -136,7 +136,7 @@ describe("SubagentDetailsComponent", () => {
 				},
 				{
 					index: 1,
-					agent: "reviewer",
+					agent: "worker",
 					task: "review patch",
 					status: "failed",
 					output: "",
@@ -156,7 +156,7 @@ describe("SubagentDetailsComponent", () => {
 						{
 							runId: "run",
 							index: 1,
-							agent: "reviewer",
+							agent: "worker",
 							task: "review patch",
 							status: "failed",
 							model: "faux/two",
@@ -178,11 +178,11 @@ describe("SubagentDetailsComponent", () => {
 			},
 		);
 		const rendered = stripAnsi(component.render(120).join("\n"));
-		expect(rendered).toContain("reviewer");
+		expect(rendered).toContain("worker");
 		expect(rendered).toContain("review patch");
 		expect(rendered).toContain("review failed");
 		expect(rendered).toContain("tokens=9");
-		expect(rendered).not.toContain("scout output");
+		expect(rendered).not.toContain("explorer output");
 
 		component.handleInput("\u001b");
 		expect(cancelled).toBe(true);
@@ -195,7 +195,7 @@ describe("SubagentDetailsComponent", () => {
 				{
 					runId: "run",
 					index: 0,
-					agent: "scout",
+					agent: "explorer",
 					task: "inspect /tmp",
 					status: "running",
 					model: "faux/one",
@@ -206,7 +206,7 @@ describe("SubagentDetailsComponent", () => {
 				{
 					runId: "run",
 					index: 0,
-					agent: "scout",
+					agent: "explorer",
 					task: "inspect /tmp",
 					status: "running",
 					model: "faux/one",
@@ -217,7 +217,7 @@ describe("SubagentDetailsComponent", () => {
 				{
 					runId: "run",
 					index: 0,
-					agent: "scout",
+					agent: "explorer",
 					task: "inspect /tmp",
 					status: "running",
 					model: "faux/one",
@@ -229,7 +229,7 @@ describe("SubagentDetailsComponent", () => {
 				{
 					runId: "run",
 					index: 0,
-					agent: "scout",
+					agent: "explorer",
 					task: "inspect /tmp",
 					status: "running",
 					model: "faux/one",

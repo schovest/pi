@@ -23,33 +23,33 @@ describe("subagents discovery", () => {
 			mkdirSync(projectAgentsDir, { recursive: true });
 
 			writeFileSync(
-				join(userAgentsDir, "scout.md"),
-				"---\ndescription: User scout\nmodel: faux/faux-fast\nthinking: high\ntools: [read]\n---\nUser scout prompt",
+				join(userAgentsDir, "explorer.md"),
+				"---\ndescription: User explorer\nmodel: faux/faux-fast\nthinking: high\ntools: [read]\n---\nUser explorer prompt",
 			);
 			writeFileSync(
-				join(projectAgentsDir, "scout.md"),
-				"---\ndescription: Project scout\nthinking: low\ntools: [grep]\n---\nProject scout prompt",
+				join(projectAgentsDir, "explorer.md"),
+				"---\ndescription: Project explorer\nthinking: low\ntools: [grep]\n---\nProject explorer prompt",
 			);
 			writeFileSync(join(projectAgentsDir, "local.md"), "---\ndescription: Local only\n---\nLocal prompt");
 
 			const userOnly = await discoverSubagents({ cwd: harness.tempDir, agentDir: harness.tempDir, scope: "user" });
-			expect(userOnly.map((agent) => agent.name)).toContain("scout");
-			expect(userOnly.find((agent) => agent.name === "scout")).toMatchObject({
-				description: "User scout",
+			expect(userOnly.map((agent) => agent.name)).toContain("explorer");
+			expect(userOnly.find((agent) => agent.name === "explorer")).toMatchObject({
+				description: "User explorer",
 				model: "faux/faux-fast",
 				thinking: "high",
 				tools: ["read"],
-				prompt: "User scout prompt",
+				prompt: "User explorer prompt",
 				scope: "user",
 			});
 			expect(userOnly.map((agent) => agent.name)).not.toContain("local");
 
 			const project = await discoverSubagents({ cwd: harness.tempDir, agentDir: harness.tempDir, scope: "project" });
-			expect(project.find((agent) => agent.name === "scout")).toMatchObject({
-				description: "Project scout",
+			expect(project.find((agent) => agent.name === "explorer")).toMatchObject({
+				description: "Project explorer",
 				thinking: "low",
 				tools: ["grep"],
-				prompt: "Project scout prompt",
+				prompt: "Project explorer prompt",
 				scope: "project",
 			});
 			expect(project.map((agent) => agent.name)).toContain("local");
@@ -76,7 +76,7 @@ describe("AgentSession subagents", () => {
 			const agentsDir = join(agentDir, "agents");
 			mkdirSync(agentsDir, { recursive: true });
 			writeFileSync(
-				join(agentsDir, "planner.md"),
+				join(agentsDir, "worker.md"),
 				"---\ndescription: Plans work\nmodel: faux/limited\nthinking: xhigh\ntools: []\n---\nPlan carefully.",
 			);
 
@@ -91,7 +91,7 @@ describe("AgentSession subagents", () => {
 
 			const result = await harness.session.runSubagents(
 				{
-					tasks: [{ agent: "planner", task: "make a plan", model: "faux/parent", thinking: "xhigh" }],
+					tasks: [{ agent: "worker", task: "make a plan", model: "faux/parent", thinking: "xhigh" }],
 					subagentScope: "user",
 				},
 				{ agentDir },
@@ -100,7 +100,7 @@ describe("AgentSession subagents", () => {
 			expect(result.mode).toBe("parallel");
 			expect(result.results).toHaveLength(1);
 			expect(result.results[0]).toMatchObject({
-				agent: "planner",
+				agent: "worker",
 				task: "make a plan",
 				status: "success",
 				output: "single result",
@@ -162,7 +162,7 @@ describe("AgentSession subagents", () => {
 			const result = await harness.session.runSubagents({
 				chain: [
 					{ agent: "worker", task: "one", tools: [] },
-					{ agent: "reviewer", task: "review {previous}", tools: [] },
+					{ agent: "worker", task: "review {previous}", tools: [] },
 					{ agent: "worker", task: "three", tools: [] },
 				],
 			});
@@ -325,7 +325,7 @@ describe("AgentSession subagents", () => {
 						),
 						fauxToolCall(
 							"subagent",
-							{ tasks: [{ agent: "reviewer", task: "second", tools: [] }] },
+							{ tasks: [{ agent: "worker", task: "second", tools: [] }] },
 							{ id: "subagent-2" },
 						),
 					],

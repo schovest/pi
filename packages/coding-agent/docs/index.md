@@ -45,7 +45,7 @@ For the full first-run flow, see [Quickstart](quickstart.md).
 - [Keybindings](keybindings.md) - default shortcuts and custom keybindings.
 - [Sessions](sessions.md) - session management, branching, and tree navigation.
 - [Compaction](compaction.md) - context compaction and branch summarization.
-- [Subagents](subagents.md) - in-memory focused agents for scouting, planning, reviewing, and work.
+- [Subagents](subagents.md) - in-memory focused agents for fast search (explorer) and unit-scoped execution (worker).
 
 ## Customization
 
