@@ -66,7 +66,6 @@ export class SubagentOverlayComponent extends Container {
 	private getSubagentMessages?: (subagentEntryId: string) => AgentMessage[];
 
 	private selectedIndex = 0;
-	private focusedPane: "list" | "detail" = "list";
 	private expanded = false;
 	private detailScrollOffset = 0;
 
@@ -117,68 +116,61 @@ export class SubagentOverlayComponent extends Container {
 			return true;
 		}
 
-		if (this.focusedPane === "list") {
-			if (kb.matches(keyData, "tui.select.up") || keyData === "k") {
-				this.selectedIndex = Math.max(0, this.selectedIndex - 1);
-				this.detailScrollOffset = 0;
-				this.rebuild();
-				this.subscribeToSelectedChild();
-				return true;
-			} else if (kb.matches(keyData, "tui.select.down") || keyData === "j") {
-				this.selectedIndex = Math.min(items.length - 1, this.selectedIndex + 1);
-				this.detailScrollOffset = 0;
-				this.rebuild();
-				this.subscribeToSelectedChild();
-				return true;
-			} else if (kb.matches(keyData, "tui.select.confirm") || keyData === "\n" || keyData === "\t") {
-				this.focusedPane = "detail";
-				this.rebuild();
-				return true;
-			}
-		} else {
-			if (keyData === "\t") {
-				this.focusedPane = "list";
-				this.rebuild();
-				return true;
-			} else if (keyData === "\x0f") {
-				this.expanded = !this.expanded;
-				this.rebuildRightPanel();
-				return true;
-			} else {
-				const pageAmount = this.getTerminalHeight() - 4;
-				if (matchesKey(keyData, "pageUp") || keyData === "\x1b[scrollUp") {
-					this.detailScrollOffset = Math.max(0, this.detailScrollOffset - pageAmount);
-					this.rebuildRightPanel();
-					this.requestRender();
-					return true;
-				} else if (matchesKey(keyData, "pageDown") || keyData === "\x1b[scrollDown") {
-					this.detailScrollOffset += pageAmount;
-					this.rebuildRightPanel();
-					this.requestRender();
-					return true;
-				} else if (matchesKey(keyData, "home") || keyData === "g") {
-					this.detailScrollOffset = 0;
-					this.rebuildRightPanel();
-					this.requestRender();
-					return true;
-				} else if (matchesKey(keyData, "end") || keyData === "G") {
-					this.detailScrollOffset = Number.MAX_SAFE_INTEGER;
-					this.clampScrollOffset();
-					this.rebuildRightPanel();
-					this.requestRender();
-					return true;
-				} else if (kb.matches(keyData, "tui.select.up") || keyData === "k") {
-					this.detailScrollOffset = Math.max(0, this.detailScrollOffset - 1);
-					this.rebuildRightPanel();
-					this.requestRender();
-					return true;
-				} else if (kb.matches(keyData, "tui.select.down") || keyData === "j") {
-					this.detailScrollOffset++;
-					this.rebuildRightPanel();
-					this.requestRender();
-					return true;
-				}
-			}
+		// ↑/↓/j/k — left panel list navigation
+		if (kb.matches(keyData, "tui.select.up") || keyData === "k") {
+			this.selectedIndex = this.selectedIndex <= 0 ? items.length - 1 : this.selectedIndex - 1;
+			this.detailScrollOffset = 0;
+			this.rebuild();
+			this.subscribeToSelectedChild();
+			return true;
+		} else if (kb.matches(keyData, "tui.select.down") || keyData === "j") {
+			this.selectedIndex = this.selectedIndex >= items.length - 1 ? 0 : this.selectedIndex + 1;
+			this.detailScrollOffset = 0;
+			this.rebuild();
+			this.subscribeToSelectedChild();
+			return true;
+		}
+
+		// Ctrl-O — toggle expand/collapse
+		if (keyData === "\x0f") {
+			this.expanded = !this.expanded;
+			this.rebuildRightPanel();
+			return true;
+		}
+
+		// Right panel scrolling — PgUp/PgDn, Home/End, mouse wheel
+		const pageAmount = this.getTerminalHeight() - 4;
+		if (keyData === "\x1b[scrollUp") {
+			this.detailScrollOffset = Math.max(0, this.detailScrollOffset - 3);
+			this.rebuildRightPanel();
+			this.requestRender();
+			return true;
+		} else if (keyData === "\x1b[scrollDown") {
+			this.detailScrollOffset += 3;
+			this.rebuildRightPanel();
+			this.requestRender();
+			return true;
+		} else if (matchesKey(keyData, "pageUp")) {
+			this.detailScrollOffset = Math.max(0, this.detailScrollOffset - pageAmount);
+			this.rebuildRightPanel();
+			this.requestRender();
+			return true;
+		} else if (matchesKey(keyData, "pageDown")) {
+			this.detailScrollOffset += pageAmount;
+			this.rebuildRightPanel();
+			this.requestRender();
+			return true;
+		} else if (matchesKey(keyData, "home") || keyData === "g") {
+			this.detailScrollOffset = 0;
+			this.rebuildRightPanel();
+			this.requestRender();
+			return true;
+		} else if (matchesKey(keyData, "end") || keyData === "G") {
+			this.detailScrollOffset = Number.MAX_SAFE_INTEGER;
+			this.clampScrollOffset();
+			this.rebuildRightPanel();
+			this.requestRender();
+			return true;
 		}
 
 		return false;
@@ -216,8 +208,7 @@ export class SubagentOverlayComponent extends Container {
 			for (let i = 0; i < items.length; i++) {
 				const item = items[i];
 				const selected = i === this.selectedIndex;
-				const focused = this.focusedPane === "list";
-				const pointer = selected && focused ? theme.fg("accent", "> ") : "  ";
+				const pointer = selected ? theme.fg("accent", "> ") : "  ";
 				const status = theme.fg(statusColor(item.status), item.status);
 				const usage = item.totalTokens === undefined ? "" : theme.fg("muted", ` t=${item.totalTokens}`);
 				const tools = theme.fg("muted", ` tools=${item.toolCount}`);
@@ -231,7 +222,7 @@ export class SubagentOverlayComponent extends Container {
 		this.leftPanel.addChild(new Spacer(1));
 		this.leftPanel.addChild(
 			new Text(
-				`${rawKeyHint("j/k", "nav")}  ${rawKeyHint("Enter/Tab", "detail")}  ${rawKeyHint("Esc", "close")}`,
+				`${rawKeyHint("↑↓/j/k", "nav")}  ${rawKeyHint("Esc", "close")}`,
 				1,
 				0,
 			),
@@ -288,7 +279,7 @@ export class SubagentOverlayComponent extends Container {
 		this.rightFooter.addChild(new DynamicBorder());
 		this.rightFooter.addChild(
 			new Text(
-				`${rawKeyHint("Tab", "list")}  ${rawKeyHint("Ctrl-O", this.expanded ? "collapse" : "expand")}  ${rawKeyHint("j/k/PgUp/PgDn/Home/End", "scroll")}`,
+				`${rawKeyHint("Ctrl-O", this.expanded ? "collapse" : "expand")}  ${rawKeyHint("PgUp/PgDn/Home/End", "scroll")}`,
 				1,
 				0,
 			),

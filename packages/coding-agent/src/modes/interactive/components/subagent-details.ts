@@ -117,6 +117,8 @@ function latestEvents(events: SubagentRunEvent[]): SubagentDetailsItem[] {
 		.sort((a, b) => a.index - b.index)
 		.map((event) => {
 			const itemEvents = events.filter((candidate) => candidate.index === event.index);
+			// Use earliest event timestamp as creation time (stable across status updates)
+			const startTimestamp = new Date(Math.min(...itemEvents.map((e) => e.timestamp))).toISOString();
 			return {
 				index: event.index,
 				agent: event.agent,
@@ -132,7 +134,7 @@ function latestEvents(events: SubagentRunEvent[]): SubagentDetailsItem[] {
 				outputSummary: latestDefined(itemEvents, (candidate) => candidate.outputSummary),
 				events: itemEvents,
 				runId: event.runId,
-				timestamp: new Date(event.timestamp).toISOString(),
+				timestamp: startTimestamp,
 			};
 		});
 }
