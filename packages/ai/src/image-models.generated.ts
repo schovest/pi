@@ -4,7 +4,5 @@
 import type { ImagesApi, ImagesModel } from "./types.ts";
 
 export const IMAGE_MODELS = {
-	"openrouter": {
-
-	},
+	openrouter: {},
 } as const satisfies Record<string, Record<string, ImagesModel<ImagesApi>>>;

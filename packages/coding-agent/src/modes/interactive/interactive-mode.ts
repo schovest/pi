@@ -308,6 +308,11 @@ export class InteractiveMode {
 
 	private lastSigintTime = 0;
 	private lastEscapeTime = 0;
+
+	// Double-press warning state (shared between abort and exit)
+	private lastDoublePressWarningTime = 0;
+	private doublePressWarningTimer: ReturnType<typeof setTimeout> | undefined;
+	private readonly DOUBLE_PRESS_WARNING_TIMEOUT_MS = 1500;
 	private changelogMarkdown: string | undefined = undefined;
 	private startupNoticesShown = false;
 	private anthropicSubscriptionWarningShown = false;
@@ -2433,9 +2438,13 @@ export class InteractiveMode {
 		// so they work correctly regardless of which editor is active
 		this.defaultEditor.onEscape = () => {
 			if (this.session.isStreaming) {
-				this.restoreQueuedMessagesToEditor({ abort: true });
+				this.handleAbortWarning(() => {
+					this.restoreQueuedMessagesToEditor({ abort: true });
+				});
 			} else if (this.session.isBashRunning) {
-				this.session.abortBash();
+				this.handleAbortWarning(() => {
+					this.session.abortBash();
+				});
 			} else if (this.isBashMode) {
 				this.editor.setText("");
 				this.isBashMode = false;
@@ -3785,7 +3794,13 @@ export class InteractiveMode {
 
 	private handleCtrlD(): void {
 		// Only called when editor is empty (enforced by CustomEditor)
-		void this.shutdown();
+		if (this.session.isStreaming) {
+			this.handleDoublePressWarning("Press Ctrl+D again to exit", () => {
+				void this.shutdown();
+			});
+		} else {
+			void this.shutdown();
+		}
 	}
 
 	/**
@@ -4212,6 +4227,67 @@ export class InteractiveMode {
 		this.chatContainer.addChild(new Spacer(1));
 		this.chatContainer.addChild(new Text(theme.fg("warning", `Warning: ${warningMessage}`), 1, 0));
 		this.ui.requestRender();
+	}
+
+	/**
+	 * Generic double-press warning mechanism. First press shows a warning message,
+	 * second press within the timeout window executes the action.
+	 */
+	private handleDoublePressWarning(message: string, action: () => void): void {
+		const now = Date.now();
+		if (
+			this.lastDoublePressWarningTime > 0 &&
+			now - this.lastDoublePressWarningTime < this.DOUBLE_PRESS_WARNING_TIMEOUT_MS
+		) {
+			this.clearDoublePressWarning();
+			action();
+		} else {
+			this.lastDoublePressWarningTime = now;
+			this.showDoublePressWarning(message);
+		}
+	}
+
+	/**
+	 * Show a prominent double-press warning in the status bar area.
+	 * Does NOT reset `lastDoublePressWarningTime` — caller owns the timestamp.
+	 */
+	private showDoublePressWarning(message: string): void {
+		// Clear existing timer if re-triggered before expiry
+		if (this.doublePressWarningTimer) {
+			clearTimeout(this.doublePressWarningTimer);
+			this.doublePressWarningTimer = undefined;
+		}
+		this.statusContainer.clear();
+		this.statusContainer.addChild(new Text(theme.fg("warning", `⚠  ${message}`), 1, 0));
+		this.ui.requestRender();
+
+		this.doublePressWarningTimer = setTimeout(() => {
+			this.clearDoublePressWarning();
+		}, this.DOUBLE_PRESS_WARNING_TIMEOUT_MS);
+	}
+
+	/**
+	 * Clear the double-press warning and restore normal status display.
+	 */
+	private clearDoublePressWarning(): void {
+		if (this.doublePressWarningTimer) {
+			clearTimeout(this.doublePressWarningTimer);
+			this.doublePressWarningTimer = undefined;
+		}
+		this.lastDoublePressWarningTime = 0;
+		this.statusContainer.clear();
+		if (this.session.isStreaming && this.workingVisible && this.loadingAnimation) {
+			this.statusContainer.addChild(this.loadingAnimation);
+		}
+		this.ui.requestRender();
+	}
+
+	/**
+	 * Handle double-escape to abort: first press shows a warning, second press aborts.
+	 */
+	private handleAbortWarning(action: () => void): void {
+		const cancelKey = keyText("app.interrupt");
+		this.handleDoublePressWarning(`Press ${cancelKey} again to abort`, action);
 	}
 
 	private showPackageUpdateNotification(packages: string[]): void {
