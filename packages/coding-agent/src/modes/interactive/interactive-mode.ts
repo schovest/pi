@@ -3094,6 +3094,7 @@ export class InteractiveMode {
 			if (this.session.isStreaming) {
 				this.editor.addToHistory?.(text);
 				this.editor.setText("");
+				this.ui.setAutoFollow(true);
 				await this.session.prompt(text, { streamingBehavior: "steer" });
 				this.updatePendingMessagesDisplay();
 				this.ui.requestRender();
@@ -3103,6 +3104,7 @@ export class InteractiveMode {
 			// Normal message submission
 			// First, move any pending bash components to chat
 			this.flushPendingBashComponents();
+			this.ui.setAutoFollow(true);
 
 			if (this.onInputCallback) {
 				this.onInputCallback(text);
