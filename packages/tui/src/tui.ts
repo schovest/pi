@@ -284,7 +284,7 @@ export class TUI extends Container {
 	// biome-ignore lint/correctness/noUnusedPrivateClassMembers: used in render and cursor positioning
 	private cursorRow = 0; // Logical cursor row (end of rendered content)
 	private hardwareCursorRow = 0; // Actual terminal cursor row (may differ due to IME positioning)
-	private showHardwareCursor = process.env.PI_HARDWARE_CURSOR === "1";
+	private showHardwareCursor = process.env.PI_HARDWARE_CURSOR !== "0";
 	private clearOnShrink = process.env.PI_CLEAR_ON_SHRINK === "1"; // Clear empty rows when content shrinks (default: off)
 	private maxLinesRendered = 0; // Track terminal's working area (max lines ever rendered)
 	// biome-ignore lint/correctness/noUnusedPrivateClassMembers: used in scroll calculations
@@ -344,7 +344,10 @@ export class TUI extends Container {
 	setShowHardwareCursor(enabled: boolean): void {
 		if (this.showHardwareCursor === enabled) return;
 		this.showHardwareCursor = enabled;
-		if (!enabled) {
+		if (enabled) {
+			// Set steady bar cursor shape when enabling hardware cursor
+			this.terminal.write("\x1b[6 q");
+		} else {
 			this.terminal.hideCursor();
 		}
 		this.requestRender();
@@ -394,7 +397,9 @@ export class TUI extends Container {
 		if (!options?.nonCapturing && this.isOverlayVisible(entry)) {
 			this.setFocus(component);
 		}
-		this.terminal.hideCursor();
+		if (!this.showHardwareCursor) {
+			this.terminal.hideCursor();
+		}
 		this.requestRender();
 
 		// Return handle for controlling this overlay
@@ -408,7 +413,9 @@ export class TUI extends Container {
 						const topVisible = this.getTopmostVisibleOverlay();
 						this.setFocus(topVisible?.component ?? entry.preFocus);
 					}
-					if (this.overlayStack.length === 0) this.terminal.hideCursor();
+					if (this.overlayStack.length === 0 && !this.showHardwareCursor) {
+						this.terminal.hideCursor();
+					}
 					this.requestRender();
 				}
 			},
@@ -499,7 +506,9 @@ export class TUI extends Container {
 			(data) => this.handleInput(data),
 			() => this.requestRender(),
 		);
-		this.terminal.hideCursor();
+		if (!this.showHardwareCursor) {
+			this.terminal.hideCursor();
+		}
 		this.queryCellSize();
 		this.setupMouseListener();
 		this.requestRender();
@@ -551,6 +560,8 @@ export class TUI extends Container {
 		}
 
 		this.terminal.showCursor();
+		// Reset cursor shape to user default on exit
+		this.terminal.write("\x1b[0 q");
 		this.terminal.stop();
 	}
 
@@ -1562,7 +1573,9 @@ export class TUI extends Container {
 		this.hardwareCursorRow = targetRow;
 
 		if (this.showHardwareCursor) {
-			return `\x1b[${targetRow + 1};${targetCol + 1}H\x1b[?25h`;
+			// DECSCUSR Ps=6: steady bar cursor — non-blinking, unobtrusive,
+			// and ensures IME frameworks track the cursor position reliably.
+			return `\x1b[${targetRow + 1};${targetCol + 1}H\x1b[6 q\x1b[?25h`;
 		}
 		// Hide then move — both inside the sync-mode buffer so the
 		// terminal never shows the cursor at an intermediate position.
