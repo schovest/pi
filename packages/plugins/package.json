@@ -1,6 +1,6 @@
 {
 	"name": "@earendil-works/pi-plugins",
-	"version": "0.4.0",
+	"version": "0.4.1",
 	"description": "Built-in plugins for Pi distributions",
 	"private": true,
 	"type": "module",
@@ -23,9 +23,9 @@
 		"copy-assets": "shx mkdir -p dist/mcp/adapter && shx cp src/mcp/adapter/app-bridge.bundle.js dist/mcp/adapter/ && shx mkdir -p dist/btw/prompts && shx cp src/btw/prompts/btw-system.txt dist/btw/prompts/"
 	},
 	"dependencies": {
-		"@earendil-works/pi-agent-core": "^0.4.0",
-		"@earendil-works/pi-ai": "^0.4.0",
-		"@earendil-works/pi-tui": "^0.4.0",
+		"@earendil-works/pi-agent-core": "^0.4.1",
+		"@earendil-works/pi-ai": "^0.4.1",
+		"@earendil-works/pi-tui": "^0.4.1",
 		"@modelcontextprotocol/ext-apps": "1.2.2",
 		"@modelcontextprotocol/sdk": "1.29.0",
 		"open": "10.2.0",
