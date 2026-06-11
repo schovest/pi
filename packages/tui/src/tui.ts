@@ -323,6 +323,7 @@ export class TUI extends Container {
 	private scrollOffset = 0;
 	private autoFollow = true;
 	private previousScrollableLineCount = 0;
+	private lastScrollableViewport = 0;
 	private autoScrollTimer: ReturnType<typeof setInterval> | null = null;
 	private mouseListenerRemover?: () => void;
 	// Cached overlay layouts from the most recent render, used for selection clip
@@ -1119,11 +1120,13 @@ export class TUI extends Container {
 
 		// Fallback: TUI handles scroll keys when focused component didn't consume them
 		if (matchesKey(data, "pageUp")) {
-			this.setScrollOffset(this.scrollOffset + this.terminal.rows - 2);
+			const pageSize = this.lastScrollableViewport || this.terminal.rows - 2;
+			this.setScrollOffset(this.scrollOffset + pageSize);
 			return;
 		}
 		if (matchesKey(data, "pageDown")) {
-			this.setScrollOffset(Math.max(0, this.scrollOffset - (this.terminal.rows - 2)));
+			const pageSize = this.lastScrollableViewport || this.terminal.rows - 2;
+			this.setScrollOffset(Math.max(0, this.scrollOffset - pageSize));
 			return;
 		}
 		// Ctrl+Home / Ctrl+End: scroll to top/bottom of content
@@ -1584,6 +1587,7 @@ export class TUI extends Container {
 		// Calculate available space for scrollable area
 		const fixedHeight = fixedLines.length;
 		const scrollableViewport = Math.max(0, height - fixedHeight);
+		this.lastScrollableViewport = scrollableViewport;
 
 		// Apply scrollOffset to scrollable content only
 		const maxScroll = Math.max(0, scrollableLines.length - scrollableViewport);
