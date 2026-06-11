@@ -278,6 +278,10 @@ git tag vx.y.z
 - 只在用户明确要求时修改 `packages/*/CHANGELOG.md`
 - 新条目放入 `## [Unreleased]`，不修改已发布版本段落
 
+## 上游合并
+
+合并上游 `pi-remote` 新版本时，加载 skill `merge-remote-pi`（`.agents/skills/merge-remote-pi/SKILL.md`）。核心原则：**本地开发优先**，获取新特性的同时不破坏本地变更；矛盾冲突时舍去上游部分并报告。
+
 ## 更新覆盖
 
 项目中发生变更与 `AGENTS.md` 不一致的可对 `AGENTS.md` 修改，但需要主动告知用户变更内容
