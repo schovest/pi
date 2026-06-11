@@ -1,18 +1,18 @@
 {
 	"name": "@earendil-works/pi-coding-agent",
-	"version": "0.4.1",
+	"version": "0.79.1",
 	"lockfileVersion": 3,
 	"requires": true,
 	"packages": {
 		"": {
 			"name": "@earendil-works/pi-coding-agent",
-			"version": "0.4.1",
+			"version": "0.79.1",
 			"license": "MIT",
 			"dependencies": {
-				"@earendil-works/pi-agent-core": "^0.4.1",
-				"@earendil-works/pi-ai": "^0.4.1",
+				"@earendil-works/pi-agent-core": "^0.79.1",
+				"@earendil-works/pi-ai": "^0.79.1",
 				"@earendil-works/pi-plugins": "file:../plugins",
-				"@earendil-works/pi-tui": "^0.4.1",
+				"@earendil-works/pi-tui": "^0.79.1",
 				"@silvia-odwyer/photon-node": "0.3.4",
 				"chalk": "5.6.2",
 				"cross-spawn": "7.0.6",
@@ -477,11 +477,11 @@
 			}
 		},
 		"node_modules/@earendil-works/pi-agent-core": {
-			"version": "0.4.1",
-			"resolved": "https://registry.npmjs.org/@earendil-works/pi-agent-core/-/pi-agent-core-0.4.1.tgz",
+			"version": "0.79.1",
+			"resolved": "https://registry.npmjs.org/@earendil-works/pi-agent-core/-/pi-agent-core-0.79.1.tgz",
 			"license": "MIT",
 			"dependencies": {
-				"@earendil-works/pi-ai": "^0.4.1",
+				"@earendil-works/pi-ai": "^0.79.1",
 				"ignore": "7.0.5",
 				"typebox": "1.1.38",
 				"yaml": "2.9.0"
@@ -491,8 +491,8 @@
 			}
 		},
 		"node_modules/@earendil-works/pi-ai": {
-			"version": "0.4.1",
-			"resolved": "https://registry.npmjs.org/@earendil-works/pi-ai/-/pi-ai-0.4.1.tgz",
+			"version": "0.79.1",
+			"resolved": "https://registry.npmjs.org/@earendil-works/pi-ai/-/pi-ai-0.79.1.tgz",
 			"license": "MIT",
 			"dependencies": {
 				"@anthropic-ai/sdk": "0.91.1",
@@ -514,12 +514,12 @@
 			}
 		},
 		"node_modules/@earendil-works/pi-plugins": {
-			"version": "0.4.1",
+			"version": "0.79.1",
 			"license": "MIT",
 			"dependencies": {
-				"@earendil-works/pi-agent-core": "^0.4.1",
-				"@earendil-works/pi-ai": "^0.4.1",
-				"@earendil-works/pi-tui": "^0.4.1",
+				"@earendil-works/pi-agent-core": "^0.79.1",
+				"@earendil-works/pi-ai": "^0.79.1",
+				"@earendil-works/pi-tui": "^0.79.1",
 				"@modelcontextprotocol/ext-apps": "1.2.2",
 				"@modelcontextprotocol/sdk": "1.29.0",
 				"open": "10.2.0",
@@ -530,8 +530,8 @@
 			"inBundle": true
 		},
 		"node_modules/@earendil-works/pi-tui": {
-			"version": "0.4.1",
-			"resolved": "https://registry.npmjs.org/@earendil-works/pi-tui/-/pi-tui-0.4.1.tgz",
+			"version": "0.79.1",
+			"resolved": "https://registry.npmjs.org/@earendil-works/pi-tui/-/pi-tui-0.79.1.tgz",
 			"license": "MIT",
 			"dependencies": {
 				"get-east-asian-width": "1.6.0",
@@ -1916,9 +1916,9 @@
 			}
 		},
 		"node_modules/hono": {
-			"version": "4.12.23",
-			"resolved": "https://registry.npmjs.org/hono/-/hono-4.12.23.tgz",
-			"integrity": "sha512-eIaZ9qDgu7XV0pxOCrg7/WhnQ6Ivm22UcxhXx/A3dcbqbbYgBEkc6e/J/s7j2tS96zoB0S9VBdLwQNCWwUo4LA==",
+			"version": "4.12.25",
+			"resolved": "https://registry.npmjs.org/hono/-/hono-4.12.25.tgz",
+			"integrity": "sha512-2NFaIyNVgJmBs/ecmtGzlmluTFs5cHEWGTdu0t1HBwYzoGXOL5nUQBRMXsXWla5i4KkG//QMzVP88m1+I3fdAQ==",
 			"license": "MIT",
 			"engines": {
 				"node": ">=16.9.0"
@@ -2816,14 +2816,14 @@
 			}
 		},
 		"node_modules/side-channel": {
-			"version": "1.1.0",
-			"resolved": "https://registry.npmjs.org/side-channel/-/side-channel-1.1.0.tgz",
-			"integrity": "sha512-ZX99e6tRweoUXqR+VBrslhda51Nh5MTQwou5tnUDgbtyM0dBgmhEDtWGP/xbKn6hqfPRHujUNwz5fy/wbbhnpw==",
+			"version": "1.1.1",
+			"resolved": "https://registry.npmjs.org/side-channel/-/side-channel-1.1.1.tgz",
+			"integrity": "sha512-6x6dK6zJdpTzF4sQeNYxwtvBzf6Eg4GtlesS94HOvTudUeyK2WXAaIfmDgsyslYrRBeFIlsi54AYsFGUuhmvrQ==",
 			"license": "MIT",
 			"dependencies": {
 				"es-errors": "^1.3.0",
-				"object-inspect": "^1.13.3",
-				"side-channel-list": "^1.0.0",
+				"object-inspect": "^1.13.4",
+				"side-channel-list": "^1.0.1",
 				"side-channel-map": "^1.0.1",
 				"side-channel-weakmap": "^1.0.2"
 			},

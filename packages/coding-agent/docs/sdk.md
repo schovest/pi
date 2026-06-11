@@ -1131,6 +1131,11 @@ createEventBus
 
 // Helpers
 defineTool
+getAgentDir
+getPackageDir
+getReadmePath
+getDocsPath
+getExamplesPath
 
 // Session management
 SessionManager

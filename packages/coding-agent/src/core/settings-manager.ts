@@ -1,4 +1,5 @@
 import type { Transport } from "@earendil-works/pi-ai";
+import { randomUUID } from "crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import lockfile from "proper-lockfile";
@@ -57,6 +58,8 @@ export interface WarningSettings {
 	anthropicExtraUsage?: boolean; // default: true
 }
 
+export type DefaultProjectTrust = "ask" | "always" | "never";
+
 export type TransportSetting = Transport;
 
 /**
@@ -101,10 +104,13 @@ export interface Settings {
 	hideThinkingBlock?: boolean;
 	shellPath?: string; // Custom shell path (e.g., for Cygwin users on Windows)
 	quietStartup?: boolean;
+	defaultProjectTrust?: DefaultProjectTrust; // default: "ask"; global setting only
 	shellCommandPrefix?: string; // Prefix prepended to every bash command (e.g., "shopt -s expand_aliases" for alias support)
 	npmCommand?: string[]; // Command used for npm package lookup/install operations, argv-style (e.g., ["mise", "exec", "node@20", "--", "npm"])
 	collapseChangelog?: boolean; // Show condensed changelog after update (use /changelog for full)
 	enableInstallTelemetry?: boolean; // default: true - anonymous version/update ping after changelog-detected updates
+	enableAnalytics?: boolean; // default: false - opt-in analytics data sharing
+	trackingId?: string; // analytics tracking identifier, generated when analytics is enabled
 	packages?: PackageSource[]; // Array of npm/git package sources (string or object with filtering)
 	pluginMarketplaces?: Record<string, PluginMarketplaceSettings>; // Claude-compatible plugin marketplace aliases
 	plugins?: InstalledPluginSettings[]; // Claude-compatible plugins, independent from Pi packages
@@ -172,6 +178,10 @@ function parseTimeoutSetting(value: unknown, settingName: string): number | unde
 }
 
 export type SettingsScope = "global" | "project";
+
+export interface SettingsManagerCreateOptions {
+	projectTrusted?: boolean;
+}
 
 export interface SettingsStorage {
 	withLock(scope: SettingsScope, fn: (current: string | undefined) => string | undefined): void;
@@ -273,6 +283,7 @@ export class SettingsManager {
 	private globalSettings: Settings;
 	private projectSettings: Settings;
 	private settings: Settings;
+	private projectTrusted: boolean;
 	private modifiedFields = new Set<keyof Settings>(); // Track global fields modified during session
 	private modifiedNestedFields = new Map<keyof Settings, Set<string>>(); // Track global nested field modifications
 	private modifiedProjectFields = new Set<keyof Settings>(); // Track project fields modified during session
@@ -289,10 +300,12 @@ export class SettingsManager {
 		globalLoadError: Error | null = null,
 		projectLoadError: Error | null = null,
 		initialErrors: SettingsError[] = [],
+		projectTrusted = true,
 	) {
 		this.storage = storage;
 		this.globalSettings = initialGlobal;
 		this.projectSettings = initialProject;
+		this.projectTrusted = projectTrusted;
 		this.globalSettingsLoadError = globalLoadError;
 		this.projectSettingsLoadError = projectLoadError;
 		this.errors = [...initialErrors];
@@ -300,15 +313,20 @@ export class SettingsManager {
 	}
 
 	/** Create a SettingsManager that loads from files */
-	static create(cwd: string, agentDir: string = getAgentDir()): SettingsManager {
+	static create(
+		cwd: string,
+		agentDir: string = getAgentDir(),
+		options: SettingsManagerCreateOptions = {},
+	): SettingsManager {
 		const storage = new FileSettingsStorage(cwd, agentDir);
-		return SettingsManager.fromStorage(storage);
+		return SettingsManager.fromStorage(storage, options);
 	}
 
 	/** Create a SettingsManager from an arbitrary storage backend */
-	static fromStorage(storage: SettingsStorage): SettingsManager {
+	static fromStorage(storage: SettingsStorage, options: SettingsManagerCreateOptions = {}): SettingsManager {
+		const projectTrusted = options.projectTrusted ?? true;
 		const globalLoad = SettingsManager.tryLoadFromStorage(storage, "global");
-		const projectLoad = SettingsManager.tryLoadFromStorage(storage, "project");
+		const projectLoad = SettingsManager.tryLoadFromStorage(storage, "project", projectTrusted);
 		const initialErrors: SettingsError[] = [];
 		if (globalLoad.error) {
 			initialErrors.push({ scope: "global", error: globalLoad.error });
@@ -324,6 +342,7 @@ export class SettingsManager {
 			globalLoad.error,
 			projectLoad.error,
 			initialErrors,
+			projectTrusted,
 		);
 	}
 
@@ -335,7 +354,11 @@ export class SettingsManager {
 		return SettingsManager.fromStorage(storage);
 	}
 
-	private static loadFromStorage(storage: SettingsStorage, scope: SettingsScope): Settings {
+	private static loadFromStorage(storage: SettingsStorage, scope: SettingsScope, projectTrusted = true): Settings {
+		if (scope === "project" && !projectTrusted) {
+			return {};
+		}
+
 		let content: string | undefined;
 		storage.withLock(scope, (current) => {
 			content = current;
@@ -352,9 +375,10 @@ export class SettingsManager {
 	private static tryLoadFromStorage(
 		storage: SettingsStorage,
 		scope: SettingsScope,
+		projectTrusted = true,
 	): { settings: Settings; error: Error | null } {
 		try {
-			return { settings: SettingsManager.loadFromStorage(storage, scope), error: null };
+			return { settings: SettingsManager.loadFromStorage(storage, scope, projectTrusted), error: null };
 		} catch (error) {
 			return { settings: {}, error: error as Error };
 		}
@@ -430,6 +454,35 @@ export class SettingsManager {
 		return structuredClone(this.projectSettings);
 	}
 
+	isProjectTrusted(): boolean {
+		return this.projectTrusted;
+	}
+
+	setProjectTrusted(trusted: boolean): void {
+		if (this.projectTrusted === trusted) {
+			return;
+		}
+
+		this.projectTrusted = trusted;
+		this.modifiedProjectFields.clear();
+		this.modifiedProjectNestedFields.clear();
+
+		if (!trusted) {
+			this.projectSettings = {};
+			this.projectSettingsLoadError = null;
+			this.settings = deepMergeSettings(this.globalSettings, this.projectSettings);
+			return;
+		}
+
+		const projectLoad = SettingsManager.tryLoadFromStorage(this.storage, "project", trusted);
+		this.projectSettings = projectLoad.settings;
+		this.projectSettingsLoadError = projectLoad.error;
+		if (projectLoad.error) {
+			this.recordError("project", projectLoad.error);
+		}
+		this.settings = deepMergeSettings(this.globalSettings, this.projectSettings);
+	}
+
 	async reload(): Promise<void> {
 		await this.writeQueue;
 		const globalLoad = SettingsManager.tryLoadFromStorage(this.storage, "global");
@@ -446,7 +499,7 @@ export class SettingsManager {
 		this.modifiedProjectFields.clear();
 		this.modifiedProjectNestedFields.clear();
 
-		const projectLoad = SettingsManager.tryLoadFromStorage(this.storage, "project");
+		const projectLoad = SettingsManager.tryLoadFromStorage(this.storage, "project", this.projectTrusted);
 		if (!projectLoad.error) {
 			this.projectSettings = projectLoad.settings;
 			this.projectSettingsLoadError = null;
@@ -485,6 +538,12 @@ export class SettingsManager {
 		}
 	}
 
+	private assertProjectTrustedForWrite(): void {
+		if (!this.projectTrusted) {
+			throw new Error("Project is not trusted; refusing to write project settings");
+		}
+	}
+
 	private recordError(scope: SettingsScope, error: unknown): void {
 		const normalizedError = error instanceof Error ? error : new Error(String(error));
 		this.errors.push({ scope, error: normalizedError });
@@ -504,6 +563,9 @@ export class SettingsManager {
 	private enqueueWrite(scope: SettingsScope, task: () => void): void {
 		this.writeQueue = this.writeQueue
 			.then(() => {
+				if (scope === "project") {
+					this.assertProjectTrustedForWrite();
+				}
 				task();
 				this.clearModifiedScope(scope);
 			})
@@ -568,6 +630,7 @@ export class SettingsManager {
 	}
 
 	private saveProjectSettings(settings: Settings): void {
+		this.assertProjectTrustedForWrite();
 		this.projectSettings = structuredClone(settings);
 		this.settings = deepMergeSettings(this.globalSettings, this.projectSettings);
 
@@ -581,6 +644,14 @@ export class SettingsManager {
 		this.enqueueWrite("project", () => {
 			this.persistScopedSettings("project", snapshotProjectSettings, modifiedFields, modifiedNestedFields);
 		});
+	}
+
+	private updateProjectSettings(field: keyof Settings, update: (settings: Settings) => void): void {
+		this.assertProjectTrustedForWrite();
+		const projectSettings = structuredClone(this.projectSettings);
+		update(projectSettings);
+		this.markProjectModified(field);
+		this.saveProjectSettings(projectSettings);
 	}
 
 	async flush(): Promise<void> {
@@ -802,6 +873,17 @@ export class SettingsManager {
 		this.save();
 	}
 
+	getDefaultProjectTrust(): DefaultProjectTrust {
+		const value = this.globalSettings.defaultProjectTrust;
+		return value === "always" || value === "never" ? value : "ask";
+	}
+
+	setDefaultProjectTrust(defaultProjectTrust: DefaultProjectTrust): void {
+		this.globalSettings.defaultProjectTrust = defaultProjectTrust;
+		this.markModified("defaultProjectTrust");
+		this.save();
+	}
+
 	getShellCommandPrefix(): string | undefined {
 		return this.settings.shellCommandPrefix;
 	}
@@ -842,6 +924,25 @@ export class SettingsManager {
 		this.save();
 	}
 
+	getEnableAnalytics(): boolean {
+		return this.settings.enableAnalytics ?? false;
+	}
+
+	getTrackingId(): string | undefined {
+		return this.settings.trackingId;
+	}
+
+	/** Set the analytics opt-in preference; generates a tracking identifier on first opt-in */
+	setEnableAnalytics(enabled: boolean): void {
+		this.globalSettings.enableAnalytics = enabled;
+		this.markModified("enableAnalytics");
+		if (enabled && !this.globalSettings.trackingId) {
+			this.globalSettings.trackingId = randomUUID();
+			this.markModified("trackingId");
+		}
+		this.save();
+	}
+
 	getPackages(): PackageSource[] {
 		return [...(this.settings.packages ?? [])];
 	}
@@ -853,10 +954,9 @@ export class SettingsManager {
 	}
 
 	setProjectPackages(packages: PackageSource[]): void {
-		const projectSettings = structuredClone(this.projectSettings);
-		projectSettings.packages = packages;
-		this.markProjectModified("packages");
-		this.saveProjectSettings(projectSettings);
+		this.updateProjectSettings("packages", (settings) => {
+			settings.packages = packages;
+		});
 	}
 
 	getPluginMarketplaces(): Record<string, PluginMarketplaceSettings> {
@@ -904,10 +1004,9 @@ export class SettingsManager {
 	}
 
 	setProjectExtensionPaths(paths: string[]): void {
-		const projectSettings = structuredClone(this.projectSettings);
-		projectSettings.extensions = paths;
-		this.markProjectModified("extensions");
-		this.saveProjectSettings(projectSettings);
+		this.updateProjectSettings("extensions", (settings) => {
+			settings.extensions = paths;
+		});
 	}
 
 	getSkillPaths(): string[] {
@@ -921,10 +1020,9 @@ export class SettingsManager {
 	}
 
 	setProjectSkillPaths(paths: string[]): void {
-		const projectSettings = structuredClone(this.projectSettings);
-		projectSettings.skills = paths;
-		this.markProjectModified("skills");
-		this.saveProjectSettings(projectSettings);
+		this.updateProjectSettings("skills", (settings) => {
+			settings.skills = paths;
+		});
 	}
 
 	getPromptTemplatePaths(): string[] {
@@ -938,10 +1036,9 @@ export class SettingsManager {
 	}
 
 	setProjectPromptTemplatePaths(paths: string[]): void {
-		const projectSettings = structuredClone(this.projectSettings);
-		projectSettings.prompts = paths;
-		this.markProjectModified("prompts");
-		this.saveProjectSettings(projectSettings);
+		this.updateProjectSettings("prompts", (settings) => {
+			settings.prompts = paths;
+		});
 	}
 
 	getThemePaths(): string[] {
@@ -955,10 +1052,9 @@ export class SettingsManager {
 	}
 
 	setProjectThemePaths(paths: string[]): void {
-		const projectSettings = structuredClone(this.projectSettings);
-		projectSettings.themes = paths;
-		this.markProjectModified("themes");
-		this.saveProjectSettings(projectSettings);
+		this.updateProjectSettings("themes", (settings) => {
+			settings.themes = paths;
+		});
 	}
 
 	getEnableSkillCommands(): boolean {
