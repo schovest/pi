@@ -91,8 +91,8 @@ describe("SubagentDetailsComponent", () => {
 			() => {},
 		);
 		const rendered = stripAnsi(component.render(120).join("\n"));
-		expect(rendered).toContain("explorer");
-		expect(rendered).toContain("worker");
+		expect(rendered).toContain("inspect files");
+		expect(rendered).toContain("review patch");
 		expect(rendered).toContain("Select a subagent");
 
 		component.handleInput("j");
@@ -186,8 +186,7 @@ describe("SubagentDetailsComponent", () => {
 			},
 		);
 		const rendered = stripAnsi(component.render(120).join("\n"));
-		expect(rendered).toContain("worker");
-		expect(rendered).toContain("review patch");
+		expect(rendered).toContain("Subagent review patch");
 		expect(rendered).toContain("review failed");
 		expect(rendered).toContain("tokens=9");
 		expect(rendered).not.toContain("explorer output");

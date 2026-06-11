@@ -13,6 +13,10 @@ type SubmitContext = {
 		isBashRunning: boolean;
 		prompt: (text: string, options?: unknown) => Promise<void>;
 	};
+	ui: {
+		setAutoFollow: (follow: boolean) => void;
+		requestRender: () => void;
+	};
 	flushPendingBashComponents: () => void;
 	onInputCallback?: (text: string) => void;
 	pendingUserInputs: string[];
@@ -42,6 +46,10 @@ function createSubmitContext(): SubmitContext {
 			isStreaming: false,
 			isBashRunning: false,
 			prompt: vi.fn(async () => {}),
+		},
+		ui: {
+			setAutoFollow: vi.fn(),
+			requestRender: vi.fn(),
 		},
 		flushPendingBashComponents: vi.fn(),
 		pendingUserInputs: [],

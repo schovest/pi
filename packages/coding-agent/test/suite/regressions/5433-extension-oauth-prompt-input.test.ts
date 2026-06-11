@@ -1,6 +1,5 @@
-import { setKeybindings, type TUI } from "@earendil-works/pi-tui";
-import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
-import { KeybindingsManager } from "../../../src/core/keybindings.ts";
+import type { TUI } from "@earendil-works/pi-tui";
+import { beforeAll, describe, expect, test, vi } from "vitest";
 import { LoginDialogComponent } from "../../../src/modes/interactive/components/login-dialog.ts";
 import { initTheme } from "../../../src/modes/interactive/theme/theme.ts";
 import { stripAnsi } from "../../../src/utils/ansi.ts";
@@ -33,16 +32,12 @@ describe("LoginDialogComponent OAuth prompts", () => {
 		initTheme("dark");
 	});
 
-	beforeEach(() => {
-		setKeybindings(new KeybindingsManager());
-	});
-
 	test("keeps previous prompt input stable when a later prompt is active", async () => {
 		const dialog = createDialog();
 
 		const firstPrompt = dialog.showPrompt("First prompt:", "first-value");
 		dialog.handleInput("first-value");
-		dialog.handleInput("\n");
+		dialog.handleInput("\r");
 		await expect(firstPrompt).resolves.toBe("first-value");
 
 		const secondPrompt = dialog.showPrompt("Second prompt:");
@@ -54,7 +49,7 @@ describe("LoginDialogComponent OAuth prompts", () => {
 		expect(countRenderedValue(lines, "first-value")).toBe(1);
 		expect(countRenderedValue(lines, "second-secret-demo")).toBe(1);
 
-		dialog.handleInput("\n");
+		dialog.handleInput("\r");
 		await expect(secondPrompt).resolves.toBe("second-secret-demo");
 	});
 
@@ -75,7 +70,7 @@ describe("LoginDialogComponent OAuth prompts", () => {
 
 		const manualInput = dialog.showManualInput("Paste callback URL:");
 		dialog.handleInput("callback-value");
-		dialog.handleInput("\n");
+		dialog.handleInput("\r");
 		await expect(manualInput).resolves.toBe("callback-value");
 
 		const prompt = dialog.showPrompt("Second prompt:");
@@ -87,7 +82,7 @@ describe("LoginDialogComponent OAuth prompts", () => {
 		expect(countRenderedValue(lines, "callback-value")).toBe(1);
 		expect(countRenderedValue(lines, "second-secret-demo")).toBe(1);
 
-		dialog.handleInput("\n");
+		dialog.handleInput("\r");
 		await expect(prompt).resolves.toBe("second-secret-demo");
 	});
 });

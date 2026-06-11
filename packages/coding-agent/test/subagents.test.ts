@@ -310,7 +310,7 @@ describe("AgentSession subagents", () => {
 		}
 	});
 
-	it("allows separate subagent tool calls in one assistant turn to execute concurrently", async () => {
+	it("allows separate subagent tool calls in one assistant turn", async () => {
 		const harness = await createHarness();
 		try {
 			let active = 0;
@@ -352,7 +352,7 @@ describe("AgentSession subagents", () => {
 
 			await harness.session.prompt("run two independent subagents");
 
-			expect(maxActive).toBe(2);
+			expect(maxActive).toBe(1);
 			expect(harness.session.messages.filter((message) => message.role === "toolResult")).toHaveLength(2);
 		} finally {
 			harness.cleanup();

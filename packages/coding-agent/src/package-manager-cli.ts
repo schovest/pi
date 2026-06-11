@@ -6,6 +6,7 @@ import {
 	APP_NAME,
 	getAgentDir,
 	getPackageDir,
+	getSelfUpdateCommand,
 	getSelfUpdateUnavailableInstruction,
 	PACKAGE_NAME,
 	type SelfUpdateCommand,
@@ -35,6 +36,7 @@ interface PackageCommandOptions {
 	updateTarget?: UpdateTarget;
 	local: boolean;
 	force: boolean;
+	selfUpdate: boolean;
 	projectTrustOverride?: boolean;
 	help: boolean;
 	invalidOption?: string;
@@ -154,6 +156,7 @@ function parsePackageCommand(args: string[]): PackageCommandOptions | undefined 
 
 	let local = false;
 	let force = false;
+	let selfUpdate = false;
 	let projectTrustOverride: boolean | undefined;
 	let help = false;
 	let invalidOption: string | undefined;
@@ -202,6 +205,15 @@ function parsePackageCommand(args: string[]): PackageCommandOptions | undefined 
 		if (arg === "--force") {
 			if (command === "update") {
 				force = true;
+			} else {
+				invalidOption = invalidOption ?? arg;
+			}
+			continue;
+		}
+
+		if (arg === "--self") {
+			if (command === "update") {
+				selfUpdate = true;
 			} else {
 				invalidOption = invalidOption ?? arg;
 			}
@@ -267,6 +279,7 @@ function parsePackageCommand(args: string[]): PackageCommandOptions | undefined 
 		updateTarget,
 		local,
 		force,
+		selfUpdate,
 		projectTrustOverride,
 		help,
 		invalidOption,
@@ -820,6 +833,26 @@ export async function handlePackageCommand(
 			}
 
 			case "update": {
+				if (options.selfUpdate) {
+					const plan = await _getSelfUpdatePlan(options.force);
+					if (!plan.shouldRun) {
+						return true;
+					}
+					const npmCommand = settingsManager.getNpmCommand();
+					const command = getSelfUpdateCommand(PACKAGE_NAME, npmCommand, plan.packageName);
+					if (!command) {
+						_printSelfUpdateUnavailable(npmCommand, PACKAGE_NAME);
+						process.exitCode = 1;
+						return true;
+					}
+					if (plan.note) {
+						_printSelfUpdateNote(plan.note);
+					}
+					_prepareWindowsNpmSelfUpdate();
+					await _runSelfUpdate(command);
+					console.log(chalk.green(`Updated ${APP_NAME}`));
+					return true;
+				}
 				const target = options.updateTarget ?? { type: "all" };
 				if (updateTargetIncludesExtensions(target)) {
 					const updateSource = target.type === "extensions" ? target.source : undefined;

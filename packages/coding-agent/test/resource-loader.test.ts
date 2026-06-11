@@ -164,7 +164,10 @@ Project skill`,
 			);
 
 			const baseTheme = JSON.parse(
-				readFileSync(join(process.cwd(), "src", "modes", "interactive", "theme", "dark.json"), "utf-8"),
+				readFileSync(
+					join(process.cwd(), "packages", "coding-agent", "src", "modes", "interactive", "theme", "dark.json"),
+					"utf-8",
+				),
 			) as { name: string; vars?: Record<string, string> };
 			baseTheme.name = "collision-theme";
 			const userThemePath = join(agentDir, "themes", "collision.json");
@@ -208,7 +211,11 @@ Project skill`,
 			symlinkSync(sharedExtDir, join(agentDir, "extensions"), "dir");
 			symlinkSync(sharedExtDir, join(cwd, ".pi", "extensions"), "dir");
 
-			const loader = new DefaultResourceLoader({ cwd, agentDir });
+			const loader = new DefaultResourceLoader({
+				cwd,
+				agentDir,
+				disabledBuiltinPlugins: ["mcp", "plan", "todo", "ask-user-question", "tps", "btw"],
+			});
 			await loader.reload();
 
 			const extensionsResult = loader.getExtensions();
@@ -271,7 +278,11 @@ export default function(pi) {
 }`,
 			);
 
-			const loader = new DefaultResourceLoader({ cwd, agentDir });
+			const loader = new DefaultResourceLoader({
+				cwd,
+				agentDir,
+				disabledBuiltinPlugins: ["mcp", "plan", "todo", "ask-user-question", "tps", "btw"],
+			});
 			await loader.reload({
 				resolveProjectTrust: async ({ extensionsResult }) => {
 					expect(extensionsResult.extensions.map((extension) => extension.path)).toEqual([
@@ -323,7 +334,11 @@ export default function(pi) {
 }`,
 			);
 
-			const loader = new DefaultResourceLoader({ cwd, agentDir });
+			const loader = new DefaultResourceLoader({
+				cwd,
+				agentDir,
+				disabledBuiltinPlugins: ["mcp", "plan", "todo", "ask-user-question", "tps", "btw"],
+			});
 			await loader.reload();
 
 			const extensionsResult = loader.getExtensions();
@@ -456,13 +471,21 @@ Project skill content`,
 			);
 			writeFileSync(join(promptsDir, "project.md"), "Project prompt");
 			const themeData = JSON.parse(
-				readFileSync(join(process.cwd(), "src", "modes", "interactive", "theme", "dark.json"), "utf-8"),
+				readFileSync(
+					join(process.cwd(), "packages", "coding-agent", "src", "modes", "interactive", "theme", "dark.json"),
+					"utf-8",
+				),
 			) as { name: string };
 			themeData.name = "project-theme";
 			writeFileSync(join(themesDir, "project.json"), JSON.stringify(themeData, null, 2));
 			const settingsManager = SettingsManager.create(cwd, agentDir, { projectTrusted: false });
 
-			const loader = new DefaultResourceLoader({ cwd, agentDir, settingsManager });
+			const loader = new DefaultResourceLoader({
+				cwd,
+				agentDir,
+				settingsManager,
+				disabledBuiltinPlugins: ["mcp", "plan", "todo", "ask-user-question", "tps", "btw"],
+			});
 			await loader.reload();
 
 			expect(loader.getSystemPrompt()).toBe("Global system prompt.");

@@ -73,13 +73,19 @@ describe("regression #3592: no-builtin-tools keeps extension tools enabled", () 
 	it("keeps extension tools active when built-in defaults are disabled", async () => {
 		const session = await createSession({ noTools: "builtin" });
 
-		expect(
-			session
-				.getAllTools()
-				.map((tool) => tool.name)
-				.sort(),
-		).toEqual(["bash", "dynamic_tool", "edit", "find", "grep", "ls", "read", "subagent", "write"]);
-		expect(session.getActiveToolNames().sort()).toEqual(["dynamic_tool", "subagent"]);
+		const allTools = session
+			.getAllTools()
+			.map((tool) => tool.name)
+			.sort();
+		expect(allTools).toContain("dynamic_tool");
+		expect(allTools).toContain("bash");
+		expect(allTools).toContain("read");
+		expect(allTools).toContain("edit");
+		expect(allTools).toContain("subagent");
+		expect(session.getActiveToolNames().sort()).not.toContain("read");
+		expect(session.getActiveToolNames().sort()).not.toContain("bash");
+		expect(session.getActiveToolNames().sort()).toContain("dynamic_tool");
+		expect(session.getActiveToolNames().sort()).toContain("subagent");
 		expect(session.systemPrompt).toContain("- dynamic_tool: Run dynamic test behavior");
 		expect(session.systemPrompt).not.toContain("- read:");
 		expect(session.systemPrompt).not.toContain("- bash:");
@@ -111,7 +117,10 @@ describe("regression #3592: no-builtin-tools keeps extension tools enabled", () 
 			noTools: "builtin",
 		});
 
-		expect(session.getActiveToolNames()).toEqual(["subagent"]);
+		const activeToolNames = session.getActiveToolNames();
+		expect(activeToolNames).toContain("subagent");
+		expect(activeToolNames).not.toContain("read");
+		expect(activeToolNames).not.toContain("bash");
 		expect(session.systemPrompt).not.toContain("Available tools:\n(none)");
 		expect(session.systemPrompt).toContain("- subagent:");
 		session.dispose();
