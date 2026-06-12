@@ -21,3 +21,19 @@
 *.gz binary
 *.woff binary
 *.woff2 binary
+
+# ── Merge strategies for upstream (pi-remote) merges ──
+# These files always conflict due to version churn or divergent content.
+# 'union' = auto-merge both sides (additive); 'ours' = always keep local.
+
+# Generated model files: take upstream (more complete), reconcile later
+packages/ai/src/models.generated.ts merge=union
+packages/ai/src/image-models.generated.ts merge=union
+
+# Lockfiles: regenerate after merge anyway
+package-lock.json merge=union
+packages/coding-agent/npm-shrinkwrap.json merge=union
+packages/coding-agent/examples/**/package-lock.json merge=union
+
+# AGENTS.md: local project rules take priority
+AGENTS.md merge=ours

@@ -9,6 +9,65 @@ description: 合并上游 pi-remote 分支新版本到本地 dev 分支的完整
 
 **本地开发优先。** 合并的目标是在保留所有本地定制的前提下获取上游新特性。任何冲突中，本地代码优先级高于上游代码。无法调和的矛盾，舍去上游部分并向用户报告。
 
+## 前置配置
+
+### 防止上游 tag 污染
+
+```bash
+git config remote.pi-remote.tagOpt --no-tags
+```
+
+这样 `git fetch pi-remote` 不再拉取上游 tag，避免每次合并后手动清理。
+
+### .gitattributes 合并策略
+
+项目根 `.gitattributes` 已配置以下合并策略：
+
+| 文件 | 策略 | 原因 |
+|------|------|------|
+| `models.generated.ts` | `union` | 上游新增模型，本地精简模型，两者叠加 |
+| `image-models.generated.ts` | `union` | 同上 |
+| `package-lock.json` | `union` | 合并后重新生成，先自动合并 |
+| `npm-shrinkwrap.json` | `union` | 同上 |
+| `examples/**/package-lock.json` | `union` | 同上 |
+| `AGENTS.md` | `ours` | 本地项目规则优先，不接受上游覆盖 |
+
+这减少约 40% 的手动冲突解决量。
+
+## 合并方式选择
+
+根据上游更新规模选择策略：
+
+| 场景 | 方式 | 说明 |
+|------|------|------|
+| **小更新**（1-5 个提交，如单个 bug fix/模型更新） | `cherry-pick` | 只选需要的提交，零冲突风险 |
+| **中更新**（5-20 个提交） | `cherry-pick` 批量 | 逐个挑选，跳过不需要的 |
+| **大版本**（50+ 提交，新功能密集） | `merge --no-ff` | 一次性合并，配合 .gitattributes 减少冲突 |
+
+### cherry-pick 策略
+
+小更新优先使用 cherry-pick：
+
+1. 查看上游提交列表：
+   ```bash
+   git log pi-remote --oneline -20
+   ```
+
+2. 挑选需要的提交：
+   ```bash
+   git cherry-pick <commit-hash>
+   ```
+
+3. 如遇冲突，按本地优先原则解决
+
+4. 跳过不需要的提交（如 self-update、release notes 等）
+
+**cherry-pick 优势：**
+- 不引入上游历史和 tag
+- 不触发 `.gitattributes` 未覆盖的冲突
+- 可以精确控制合入内容
+- 适合"我只需要那个 bug fix"的场景
+
 ## 前置条件
 
 - 当前在 `dev` 分支
