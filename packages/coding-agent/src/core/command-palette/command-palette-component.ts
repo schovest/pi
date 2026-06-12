@@ -1,4 +1,4 @@
-import type { Focusable } from "@earendil-works/pi-tui";
+import type { Focusable, Terminal } from "@earendil-works/pi-tui";
 import { Container, Input, type KeybindingsManager, Spacer } from "@earendil-works/pi-tui";
 import { DynamicBorder } from "../../modes/interactive/components/dynamic-border.ts";
 import { CommandPaletteList } from "./command-palette-list.ts";
@@ -13,12 +13,25 @@ export class CommandPaletteComponent extends Container implements Focusable {
 	private registry: CommandRegistry;
 	private keybindings: KeybindingsManager;
 	private callbacks: CommandPaletteCallbacks;
+	private terminal: Terminal;
+	private maxHeightPercent: number;
 
-	constructor(registry: CommandRegistry, keybindings: KeybindingsManager, callbacks: CommandPaletteCallbacks) {
+	/** Non-list children for chrome measurement */
+	private chromeChildren: Array<{ render: (width: number) => string[] }>;
+
+	constructor(
+		registry: CommandRegistry,
+		keybindings: KeybindingsManager,
+		callbacks: CommandPaletteCallbacks,
+		terminal: Terminal,
+		maxHeightPercent: number = 50,
+	) {
 		super();
 		this.registry = registry;
 		this.keybindings = keybindings;
 		this.callbacks = callbacks;
+		this.terminal = terminal;
+		this.maxHeightPercent = maxHeightPercent;
 
 		this.searchInput = new Input();
 		this.list = new CommandPaletteList();
@@ -26,12 +39,30 @@ export class CommandPaletteComponent extends Container implements Focusable {
 		this.filteredItems = registry.getAll();
 		this.list.setItems(this.filteredItems);
 
-		this.addChild(new DynamicBorder());
+		const topBorder = new DynamicBorder();
+		const topSpacer = new Spacer(1);
+		const bottomSpacer = new Spacer(1);
+		const bottomBorder = new DynamicBorder();
+
+		this.chromeChildren = [topBorder, this.searchInput, topSpacer, bottomSpacer, bottomBorder];
+
+		this.addChild(topBorder);
 		this.addChild(this.searchInput);
-		this.addChild(new Spacer(1));
+		this.addChild(topSpacer);
 		this.addChild(this.list);
-		this.addChild(new Spacer(1));
-		this.addChild(new DynamicBorder());
+		this.addChild(bottomSpacer);
+		this.addChild(bottomBorder);
+	}
+
+	render(width: number): string[] {
+		const maxOverlayHeight = Math.floor((this.terminal.rows * this.maxHeightPercent) / 100);
+		let chromeLines = 0;
+		for (const child of this.chromeChildren) {
+			chromeLines += child.render(width).length;
+		}
+		const listMaxVisible = Math.max(1, maxOverlayHeight - chromeLines);
+		this.list.setMaxVisible(listMaxVisible);
+		return super.render(width);
 	}
 
 	get focused(): boolean {

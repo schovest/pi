@@ -2925,13 +2925,18 @@ export class InteractiveMode {
 	}
 
 	private showCommandPalette(): void {
-		const palette = new CommandPaletteComponent(this.commandRegistry, this.keybindings, {
-			onSelect: (item) => {
-				handle.hide();
-				void item.handler();
+		const palette = new CommandPaletteComponent(
+			this.commandRegistry,
+			this.keybindings,
+			{
+				onSelect: (item) => {
+					handle.hide();
+					void item.handler();
+				},
+				onCancel: () => handle.hide(),
 			},
-			onCancel: () => handle.hide(),
-		});
+			this.ui.terminal,
+		);
 
 		const handle = this.ui.showOverlay(palette, {
 			width: "60%",

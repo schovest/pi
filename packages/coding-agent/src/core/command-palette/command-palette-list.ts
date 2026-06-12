@@ -1,19 +1,21 @@
-import { Container, Spacer, Text } from "@earendil-works/pi-tui";
+import type { Component } from "@earendil-works/pi-tui";
 import { theme } from "../../modes/interactive/theme/theme.ts";
 import type { CommandPaletteItem } from "./types.ts";
 
-const MAX_VISIBLE = 10;
+const DEFAULT_MAX_VISIBLE = 10;
 
-export class CommandPaletteList extends Container {
+export class CommandPaletteList implements Component {
 	private items: CommandPaletteItem[] = [];
 	private selectedIndex = 0;
-	private scrollOffset = 0;
+	private maxVisible: number = DEFAULT_MAX_VISIBLE;
+
+	setMaxVisible(maxVisible: number): void {
+		this.maxVisible = maxVisible;
+	}
 
 	setItems(items: CommandPaletteItem[]): void {
 		this.items = items;
 		this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, items.length - 1));
-		this.scrollOffset = Math.max(0, Math.min(this.scrollOffset, Math.max(0, items.length - MAX_VISIBLE)));
-		this.updateView();
 	}
 
 	getSelectedItem(): CommandPaletteItem | null {
@@ -23,47 +25,43 @@ export class CommandPaletteList extends Container {
 	moveUp(): void {
 		if (this.items.length === 0) return;
 		this.selectedIndex = this.selectedIndex > 0 ? this.selectedIndex - 1 : this.items.length - 1;
-		this.adjustScroll();
-		this.updateView();
 	}
 
 	moveDown(): void {
 		if (this.items.length === 0) return;
 		this.selectedIndex = this.selectedIndex < this.items.length - 1 ? this.selectedIndex + 1 : 0;
-		this.adjustScroll();
-		this.updateView();
 	}
 
-	private adjustScroll(): void {
-		if (this.selectedIndex < this.scrollOffset) {
-			this.scrollOffset = this.selectedIndex;
-		} else if (this.selectedIndex >= this.scrollOffset + MAX_VISIBLE) {
-			this.scrollOffset = this.selectedIndex - MAX_VISIBLE + 1;
-		}
-	}
+	invalidate(): void {}
 
-	private updateView(): void {
-		this.clear();
-
+	render(_width: number): string[] {
 		if (this.items.length === 0) {
-			this.addChild(new Text(theme.fg("muted", "  No matching commands")));
-			return;
+			return [theme.fg("muted", "  No matching commands")];
 		}
 
-		const endIndex = Math.min(this.scrollOffset + MAX_VISIBLE, this.items.length);
+		const lines: string[] = [];
+		const visible = Math.min(this.maxVisible, this.items.length);
 
-		for (let i = this.scrollOffset; i < endIndex; i++) {
+		// Centered scroll: keep selected item centered in view
+		const startIndex = Math.max(
+			0,
+			Math.min(this.selectedIndex - Math.floor(visible / 2), this.items.length - visible),
+		);
+		const endIndex = Math.min(startIndex + visible, this.items.length);
+
+		for (let i = startIndex; i < endIndex; i++) {
 			const item = this.items[i];
 			if (!item) continue;
 			const isSelected = i === this.selectedIndex;
-			this.addChild(new Text(this.renderItem(item, isSelected)));
+			lines.push(this.renderItem(item, isSelected));
 		}
 
-		if (this.scrollOffset > 0 || endIndex < this.items.length) {
-			this.addChild(new Spacer(1));
+		if (startIndex > 0 || endIndex < this.items.length) {
 			const info = theme.fg("muted", `  ${this.selectedIndex + 1}/${this.items.length}`);
-			this.addChild(new Text(info));
+			lines.push(info);
 		}
+
+		return lines;
 	}
 
 	private renderItem(item: CommandPaletteItem, isSelected: boolean): string {
