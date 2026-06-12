@@ -192,8 +192,28 @@ description: 合并上游 pi-remote 分支新版本到本地 dev 分支的完整
    ```
 
 3. 打版本 tag：
+    ```bash
+    git tag v<local-version>
+    ```
+
+### Phase 8: 清理上游 tag
+
+合并会引入上游的 tag（如 `v0.10.0`、`v0.79.1` 等），这些不属于本地版本线，必须清理：
+
+1. 列出本地版本线的 tag（当前为 `v0.x.x`）：
    ```bash
-   git tag v<local-version>
+   git tag -l | grep -E "^v0\.[0-5]\.[0-9]$"
+   ```
+
+2. 删除所有非本地版本线的 tag：
+   ```bash
+   # 先确认要保留的 tag 范围，例如保留 v0.0.x ~ v0.5.x
+   git tag -l | grep -v -E "^v0\.[0-5]\.[0-9]$" | xargs git tag -d
+   ```
+
+3. 验证只保留本地 tag：
+   ```bash
+   git tag -l
    ```
 
 ## 常见陷阱
@@ -206,6 +226,7 @@ description: 合并上游 pi-remote 分支新版本到本地 dev 分支的完整
 | 上游新增文件本地缺失 | 上游引用了新模块（如 version-check.ts），本地已删除 | 从上游 checkout 这些文件，或移除引用 |
 | biome warnings | 合并可能引入未使用变量/无效 suppression | `npx biome check --write --unsafe` 修复 |
 | pre-commit hook 阻止 | lockfile 变更/ai test 类型错误触发 hook | `PI_ALLOW_LOCKFILE_CHANGE=1` + `--no-verify`（仅 ai test 错误时） |
+| 上游 tag 残留 | 合并后上游 tag 污染本地 tag 命名空间 | 合并后必须清理，只保留本地版本线的 tag |
 
 ## 分支规范
 
