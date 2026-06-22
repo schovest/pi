@@ -1,18 +1,18 @@
 {
 	"name": "@earendil-works/pi-coding-agent",
-	"version": "0.5.2",
+	"version": "0.5.3",
 	"lockfileVersion": 3,
 	"requires": true,
 	"packages": {
 		"": {
 			"name": "@earendil-works/pi-coding-agent",
-			"version": "0.5.2",
+			"version": "0.5.3",
 			"license": "MIT",
 			"dependencies": {
-				"@earendil-works/pi-agent-core": "^0.5.2",
-				"@earendil-works/pi-ai": "^0.5.2",
+				"@earendil-works/pi-agent-core": "^0.5.3",
+				"@earendil-works/pi-ai": "^0.5.3",
 				"@earendil-works/pi-plugins": "file:../plugins",
-				"@earendil-works/pi-tui": "^0.5.2",
+				"@earendil-works/pi-tui": "^0.5.3",
 				"@silvia-odwyer/photon-node": "0.3.4",
 				"chalk": "5.6.2",
 				"cross-spawn": "7.0.6",
@@ -477,11 +477,11 @@
 			}
 		},
 		"node_modules/@earendil-works/pi-agent-core": {
-			"version": "0.5.2",
-			"resolved": "https://registry.npmjs.org/@earendil-works/pi-agent-core/-/pi-agent-core-0.5.2.tgz",
+			"version": "0.5.3",
+			"resolved": "https://registry.npmjs.org/@earendil-works/pi-agent-core/-/pi-agent-core-0.5.3.tgz",
 			"license": "MIT",
 			"dependencies": {
-				"@earendil-works/pi-ai": "^0.5.2",
+				"@earendil-works/pi-ai": "^0.5.3",
 				"ignore": "7.0.5",
 				"typebox": "1.1.38",
 				"yaml": "2.9.0"
@@ -491,8 +491,8 @@
 			}
 		},
 		"node_modules/@earendil-works/pi-ai": {
-			"version": "0.5.2",
-			"resolved": "https://registry.npmjs.org/@earendil-works/pi-ai/-/pi-ai-0.5.2.tgz",
+			"version": "0.5.3",
+			"resolved": "https://registry.npmjs.org/@earendil-works/pi-ai/-/pi-ai-0.5.3.tgz",
 			"license": "MIT",
 			"dependencies": {
 				"@anthropic-ai/sdk": "0.91.1",
@@ -514,12 +514,12 @@
 			}
 		},
 		"node_modules/@earendil-works/pi-plugins": {
-			"version": "0.5.2",
+			"version": "0.5.3",
 			"license": "MIT",
 			"dependencies": {
-				"@earendil-works/pi-agent-core": "^0.5.2",
-				"@earendil-works/pi-ai": "^0.5.2",
-				"@earendil-works/pi-tui": "^0.5.2",
+				"@earendil-works/pi-agent-core": "^0.5.3",
+				"@earendil-works/pi-ai": "^0.5.3",
+				"@earendil-works/pi-tui": "^0.5.3",
 				"@modelcontextprotocol/ext-apps": "1.2.2",
 				"@modelcontextprotocol/sdk": "1.29.0",
 				"open": "10.2.0",
@@ -530,8 +530,8 @@
 			"inBundle": true
 		},
 		"node_modules/@earendil-works/pi-tui": {
-			"version": "0.5.2",
-			"resolved": "https://registry.npmjs.org/@earendil-works/pi-tui/-/pi-tui-0.5.2.tgz",
+			"version": "0.5.3",
+			"resolved": "https://registry.npmjs.org/@earendil-works/pi-tui/-/pi-tui-0.5.3.tgz",
 			"license": "MIT",
 			"dependencies": {
 				"get-east-asian-width": "1.6.0",
