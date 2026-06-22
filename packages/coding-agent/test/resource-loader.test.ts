@@ -226,7 +226,6 @@ Project skill`,
 			expect(extensionsResult.extensions[0].path).toBe(join(cwd, ".pi", "extensions", "shared.ts"));
 		});
 
-
 		it("should load user extensions before trust and reuse them after trust resolves", async () => {
 			const userExtDir = join(agentDir, "extensions");
 			const projectExtDir = join(cwd, ".pi", "extensions");
