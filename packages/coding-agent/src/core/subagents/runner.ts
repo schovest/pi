@@ -143,23 +143,48 @@ async function resolveTask(
 	definitions: Map<string, SubagentDefinition>,
 	task: SubagentTask,
 	index: number,
-): Promise<ResolvedTask> {
+): Promise<ResolvedTask | SubagentTaskResult> {
 	const definition = definitions.get(task.agent);
 	if (!definition) {
-		throw new Error(`Unknown subagent: ${task.agent}`);
+		const available = [...definitions.keys()].join(", ");
+		return {
+			index,
+			agent: task.agent,
+			task: task.task,
+			title: task.title,
+			status: "failed",
+			output: "",
+			error: `Unknown subagent: ${task.agent}. Available: ${available}`,
+			messages: [],
+			events: [],
+		};
 	}
-	const model = resolveModel(session, task.model ?? definition.model);
-	const thinking = resolveThinking(session, model, task, definition);
-	return {
-		index,
-		definition,
-		task,
-		title: task.title,
-		model,
-		thinking,
-		tools: task.tools ?? definition.tools ?? ["read", "bash", "edit", "write"],
-		prompt: buildPrompt(definition, task.task),
-	};
+	try {
+		const model = resolveModel(session, task.model ?? definition.model);
+		const thinking = resolveThinking(session, model, task, definition);
+		return {
+			index,
+			definition,
+			task,
+			title: task.title,
+			model,
+			thinking,
+			tools: task.tools ?? definition.tools ?? ["read", "bash", "edit", "write"],
+			prompt: buildPrompt(definition, task.task),
+		};
+	} catch (error) {
+		return {
+			index,
+			agent: definition.name,
+			task: task.task,
+			title: task.title,
+			status: "failed",
+			output: "",
+			error: error instanceof Error ? error.message : String(error),
+			messages: [],
+			events: [],
+		};
+	}
 }
 
 function createEvent(
@@ -400,7 +425,7 @@ export async function runSubagents(
 			await discoverSubagents({
 				cwd: session.cwd,
 				agentDir: options.agentDir ?? session.agentDir,
-				scope: request.subagentScope,
+				scope: request.subagentScope ?? "both",
 			})
 		).map((definition) => [definition.name, definition]),
 	);
@@ -414,6 +439,10 @@ export async function runSubagents(
 			const previous = results.at(-1)?.output ?? "";
 			const task = { ...tasks[index], task: tasks[index].task.replaceAll("{previous}", previous) };
 			const resolved = await resolveTask(session, definitions, task, index);
+			if ("status" in resolved) {
+				results.push(resolved);
+				break;
+			}
 			const result = await runOne(session, runId, resolved, options);
 			results.push(result);
 			if (result.status !== "success") {
@@ -426,6 +455,10 @@ export async function runSubagents(
 		);
 		results = new Array<SubagentTaskResult>(resolvedTasks.length);
 		await runWithConcurrency(resolvedTasks, PARALLEL_CONCURRENCY, async (resolved) => {
+			if ("status" in resolved) {
+				results[resolved.index] = resolved;
+				return;
+			}
 			results[resolved.index] = await runOne(session, runId, resolved, options);
 		});
 	}
