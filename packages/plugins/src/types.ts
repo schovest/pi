@@ -1,6 +1,6 @@
 import type { ExtensionAPI } from "./pi-types.ts";
 
-export type BuiltinPluginId = "mcp" | "plan" | "todo" | "ask-user-question" | "tps" | "btw";
+export type BuiltinPluginId = "mcp" | "plan" | "todo" | "ask-user-question";
 
 export type BuiltinPluginFactory = (pi: ExtensionAPI) => void | Promise<void>;
 

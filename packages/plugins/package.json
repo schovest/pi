@@ -20,7 +20,7 @@
 		"clean": "shx rm -rf dist",
 		"build": "tsgo -p tsconfig.build.json && npm run copy-assets",
 		"check": "tsgo -p tsconfig.build.json --noEmit",
-		"copy-assets": "shx mkdir -p dist/mcp/adapter && shx cp src/mcp/adapter/app-bridge.bundle.js dist/mcp/adapter/ && shx mkdir -p dist/btw/prompts && shx cp src/btw/prompts/btw-system.txt dist/btw/prompts/"
+		"copy-assets": "shx mkdir -p dist/mcp/adapter && shx cp src/mcp/adapter/app-bridge.bundle.js dist/mcp/adapter/"
 	},
 	"dependencies": {
 		"@earendil-works/pi-agent-core": "^0.5.2",

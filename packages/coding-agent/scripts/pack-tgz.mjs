@@ -70,6 +70,7 @@ const fileList = [
 	"assets",
 	"export-html",
 	"node_modules/@earendil-works/pi-plugins",
+	"extensions",
 	"docs",
 	"examples",
 	"photon_rs_bg.wasm",

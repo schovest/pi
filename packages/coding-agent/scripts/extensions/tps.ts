@@ -1,7 +1,7 @@
 import type { AssistantMessage } from "@earendil-works/pi-ai";
-import type { ExtensionAPI, ExtensionContext } from "../pi-types.ts";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
-// Runtime ExtensionAPI has more methods than pi-types.ts declares.
+// Runtime ExtensionAPI has more methods than the type declarations.
 type RichExtensionAPI = ExtensionAPI & {
 	on(event: "agent_start", handler: (event: unknown, ctx: ExtensionContext) => void | Promise<void>): void;
 	on(event: "agent_end", handler: (event: unknown, ctx: ExtensionContext) => void | Promise<void>): void;

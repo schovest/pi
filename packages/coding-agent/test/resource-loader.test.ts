@@ -214,7 +214,7 @@ Project skill`,
 			const loader = new DefaultResourceLoader({
 				cwd,
 				agentDir,
-				disabledBuiltinPlugins: ["mcp", "plan", "todo", "ask-user-question", "tps", "btw"],
+				disabledBuiltinPlugins: ["mcp", "plan", "todo", "ask-user-question"],
 			});
 			await loader.reload();
 
@@ -281,7 +281,7 @@ export default function(pi) {
 			const loader = new DefaultResourceLoader({
 				cwd,
 				agentDir,
-				disabledBuiltinPlugins: ["mcp", "plan", "todo", "ask-user-question", "tps", "btw"],
+				disabledBuiltinPlugins: ["mcp", "plan", "todo", "ask-user-question"],
 			});
 			await loader.reload({
 				resolveProjectTrust: async ({ extensionsResult }) => {
@@ -337,7 +337,7 @@ export default function(pi) {
 			const loader = new DefaultResourceLoader({
 				cwd,
 				agentDir,
-				disabledBuiltinPlugins: ["mcp", "plan", "todo", "ask-user-question", "tps", "btw"],
+				disabledBuiltinPlugins: ["mcp", "plan", "todo", "ask-user-question"],
 			});
 			await loader.reload();
 
@@ -484,7 +484,7 @@ Project skill content`,
 				cwd,
 				agentDir,
 				settingsManager,
-				disabledBuiltinPlugins: ["mcp", "plan", "todo", "ask-user-question", "tps", "btw"],
+				disabledBuiltinPlugins: ["mcp", "plan", "todo", "ask-user-question"],
 			});
 			await loader.reload();
 
