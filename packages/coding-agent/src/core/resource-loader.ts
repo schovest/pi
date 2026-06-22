@@ -1,6 +1,5 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
-import { BUILTIN_PLUGINS } from "@earendil-works/pi-plugins";
 import chalk from "chalk";
 import { CONFIG_DIR_NAME } from "../config.ts";
 import { loadThemeFromPath, type Theme } from "../modes/interactive/theme/theme.ts";
@@ -128,7 +127,6 @@ export interface DefaultResourceLoaderOptions {
 	additionalPromptTemplatePaths?: string[];
 	additionalThemePaths?: string[];
 	extensionFactories?: ExtensionFactory[];
-	disabledBuiltinPlugins?: string[];
 	noExtensions?: boolean;
 	noSkills?: boolean;
 	noPromptTemplates?: boolean;
@@ -168,7 +166,6 @@ export class DefaultResourceLoader implements ResourceLoader {
 	private additionalPromptTemplatePaths: string[];
 	private additionalThemePaths: string[];
 	private extensionFactories: ExtensionFactory[];
-	private disabledBuiltinPlugins: string[];
 	private noExtensions: boolean;
 	private noSkills: boolean;
 	private noPromptTemplates: boolean;
@@ -232,7 +229,6 @@ export class DefaultResourceLoader implements ResourceLoader {
 		this.additionalPromptTemplatePaths = options.additionalPromptTemplatePaths ?? [];
 		this.additionalThemePaths = options.additionalThemePaths ?? [];
 		this.extensionFactories = options.extensionFactories ?? [];
-		this.disabledBuiltinPlugins = options.disabledBuiltinPlugins ?? [];
 		this.noExtensions = options.noExtensions ?? false;
 		this.noSkills = options.noSkills ?? false;
 		this.noPromptTemplates = options.noPromptTemplates ?? false;
@@ -911,31 +907,16 @@ export class DefaultResourceLoader implements ResourceLoader {
 		const extensions: Extension[] = [];
 		const errors: Array<{ path: string; error: string }> = [];
 
-		if (!this.noExtensions) {
-			const disabledIds = new Set(this.disabledBuiltinPlugins);
-			for (const plugin of BUILTIN_PLUGINS) {
-				if (disabledIds.has(plugin.id)) continue;
-				const extensionPath = `<builtin:${plugin.id}>`;
-				try {
-					const extension = await loadExtensionFromFactory(
-						plugin.factory as unknown as ExtensionFactory,
-						this.cwd,
-						this.eventBus,
-						runtime,
-						extensionPath,
-					);
-					extensions.push(extension);
-				} catch (error) {
-					const message = error instanceof Error ? error.message : "failed to load extension";
-					errors.push({ path: extensionPath, error: message });
-				}
-			}
-		}
-
 		for (const [index, factory] of this.extensionFactories.entries()) {
 			const extensionPath = `<inline:${index + 1}>`;
 			try {
-				const extension = await loadExtensionFromFactory(factory, this.cwd, this.eventBus, runtime, extensionPath);
+				const extension = await loadExtensionFromFactory(
+					factory,
+					this.cwd,
+					this.eventBus,
+					runtime,
+					extensionPath,
+				);
 				extensions.push(extension);
 			} catch (error) {
 				const message = error instanceof Error ? error.message : "failed to load extension";

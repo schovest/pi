@@ -214,7 +214,6 @@ Project skill`,
 			const loader = new DefaultResourceLoader({
 				cwd,
 				agentDir,
-				disabledBuiltinPlugins: ["mcp", "plan", "todo", "ask-user-question"],
 			});
 			await loader.reload();
 
@@ -227,27 +226,6 @@ Project skill`,
 			expect(extensionsResult.extensions[0].path).toBe(join(cwd, ".pi", "extensions", "shared.ts"));
 		});
 
-		it("should load built-in plugins except disabled ones", async () => {
-			const loader = new DefaultResourceLoader({ cwd, agentDir, disabledBuiltinPlugins: [] });
-			await loader.reload();
-
-			const extensionsResult = loader.getExtensions();
-			expect(extensionsResult.errors).toEqual([]);
-			expect(extensionsResult.extensions.some((extension) => extension.path === "<builtin:mcp>")).toBe(true);
-		});
-
-		it("should skip built-in plugins when extensions are disabled", async () => {
-			const loader = new DefaultResourceLoader({
-				cwd,
-				agentDir,
-				disabledBuiltinPlugins: [],
-				noExtensions: true,
-			});
-			await loader.reload();
-
-			const extensionsResult = loader.getExtensions();
-			expect(extensionsResult.extensions.some((extension) => extension.path === "<builtin:mcp>")).toBe(false);
-		});
 
 		it("should load user extensions before trust and reuse them after trust resolves", async () => {
 			const userExtDir = join(agentDir, "extensions");
@@ -281,7 +259,6 @@ export default function(pi) {
 			const loader = new DefaultResourceLoader({
 				cwd,
 				agentDir,
-				disabledBuiltinPlugins: ["mcp", "plan", "todo", "ask-user-question"],
 			});
 			await loader.reload({
 				resolveProjectTrust: async ({ extensionsResult }) => {
@@ -337,7 +314,6 @@ export default function(pi) {
 			const loader = new DefaultResourceLoader({
 				cwd,
 				agentDir,
-				disabledBuiltinPlugins: ["mcp", "plan", "todo", "ask-user-question"],
 			});
 			await loader.reload();
 
@@ -484,7 +460,6 @@ Project skill content`,
 				cwd,
 				agentDir,
 				settingsManager,
-				disabledBuiltinPlugins: ["mcp", "plan", "todo", "ask-user-question"],
 			});
 			await loader.reload();
 
