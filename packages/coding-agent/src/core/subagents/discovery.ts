@@ -8,7 +8,9 @@ interface AgentFrontmatter extends Record<string, unknown> {
 	description?: unknown;
 	model?: unknown;
 	thinking?: unknown;
-	tools?: unknown;
+	tools?: unknown;           // deprecated, mapped to includedTools
+	includedTools?: unknown;
+	excludedTools?: unknown;
 }
 
 export interface DiscoverSubagentsOptions {
@@ -27,7 +29,7 @@ const BUILT_IN_SUBAGENTS: SubagentDefinition[] = [
 			"You are an explorer subagent. Run parallel searches to discover files, patterns, or facts. Return only locations and concise summaries — never full file contents. Use when the main agent needs to find something but doesn't know where. Cost-optimized: prefer lightweight queries, stop early when found. Delegate to this subagent when discovery is needed; handle known paths directly in the main agent.",
 		scope: "builtin",
 		thinking: "low",
-		tools: ["read", "grep", "find", "ls"],
+		includedTools: ["read", "grep", "find", "ls"],
 	},
 	{
 		name: "worker",
@@ -35,7 +37,7 @@ const BUILT_IN_SUBAGENTS: SubagentDefinition[] = [
 		prompt:
 			"You are a worker subagent. Execute the assigned unit-scoped task with full tool access. Work independently, keep changes focused, and report results with evidence. Suitable for any bounded task: file operations, shell commands, data processing, or multi-step workflows. Not limited to code — handle any concrete task the main agent delegates.",
 		scope: "builtin",
-		tools: ["read", "bash", "edit", "write", "grep", "find", "ls"],
+		includedTools: ["read", "bash", "edit", "write", "grep", "find", "ls"],
 	},
 ];
 
@@ -63,7 +65,8 @@ function readAgentFile(path: string, scope: SubagentDefinitionScope): SubagentDe
 		sourcePath: path,
 		model: typeof parsed.frontmatter.model === "string" ? parsed.frontmatter.model : undefined,
 		thinking: isThinkingLevel(parsed.frontmatter.thinking) ? parsed.frontmatter.thinking : undefined,
-		tools: stringArray(parsed.frontmatter.tools),
+		includedTools: stringArray(parsed.frontmatter.includedTools) ?? stringArray(parsed.frontmatter.tools),
+		excludedTools: stringArray(parsed.frontmatter.excludedTools),
 	};
 }
 
