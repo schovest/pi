@@ -3,8 +3,81 @@ set -euo pipefail
 
 PREFIX="${PI_INSTALL_PREFIX:-$HOME/.local/share/pi}"
 BINDIR="${PI_INSTALL_BINDIR:-$HOME/.local/bin}"
+AGENT_BIN_DIR="${HOME}/.pi/agent/bin"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+# ---------------------------------------------------------------------------
+# fd download helper
+# ---------------------------------------------------------------------------
+
+download_fd() {
+  local dest="$AGENT_BIN_DIR/fd"
+  if [ -f "$dest" ]; then
+    echo "fd already installed at $dest"
+    return 0
+  fi
+
+  local os arch
+  os=$(uname -s | tr '[:upper:]' '[:lower:]')
+  arch=$(uname -m)
+  case "$arch" in
+    x86_64)  arch="x86_64" ;;
+    aarch64) arch="aarch64" ;;
+    arm64)   arch="aarch64" ;;
+    *)       echo "  warning: unsupported architecture $arch for fd download"; return 1 ;;
+  esac
+
+  local version asset
+  version=$(curl -fsSL "https://api.github.com/repos/sharkdp/fd/releases/latest" 2>/dev/null \
+    | grep -o '"tag_name": *"v[^"]*"' | head -1 | sed 's/.*"v\([^"]*\)".*/\1/')
+  if [ -z "$version" ]; then
+    echo "  warning: failed to fetch fd latest version"
+    return 1
+  fi
+
+  case "$os" in
+    darwin) asset="fd-v${version}-${arch}-apple-darwin.tar.gz" ;;
+    linux)  asset="fd-v${version}-${arch}-unknown-linux-gnu.tar.gz" ;;
+    *)      echo "  warning: unsupported OS $os for fd download"; return 1 ;;
+  esac
+
+  local url="https://github.com/sharkdp/fd/releases/download/v${version}/${asset}"
+  local tmpdir
+  tmpdir=$(mktemp -d)
+  local archive="$tmpdir/$asset"
+
+  echo "Downloading fd v${version} for ${os}/${arch}..."
+  if ! curl -fsSL -o "$archive" "$url" 2>/dev/null; then
+    echo "  warning: failed to download fd from $url"
+    rm -rf "$tmpdir"
+    return 1
+  fi
+
+  mkdir -p "$AGENT_BIN_DIR"
+  if [[ "$asset" == *.tar.gz ]]; then
+    tar xzf "$archive" -C "$tmpdir"
+  else
+    unzip -q "$archive" -d "$tmpdir" 2>/dev/null || true
+  fi
+
+  # Find fd binary in extracted tree
+  local fd_bin
+  fd_bin=$(find "$tmpdir" -type f -name "fd" -perm /111 2>/dev/null | head -1)
+  if [ -z "$fd_bin" ]; then
+    fd_bin=$(find "$tmpdir" -type f -name "fd" 2>/dev/null | head -1)
+  fi
+  if [ -z "$fd_bin" ]; then
+    echo "  warning: fd binary not found in archive"
+    rm -rf "$tmpdir"
+    return 1
+  fi
+
+  cp "$fd_bin" "$dest"
+  chmod +x "$dest"
+  rm -rf "$tmpdir"
+  echo "fd installed to $dest"
+}
 
 # ---------------------------------------------------------------------------
 # Core installation (binary + assets)
@@ -264,6 +337,13 @@ done
 if [ "$any_installed" -eq 0 ]; then
 	echo "No extensions selected. Skipping."
 fi
+
+echo ""
+
+# ---------------------------------------------------------------------------
+# Download fd to ~/.pi/agent/bin/fd
+# ---------------------------------------------------------------------------
+download_fd
 
 echo ""
 echo "Installation complete."
