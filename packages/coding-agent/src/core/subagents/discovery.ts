@@ -8,7 +8,7 @@ interface AgentFrontmatter extends Record<string, unknown> {
 	description?: unknown;
 	model?: unknown;
 	thinking?: unknown;
-	tools?: unknown;           // deprecated, mapped to includedTools
+	tools?: unknown; // deprecated, mapped to includedTools
 	includedTools?: unknown;
 	excludedTools?: unknown;
 }
@@ -50,7 +50,7 @@ function stringArray(value: unknown): string[] | undefined {
 		return undefined;
 	}
 	const strings = value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
-	return strings.length > 0 ? strings : undefined;
+	return strings;
 }
 
 function readAgentFile(path: string, scope: SubagentDefinitionScope): SubagentDefinition {
@@ -65,7 +65,11 @@ function readAgentFile(path: string, scope: SubagentDefinitionScope): SubagentDe
 		sourcePath: path,
 		model: typeof parsed.frontmatter.model === "string" ? parsed.frontmatter.model : undefined,
 		thinking: isThinkingLevel(parsed.frontmatter.thinking) ? parsed.frontmatter.thinking : undefined,
-		includedTools: stringArray(parsed.frontmatter.includedTools) ?? stringArray(parsed.frontmatter.tools),
+		includedTools: (() => {
+			const parsedIncluded = stringArray(parsed.frontmatter.includedTools);
+			const parsedLegacy = stringArray(parsed.frontmatter.tools);
+			return parsedIncluded !== undefined ? parsedIncluded : parsedLegacy;
+		})(),
 		excludedTools: stringArray(parsed.frontmatter.excludedTools),
 	};
 }

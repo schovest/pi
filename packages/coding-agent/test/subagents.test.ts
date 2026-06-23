@@ -38,7 +38,7 @@ describe("subagents discovery", () => {
 				description: "User explorer",
 				model: "faux/faux-fast",
 				thinking: "high",
-				tools: ["read"],
+				includedTools: ["read"],
 				prompt: "User explorer prompt",
 				scope: "user",
 			});
@@ -48,7 +48,7 @@ describe("subagents discovery", () => {
 			expect(project.find((agent) => agent.name === "explorer")).toMatchObject({
 				description: "Project explorer",
 				thinking: "low",
-				tools: ["grep"],
+				includedTools: ["grep"],
 				prompt: "Project explorer prompt",
 				scope: "project",
 			});

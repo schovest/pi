@@ -17,8 +17,10 @@ export function matchesAnyToolPattern(toolName: string, patterns: string[]): boo
 /**
  * Resolve the final active tool set from an allowlist/denylist pattern set.
  *
- * - If `includedPatterns` is non-empty, only tools matching at least one pattern are returned.
- * - Otherwise, if `excludedPatterns` is non-empty, all tools EXCEPT those matching any exclude pattern.
+ * - If `includedPatterns` is explicitly set (even to an empty array), only tools
+ *   matching at least one pattern are returned. An empty array means "no tools".
+ * - Otherwise, if `excludedPatterns` is non-empty, all tools EXCEPT those matching
+ *   any exclude pattern.
  * - Otherwise, `defaults` is returned (falling back to `allToolNames`).
  */
 export function resolveActiveTools(
@@ -27,7 +29,7 @@ export function resolveActiveTools(
 	excludedPatterns?: string[],
 	defaults?: string[],
 ): string[] {
-	if (includedPatterns && includedPatterns.length > 0) {
+	if (includedPatterns !== undefined) {
 		return allToolNames.filter((t) => matchesAnyToolPattern(t, includedPatterns));
 	}
 	if (excludedPatterns && excludedPatterns.length > 0) {
