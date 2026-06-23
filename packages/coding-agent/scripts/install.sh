@@ -170,7 +170,7 @@ fi
 
 draw_menu() {
 	if [ "${_DRAWN:-0}" -eq 1 ]; then
-		printf "\033[%dA" $((NUM + 4))
+		printf "\033[%dA" $((NUM + 5))
 	else
 		_DRAWN=1
 	fi
@@ -290,7 +290,7 @@ else
 	done
 
 	# Clear menu from terminal
-	printf "\033[%dA" $((NUM + 4))
+	printf "\033[%dA" $((NUM + 5))
 	printf "\033[J"
 fi
 
