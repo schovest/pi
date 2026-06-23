@@ -182,12 +182,13 @@ export class FooterComponent implements Component {
 
 		// Add thinking level indicator if model supports reasoning
 		const agentRole = this.session.currentPrimaryAgent;
-		const agentPrefix = agentRole !== "build" ? `${agentRole} • ` : "";
-		let rightSideWithoutProvider = `${agentPrefix}${modelName}`;
+		const accentAgent = theme.fg("accent", agentRole);
+		const dimSeparator = theme.fg("dim", " • ");
+		let rightSideWithoutProvider = `${accentAgent}${dimSeparator}${modelName}`;
 		if (state.model?.reasoning) {
 			const thinkingLevel = state.thinkingLevel || "off";
 			const thinkingStr = thinkingLevel === "off" ? "thinking off" : thinkingLevel;
-			rightSideWithoutProvider = `${agentPrefix}${modelName} • ${thinkingStr}`;
+			rightSideWithoutProvider = `${accentAgent}${dimSeparator}${modelName}${dimSeparator}${thinkingStr}`;
 		}
 
 		// Prepend the provider in parentheses if there are multiple providers and there's enough room
