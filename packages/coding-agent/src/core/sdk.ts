@@ -393,6 +393,9 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 	});
 	const extensionsResult = resourceLoader.getExtensions();
 
+	// Restore persisted primary agent (after extensions are loaded so tool registry is ready)
+	await session.restorePrimaryAgent();
+
 	return {
 		session,
 		extensionsResult,
