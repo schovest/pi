@@ -14,7 +14,7 @@ const subagents: SubagentDefinition[] = [
 		description: "Builtin explorer",
 		prompt: "Fast parallel search for discovery. Returns locations and summaries.",
 		scope: "builtin",
-		tools: ["read", "grep"],
+		includedTools: ["read", "grep"],
 	},
 	{
 		name: "architect",
@@ -24,7 +24,7 @@ const subagents: SubagentDefinition[] = [
 		sourcePath: "/home/test/.pi/agent/agents/architect.md",
 		model: "openai/gpt-5",
 		thinking: "high",
-		tools: ["read", "write"],
+		includedTools: ["read", "write"],
 	},
 	{
 		name: "auditor",
@@ -32,7 +32,7 @@ const subagents: SubagentDefinition[] = [
 		prompt: "Review the patch for regressions.",
 		scope: "project",
 		sourcePath: "/repo/.pi/agents/auditor.md",
-		tools: ["read"],
+		includedTools: ["read"],
 	},
 ];
 

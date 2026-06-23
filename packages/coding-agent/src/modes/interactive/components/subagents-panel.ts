@@ -192,7 +192,8 @@ export class SubagentsPanelComponent extends Container {
 		this.addChild(new Text(`${theme.bold("Location")} ${agent.sourcePath ?? "builtin"}`, 1, 0));
 		this.addChild(new Text(`${theme.bold("Model")} ${agent.model ?? "default"}`, 1, 0));
 		this.addChild(new Text(`${theme.bold("Thinking")} ${agent.thinking ?? "default"}`, 1, 0));
-		this.addChild(new Text(`${theme.bold("Tools")} ${agent.tools?.join(", ") ?? "default"}`, 1, 0));
+		this.addChild(new Text(`${theme.bold("Included tools")} ${agent.includedTools?.join(", ") ?? "all"}`, 1, 0));
+		this.addChild(new Text(`${theme.bold("Excluded tools")} ${agent.excludedTools?.join(", ") ?? "none"}`, 1, 0));
 		const lifecycle =
 			agent.scope === "builtin"
 				? "Builtin definitions are compiled into this Pi distribution."

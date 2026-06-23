@@ -3,6 +3,7 @@ import type { Model, Usage } from "@earendil-works/pi-ai";
 import { clampThinkingLevel, modelsAreEqual } from "@earendil-works/pi-ai";
 import type { AgentSession } from "../agent-session.ts";
 import { DEFAULT_THINKING_LEVEL } from "../defaults.ts";
+import { resolveActiveTools } from "../tool-matcher.ts";
 import { discoverSubagents } from "./discovery.ts";
 import type {
 	SubagentDefinition,
@@ -143,6 +144,7 @@ async function resolveTask(
 	definitions: Map<string, SubagentDefinition>,
 	task: SubagentTask,
 	index: number,
+	allToolNames: string[],
 ): Promise<ResolvedTask | SubagentTaskResult> {
 	const definition = definitions.get(task.agent);
 	if (!definition) {
@@ -162,6 +164,14 @@ async function resolveTask(
 	try {
 		const model = resolveModel(session, task.model ?? definition.model);
 		const thinking = resolveThinking(session, model, task, definition);
+		const includedTools = task.includedTools ?? definition.includedTools;
+		const excludedTools = task.excludedTools ?? definition.excludedTools;
+		const resolvedTools = resolveActiveTools(allToolNames, includedTools, excludedTools, [
+			"read",
+			"bash",
+			"edit",
+			"write",
+		]);
 		return {
 			index,
 			definition,
@@ -169,7 +179,7 @@ async function resolveTask(
 			title: task.title,
 			model,
 			thinking,
-			tools: task.tools ?? definition.tools ?? ["read", "bash", "edit", "write"],
+			tools: resolvedTools,
 			prompt: buildPrompt(definition, task.task),
 		};
 	} catch (error) {
@@ -430,6 +440,7 @@ export async function runSubagents(
 		).map((definition) => [definition.name, definition]),
 	);
 
+	const allToolNames = session.getActiveToolNames();
 	const runId = `subagent:${Date.now()}:${Math.random().toString(36).slice(2)}`;
 	let results: SubagentTaskResult[];
 
@@ -438,7 +449,7 @@ export async function runSubagents(
 		for (let index = 0; index < tasks.length; index++) {
 			const previous = results.at(-1)?.output ?? "";
 			const task = { ...tasks[index], task: tasks[index].task.replaceAll("{previous}", previous) };
-			const resolved = await resolveTask(session, definitions, task, index);
+			const resolved = await resolveTask(session, definitions, task, index, allToolNames);
 			if ("status" in resolved) {
 				results.push(resolved);
 				break;
@@ -451,7 +462,7 @@ export async function runSubagents(
 		}
 	} else {
 		const resolvedTasks = await Promise.all(
-			tasks.map((task, index) => resolveTask(session, definitions, task, index)),
+			tasks.map((task, index) => resolveTask(session, definitions, task, index, allToolNames)),
 		);
 		results = new Array<SubagentTaskResult>(resolvedTasks.length);
 		await runWithConcurrency(resolvedTasks, PARALLEL_CONCURRENCY, async (resolved) => {
