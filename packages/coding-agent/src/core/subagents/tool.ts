@@ -27,7 +27,8 @@ function createTaskSchema(subagentNames: string[]) {
 		title: Type.String({ description: "Short display title summarizing this subagent task, 2-6 words" }),
 		model: Type.Optional(Type.String()),
 		thinking: Type.Optional(ThinkingSchema),
-		tools: Type.Optional(Type.Array(Type.String())),
+		includedTools: Type.Optional(Type.Array(Type.String())),
+		excludedTools: Type.Optional(Type.Array(Type.String())),
 	});
 }
 
@@ -46,7 +47,8 @@ type SubagentTaskInput = {
 	title: string;
 	model?: string;
 	thinking?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh";
-	tools?: string[];
+	includedTools?: string[];
+	excludedTools?: string[];
 };
 
 type SubagentToolInput = {
