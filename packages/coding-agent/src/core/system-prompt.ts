@@ -54,7 +54,7 @@ export function buildSystemPrompt(options: BuildSystemPromptOptions): string {
 	const skills = providedSkills ?? [];
 
 	if (customPrompt) {
-		let prompt = customPrompt;
+		let prompt = primaryAgentPrompt ? `${primaryAgentPrompt}\n\n${customPrompt}` : customPrompt;
 
 		if (appendSection) {
 			prompt += appendSection;
