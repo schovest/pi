@@ -25,11 +25,6 @@ for dir in theme assets export-html docs examples extensions; do
 	fi
 done
 
-if [ -d "$SCRIPT_DIR/node_modules/@earendil-works/pi-plugins" ]; then
-	mkdir -p "$PREFIX/node_modules/@earendil-works/pi-plugins"
-	cp -r "$SCRIPT_DIR/node_modules/@earendil-works/pi-plugins"/* "$PREFIX/node_modules/@earendil-works/pi-plugins/"
-fi
-
 if [ -d "$SCRIPT_DIR/bin" ]; then
 	cp -r "$SCRIPT_DIR/bin" "$PREFIX/bin"
 fi
@@ -153,7 +148,7 @@ read_key() {
 				case "$seq2" in
 					A) key="UP" ;;
 					B) key="DOWN" ;;
-					*) key="" ;;
+					*) key="UNKNOWN" ;;
 				esac
 			fi
 		fi
@@ -182,6 +177,9 @@ else
 			"")
 				# Enter — confirm
 				break
+				;;
+			UNKNOWN)
+				draw_menu
 				;;
 			q|Q)
 				# Skip all extensions
@@ -241,7 +239,7 @@ for i in $(seq 0 $((NUM - 1))); do
 		# File copy install
 		src_file="${install_spec#file:}"
 		echo "Installing $name (file copy)..."
-		ext_dir="$PREFIX/extensions"
+		ext_dir="$HOME/.pi/agent/extensions"
 		mkdir -p "$ext_dir"
 		if [ -f "$SCRIPT_DIR/extensions/$src_file" ]; then
 			cp "$SCRIPT_DIR/extensions/$src_file" "$ext_dir/$src_file"
@@ -253,9 +251,10 @@ for i in $(seq 0 $((NUM - 1))); do
 		# pi install
 		echo "Installing $name..."
 		if [ -x "$BINDIR/pi" ]; then
-			"$BINDIR/pi" install "$install_spec" 2>/dev/null \
+			local err_output
+			err_output=$("$BINDIR/pi" install "$install_spec" 2>&1) \
 				&& echo "  pi: installed $install_spec" \
-				|| echo "  pi: warning - pi install $install_spec failed"
+				|| echo "  pi: warning - pi install $install_spec failed: $err_output"
 		else
 			echo "  pi: warning - pi binary not found at $BINDIR/pi"
 		fi

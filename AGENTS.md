@@ -6,7 +6,7 @@
 
 将 Pi 作为 agent 平台底座，而非原版 CLI。扩展优先级：
 
-1. **内置扩展/插件** — `packages/plugins`，随二进制分发
+1. **可安装扩展** — 通过 `pi install` 按需安装，核心扩展在 `install.sh` 中提供
 2. **Skills/Prompt Templates** — `.pi/skills/`、`.pi/prompts/`，项目级或用户级
 3. **MCP Server** — 通过内置 MCP 插件桥接，默认 proxy 模式控制上下文占用
 4. **配置层** — settings.json、keybindings、themes
@@ -25,16 +25,16 @@
                     └──────┬──────┘
                            │ 依赖
               ┌────────────┼────────────┐
-              ▼            ▼            ▼
-        ┌──────────┐ ┌──────────┐ ┌──────────┐
-        │  agent   │ │   tui    │ │ plugins  │
-        │ (核心框架) │ │ (终端UI) │ │ (内置插件) │
-        └────┬─────┘ └──────────┘ └────┬─────┘
-             │ 依赖                     │ 依赖
-             ▼                          ▼
-        ┌──────────┐              ┌──────────┐
-        │    ai    │◄─────────────┤    ai    │
-        │(统一LLM) │              └──────────┘
+              ▼            ▼
+        ┌──────────┐ ┌──────────┐
+        │  agent   │ │   tui    │
+        │ (核心框架) │ │ (终端UI) │
+        └────┬─────┘ └──────────┘
+             │ 依赖
+             ▼
+        ┌──────────┐
+        │    ai    │
+        │(统一LLM) │
         └──────────┘
 ```
 
@@ -45,7 +45,6 @@
 | `agent` | `pi-agent-core` | Agent 循环、会话树、技能/模板、压缩、执行环境 | `Agent`, `AgentHarness`, `Session`, `AgentLoop` |
 | `ai` | `pi-ai` | 统一 LLM API、多 provider 适配、模型注册表、OAuth | `stream()`, `complete()`, `getModel()`, providers |
 | `tui` | `pi-tui` | 差分渲染引擎、终端组件库、键盘/快捷键系统 | `TUI`, `Terminal`, components |
-| `plugins` | `pi-plugins` | 内置插件集合（目前仅 MCP），随二进制 bundled | `BUILTIN_PLUGINS`, `mcpAdapter` |
 | `coding-agent` | `pi-coding-agent` | CLI/TUI/RPC 三种运行模式、内置工具、扩展系统、SDK | `createAgentSession()`, tools, `InteractiveMode` |
 
 ### 核心数据流
@@ -106,7 +105,7 @@ AgentSession 自动持久化 + 事件通知
 | 能力类型 | 归属位置 | 配置/注册方式 | 示例 |
 |---|---|---|---|
 | 核心运行时能力 | `packages/agent/src/` | 修改源码，需上游同步考虑 | 新的 AgentLoop 策略、新的 Session 条目类型 |
-| 内置扩展/插件 | `packages/plugins/src/` | `BUILTIN_PLUGINS` registry + manifest | MCP 插件、未来内置的 web-search 插件 |
+| 可安装扩展 | `pi install <source>` 或 `.pi/extensions/*.ts` | install.sh 交互选择 + settings.json | MCP 适配器、todo、ask-user-question、tps 等 |
 | 项目级 skill | `.pi/skills/*.md` | SKILL.md frontmatter | add-llm-provider.md |
 | 项目级 prompt | `.pi/prompts/*.md` | YAML frontmatter | pr.md, is.md |
 | 项目级扩展 | `.pi/extensions/*.ts` | ExtensionAPI 注册 | tps.ts, redraws.ts |
@@ -119,8 +118,7 @@ AgentSession 自动持久化 + 事件通知
 | 快捷键 | `.pi/keybindings.json` | KeybindingsManager | 自定义键绑定 |
 
 **关键约束**：
-- 内置插件统一在 `packages/plugins`，不要散落到 `coding-agent/src/core/builtin`
-- `packages/plugins` 不作为独立 npm 包发布，通过 `bundledDependencies` 接入 `coding-agent`
+- 扩展通过 `pi install` 安装或 `.pi/extensions/` 发现；核心扩展列表见 `install.sh`
 - MCP 能力默认 proxy 模式（控制上下文），只有少量高频工具适合 direct tools
 - Claude 兼容插件使用独立 `plugins` settings，不污染 Pi 原生 `packages` 配置
 

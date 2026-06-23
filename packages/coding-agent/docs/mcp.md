@@ -1,6 +1,6 @@
 # MCP (Model Context Protocol)
 
-Pi 内置 MCP 适配器作为插件运行，支持 stdio、SSE 和 StreamableHTTP 传输，提供 proxy tool 和 direct tools 两种调用模式，支持 OAuth 2.1 认证和 MCP Apps UI。
+Pi MCP 适配器作为可安装扩展运行，支持 stdio、SSE 和 StreamableHTTP 传输，提供 proxy tool 和 direct tools 两种调用模式，支持 OAuth 2.1 认证和 MCP Apps UI。
 
 ## 配置文件
 
@@ -241,7 +241,6 @@ Direct tools 适合高频工具，减少 proxy 层开销。Proxy tool 适合低�
 
 ```bash
 pi --mcp-config /path/to/config.json  # 自定义配置路径
-pi --no-mcp                           # 禁用 MCP 插件
 ```
 
 ### 交互式命令

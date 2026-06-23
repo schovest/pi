@@ -69,7 +69,6 @@ const fileList = [
 	"theme",
 	"assets",
 	"export-html",
-	"node_modules/@earendil-works/pi-plugins",
 	"extensions",
 	"docs",
 	"examples",
