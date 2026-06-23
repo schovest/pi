@@ -2466,7 +2466,7 @@ export class AgentSession {
 		const allowedToolNames = this._allowedToolNames;
 		const excludedToolNames = this._excludedToolNames;
 		const isAllowedTool = (name: string): boolean => {
-			if (allowedToolNames && allowedToolNames.length > 0) {
+			if (allowedToolNames !== undefined) {
 				if (!matchesAnyToolPattern(name, allowedToolNames)) return false;
 			}
 			if (excludedToolNames && excludedToolNames.length > 0) {
@@ -2539,7 +2539,7 @@ export class AgentSession {
 			options?.activeToolNames ? [...options.activeToolNames] : [...previousActiveToolNames]
 		).filter((name) => isAllowedTool(name));
 
-		if (allowedToolNames && allowedToolNames.length > 0) {
+		if (allowedToolNames !== undefined) {
 			for (const toolName of this._toolRegistry.keys()) {
 				if (matchesAnyToolPattern(toolName, allowedToolNames)) {
 					nextActiveToolNames.push(toolName);
