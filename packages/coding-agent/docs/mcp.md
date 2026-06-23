@@ -1,6 +1,8 @@
 # MCP (Model Context Protocol)
 
-Pi MCP 适配器作为可安装扩展运行，支持 stdio、SSE 和 StreamableHTTP 传输，提供 proxy tool 和 direct tools 两种调用模式，支持 OAuth 2.1 认证和 MCP Apps UI。
+Pi 通过 Claude-compatible 插件系统支持 MCP。安装包含 `mcpServers` 声明的插件时，Pi 将 MCP 服务器配置写入 `mcp.json` 文件，由外部 MCP 客户端进程读取并管理服务器生命周期。
+
+MCP 配置支持 stdio、SSE 和 StreamableHTTP 传输，提供 proxy tool 和 direct tools 两种调用模式，支持 OAuth 2.1 认证和 MCP Apps UI。
 
 ## 配置文件
 

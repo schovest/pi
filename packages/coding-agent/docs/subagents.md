@@ -21,10 +21,8 @@ Subagent 是一种任务委托机制，允许主 agent 将任务分配给专门�
 description: 审查补丁的专注审计员
 model: anthropic/claude-sonnet-4-5
 thinking: high
-tools: [read, grep, find, ls]
+includedTools: [read, grep, find, ls]
 ---
-
-审查回归、缺失测试和行为变更。先给出发现。
 ```
 
 **Frontmatter 字段**：
@@ -34,7 +32,12 @@ tools: [read, grep, find, ls]
 | `description` | string | Agent 描述，用于工具提示 |
 | `model` | string | 模型 ID，如 `anthropic/claude-sonnet-4-5` |
 | `thinking` | string | 思考级别：`off`、`minimal`、`low`、`medium`、`high`、`xhigh` |
-| `tools` | string[] | 允许的工具列表 |
+| `includedTools` | string[] | 允许的工具列表，支持 glob 模式 |
+| `excludedTools` | string[] | 排除的工具列表，支持 glob 模式 |
+
+`includedTools` 支持 glob 模式匹配（通过 minimatch，大小写不敏感）。例如 `"read*"` 匹配 `read`、`readFile` 等；`"!bash"` 排除特定工具。`includedTools` 为空数组 `[]` 表示无工具。
+
+兼容性：旧字段名 `tools` 仍然可读，但会自动映射到 `includedTools`，优先使用 `includedTools`。
 
 Frontmatter 中的 `model` 和 `thinking` 可被任务参数覆盖。
 
@@ -44,7 +47,7 @@ Frontmatter 中的 `model` 和 `thinking` 可被任务参数覆盖。
 
 ```json
 {
-"agent": "worker",
+  "agent": "worker",
   "task": "审查当前变更集",
   "thinking": "high"
 }
@@ -57,8 +60,8 @@ Frontmatter 中的 `model` 和 `thinking` 可被任务参数覆盖。
 ```json
 {
   "tasks": [
-    { "agent": "explorer", "task": "查找 settings 相关文件", "tools": ["read", "grep", "find"] },
-    { "agent": "worker", "task": "审查测试覆盖", "tools": ["read", "grep"] }
+    { "agent": "explorer", "task": "查找 settings 相关文件", "includedTools": ["read", "grep", "find"] },
+    { "agent": "worker", "task": "审查测试覆盖", "includedTools": ["read", "grep"] }
   ]
 }
 ```
@@ -86,6 +89,26 @@ Frontmatter 中的 `model` 和 `thinking` 可被任务参数覆盖。
 
 项目级 agent 覆盖同名的用户级 agent。
 
+通过设置 `settings.json` 中的 `defaultPrimaryAgent` 可以为项目指定默认使用的主 agent：
+
+```json
+{
+  "defaultPrimaryAgent": "my-custom-agent"
+}
+```
+
+设置后，每次启动会话时自动恢复该 agent。
+
+在任务中通过 `subagentScope` 参数控制 agent 搜索范围：
+
+```json
+{
+  "agent": "project-reviewer",
+  "task": "审查代码",
+  "subagentScope": "project"
+}
+```
+
 ## 运行时监控
 
 - 状态栏显示 `subagents:N` 表示运行中的 subagent 数量
@@ -108,7 +131,7 @@ Frontmatter 中的 `model` 和 `thinking` 可被任务参数覆盖。
 description: 分析依赖关系并生成依赖图
 model: anthropic/claude-sonnet-4-5
 thinking: medium
-tools: [read, grep, find, ls, bash]
+includedTools: [read, grep, find, ls, bash]
 ---
 
 你是依赖分析专家。分析项目的依赖关系并生成结构化报告。
@@ -183,7 +206,7 @@ cat > ~/.pi/agent/subagents/dep-analyzer.md << 'EOF'
 ---
 description: 分析依赖关系
 model: anthropic/claude-sonnet-4-5
-tools: [read, grep, find, ls, bash]
+includedTools: [read, grep, find, ls, bash]
 ---
 ...
 EOF
@@ -193,7 +216,7 @@ mkdir -p .pi/subagents
 cat > .pi/subagents/project-reviewer.md << 'EOF'
 ---
 description: 项目特定审查规则
-tools: [read, grep, find, ls]
+includedTools: [read, grep, find, ls]
 ---
 ...
 EOF
@@ -263,9 +286,6 @@ const result = await session.runSubagents({
   task: "规划 subagent 发现的最小实现",
   thinking: "medium",
 });
-
-// 禁用内置 subagent tool，保留 SDK 方法
-await createAgentSession({ enableSubagents: false });
 ```
 
 ## 示例：独立进程 Subagent

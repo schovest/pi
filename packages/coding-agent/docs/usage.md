@@ -103,12 +103,25 @@ Use context files for project conventions, commands, safety rules, and preferenc
 
 ### System Prompt Files
 
-Replace the default system prompt with:
+Pi 的系统提示词按以下优先级构成：
 
+1. **Primary Agent Prompt**（如有）— 来自 `.pi/primary-agents/*.md` 或 `~/.pi/agent/primary-agents/*.md` 中定义的 primary agent 的 body 内容，在 session 中通过 footer 切换
+2. **Custom Prompt** — `.pi/SYSTEM.md`（项目）或 `~/.pi/agent/SYSTEM.md`（全局）的内容，或者 `--system-prompt` CLI 参数。存在时**替换**默认系统提示词，而非追加
+3. **Default Prompt** — 当无 custom prompt 时使用内置默认提示词
+4. **Append** — `APPEND_SYSTEM.md` 或 `--append-system-prompt` 的内容，追加在上述 prompt 之后
+5. **Context Files** — `AGENTS.md` / `CLAUDE.md` 的内容
+6. **Skills** — 已加载 skills 的元数据
+7. **日期和 CWD**
+
+Primary agent prompt **始终在最前面**，即使存在 SYSTEM.md。这确保了 primary agent 的角色定义不受自定义 prompt 覆盖。
+
+替换默认 prompt：
 - `.pi/SYSTEM.md` for a project
 - `~/.pi/agent/SYSTEM.md` globally
 
-Append to the default prompt without replacing it with `APPEND_SYSTEM.md` in either location.
+追加到 prompt 而不替换：
+- `.pi/APPEND_SYSTEM.md` for a project
+- `~/.pi/agent/APPEND_SYSTEM.md` globally
 
 ### Project Trust
 
@@ -191,6 +204,7 @@ cat README.md | pi -p "Summarize this text"
 | `-c`, `--continue` | Continue the most recent session |
 | `-r`, `--resume` | Browse and select a session |
 | `--session <path\|id>` | Use a specific session file or partial UUID |
+| `--session-id <id>` | Use exact project session ID, creating it if missing |
 | `--fork <path\|id>` | Fork a session file or partial UUID into a new session |
 | `--session-dir <dir>` | Custom session storage directory |
 | `--no-session` | Ephemeral mode; do not save |
@@ -200,19 +214,21 @@ cat README.md | pi -p "Summarize this text"
 
 | Option | Description |
 |--------|-------------|
-| `--tools <list>`, `-t <list>` | Allowlist specific built-in, extension, and custom tools |
-| `--exclude-tools <list>`, `-xt <list>` | Disable specific built-in, extension, and custom tools |
+| `--tools <list>`, `-t <list>` | Allowlist specific tools, supports glob patterns (e.g., `"read*"`) |
+| `--exclude-tools <list>`, `-xt <list>` | Exclude specific tools, supports glob patterns (e.g., `"!bash"`) |
 | `--no-builtin-tools`, `-nbt` | Disable built-in tools but keep extension/custom tools enabled |
 | `--no-tools`, `-nt` | Disable all tools |
 
 Built-in tools: `read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`.
+Default active tools: `read`, `bash`, `edit`, `write`. `grep`, `find`, `ls` are available but off by default.
+All `--tools` and `--exclude-tools` patterns support glob matching (via minimatch, case-insensitive). An empty `--tools ""` means no tools.
 
 ### Resource Options
 
 | Option | Description |
 |--------|-------------|
 | `-e`, `--extension <source>` | Load an extension from path, npm, or git; repeatable |
-| `--no-extensions` | Disable extension discovery |
+| `--no-extensions`, `-ne` | Disable extension discovery |
 | `--skill <path>` | Load a skill; repeatable |
 | `--no-skills` | Disable skill discovery |
 | `--prompt-template <path>` | Load a prompt template; repeatable |
@@ -231,8 +247,9 @@ pi --no-extensions -e ./my-extension.ts
 
 | Option | Description |
 |--------|-------------|
-| `--system-prompt <text>` | Replace default prompt; context files and skills are still appended |
+| `--system-prompt <text>` | Replace default prompt; primary agent prompt, context files, and skills are still appended |
 | `--append-system-prompt <text>` | Append to system prompt |
+| `--offline` | Disable startup network operations (same as `PI_OFFLINE=1`) |
 | `--verbose` | Force verbose startup |
 | `-a`, `--approve` | Trust project-local files for this run |
 | `-na`, `--no-approve` | Ignore project-local files for this run |
@@ -279,6 +296,12 @@ pi --models "claude-*,gpt-4o"
 # Read-only mode
 pi --tools read,grep,find,ls -p "Review the code"
 
+# Glob pattern: enable all read-like tools
+pi --tools "read*" -p "Review the code"
+
+# Glob pattern: exclude all bash-related tools
+pi --exclude-tools "bash*"
+
 # Disable one extension or built-in tool while keeping the rest available
 pi --exclude-tools ask_question
 ```
@@ -300,6 +323,6 @@ pi --exclude-tools ask_question
 
 Pi keeps the core small and pushes workflow-specific behavior into extensions, skills, prompt templates, and packages.
 
-It intentionally does not include built-in MCP, sub-agents, permission popups, plan mode, to-dos, or background bash. You can build or install those workflows as extensions or packages, or use external tools such as containers and tmux.
+Sub-agents, MCP, and other workflow features are available as built-in capabilities or installable extensions. You can build or install additional workflows as extensions or packages, or use external tools such as containers and tmux.
 
 For the full rationale, read the [blog post](https://mariozechner.at/posts/2025-11-30-pi-coding-agent/).

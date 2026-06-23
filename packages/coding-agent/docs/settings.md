@@ -155,6 +155,7 @@ Keep `retry.provider.maxRetries` at `0` unless provider-level retries are explic
 | `terminal.showImages` | boolean | `true` | Show images in terminal (if supported) |
 | `terminal.imageWidthCells` | number | `60` | Preferred inline image width in terminal cells |
 | `terminal.clearOnShrink` | boolean | `false` | Clear empty rows when content shrinks (can cause flicker) |
+| `terminal.showTerminalProgress` | boolean | `false` | Show terminal progress during operations |
 | `images.autoResize` | boolean | `true` | Resize images to 2000x2000 max |
 | `images.blockImages` | boolean | `false` | Block all images from being sent to LLM |
 
@@ -173,6 +174,16 @@ Keep `retry.provider.maxRetries` at `0` unless provider-level retries are explic
 ```
 
 `npmCommand` is used for all npm package-manager operations, including installs, uninstalls, and dependency installs inside git packages. User-scoped npm packages install under `~/.pi/agent/npm/`; project-scoped npm packages install under `.pi/npm/`. Use argv-style entries exactly as the process should be launched. When `npmCommand` is configured, git package dependency installs use plain `install` to avoid npm-specific flags in wrappers or alternate package managers.
+
+### Subagents
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `defaultPrimaryAgent` | string | - | Active primary agent name for this project (project setting). Restored on session creation. |
+
+```json
+{ "defaultPrimaryAgent": "my-custom-agent" }
+```
 
 ### Sessions
 

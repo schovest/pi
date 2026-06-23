@@ -67,5 +67,5 @@ packages/
   ai/           # LLM provider abstraction
   agent/        # Agent loop and message types  
   tui/          # Terminal UI components
-  coding-agent/ # CLI and interactive mode
+  coding-agent/ # CLI, interactive mode, built-in tools, extensions, subagents
 ```
