@@ -440,7 +440,7 @@ export async function runSubagents(
 		).map((definition) => [definition.name, definition]),
 	);
 
-	const allToolNames = session.getActiveToolNames();
+	const allToolNames = session.getAllToolNames();
 	const runId = `subagent:${Date.now()}:${Math.random().toString(36).slice(2)}`;
 	let results: SubagentTaskResult[];
 

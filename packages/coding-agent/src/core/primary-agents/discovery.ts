@@ -10,6 +10,7 @@ interface PrimaryAgentFrontmatter extends Record<string, unknown> {
 	excludedTools?: unknown;
 	model?: unknown;
 	thinking?: unknown;
+	tools?: unknown;
 }
 
 const VALID_THINKING = new Set<ThinkingLevel>(["off", "minimal", "low", "medium", "high", "xhigh"]);
@@ -21,7 +22,7 @@ function isThinkingLevel(value: unknown): value is ThinkingLevel {
 function stringArray(value: unknown): string[] | undefined {
 	if (!Array.isArray(value)) return undefined;
 	const strings = value.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
-	return strings.length > 0 ? strings : undefined;
+	return strings;
 }
 
 const BUILT_IN_PRIMARY_AGENTS: PrimaryAgentDefinition[] = [
@@ -51,7 +52,11 @@ function readPrimaryAgentFile(path: string, scope: PrimaryAgentDefinitionScope):
 		systemPrompt: parsed.body,
 		scope,
 		sourcePath: path,
-		includedTools: stringArray(parsed.frontmatter.includedTools),
+		includedTools: (() => {
+			const parsedIncluded = stringArray(parsed.frontmatter.includedTools);
+			const parsedLegacy = stringArray(parsed.frontmatter.tools);
+			return parsedIncluded !== undefined ? parsedIncluded : parsedLegacy;
+		})(),
 		excludedTools: stringArray(parsed.frontmatter.excludedTools),
 		model: typeof parsed.frontmatter.model === "string" ? parsed.frontmatter.model : undefined,
 		thinking: isThinkingLevel(parsed.frontmatter.thinking) ? parsed.frontmatter.thinking : undefined,
