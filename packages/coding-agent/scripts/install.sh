@@ -324,7 +324,6 @@ for i in $(seq 0 $((NUM - 1))); do
 		# pi install
 		echo "Installing $name..."
 		if [ -x "$BINDIR/pi" ]; then
-			local err_output
 			err_output=$("$BINDIR/pi" install "$install_spec" 2>&1) \
 				&& echo "  pi: installed $install_spec" \
 				|| echo "  pi: warning - pi install $install_spec failed: $err_output"
