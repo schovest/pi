@@ -108,6 +108,7 @@ import type {
 } from "./subagents/index.ts";
 import { createSubagentToolDefinition, discoverSubagents, runSubagents } from "./subagents/index.ts";
 import { type BuildSystemPromptOptions, buildSystemPrompt } from "./system-prompt.ts";
+import { matchesAnyToolPattern, resolveActiveTools } from "./tool-matcher.ts";
 import { type BashOperations, createLocalBashOperations } from "./tools/bash.ts";
 import { createAllToolDefinitions } from "./tools/index.ts";
 import { createToolDefinitionFromAgentTool } from "./tools/tool-definition-wrapper.ts";
@@ -328,8 +329,8 @@ export class AgentSession {
 	private _agentDir: string;
 	private _extensionRunnerRef?: { current?: ExtensionRunner };
 	private _initialActiveToolNames?: string[];
-	private _allowedToolNames?: Set<string>;
-	private _excludedToolNames?: Set<string>;
+	private _allowedToolNames?: string[];
+	private _excludedToolNames?: string[];
 	private _baseToolsOverride?: Record<string, AgentTool>;
 	private _sessionStartEvent: SessionStartEvent;
 	private _extensionUIContext?: ExtensionUIContext;
@@ -368,8 +369,8 @@ export class AgentSession {
 		this._modelRegistry = config.modelRegistry;
 		this._extensionRunnerRef = config.extensionRunnerRef;
 		this._initialActiveToolNames = config.initialActiveToolNames;
-		this._allowedToolNames = config.allowedToolNames ? new Set(config.allowedToolNames) : undefined;
-		this._excludedToolNames = config.excludedToolNames ? new Set(config.excludedToolNames) : undefined;
+		this._allowedToolNames = config.allowedToolNames;
+		this._excludedToolNames = config.excludedToolNames;
 		this._baseToolsOverride = config.baseToolsOverride;
 		this._sessionStartEvent = config.sessionStartEvent ?? { type: "session_start", reason: "startup" };
 
@@ -820,6 +821,11 @@ export class AgentSession {
 		return this.agent.state.tools.map((t) => t.name);
 	}
 
+	/** Get all registered tool names (including inactive ones). */
+	getAllToolNames(): string[] {
+		return Array.from(this._toolRegistry.keys());
+	}
+
 	/**
 	 * Get all configured tools with name, description, parameter schema, prompt guidelines, and source metadata.
 	 */
@@ -861,15 +867,7 @@ export class AgentSession {
 
 		// Compute new active tool set
 		const allToolNames = Array.from(this._toolRegistry.keys());
-		let newActiveTools: string[];
-		if (definition.includedTools && definition.includedTools.length > 0) {
-			newActiveTools = definition.includedTools.filter((t) => this._toolRegistry.has(t));
-		} else if (definition.excludedTools && definition.excludedTools.length > 0) {
-			const excluded = new Set(definition.excludedTools);
-			newActiveTools = allToolNames.filter((t) => !excluded.has(t));
-		} else {
-			newActiveTools = allToolNames;
-		}
+		const newActiveTools = resolveActiveTools(allToolNames, definition.includedTools, definition.excludedTools);
 		this.setActiveToolsByName(newActiveTools);
 
 		// Optionally update model and thinking level
@@ -884,6 +882,19 @@ export class AgentSession {
 		}
 
 		this._emit({ type: "primary_agent_changed", name, previousName });
+
+		// Persist the selected primary agent to project settings
+		this.settingsManager.setDefaultPrimaryAgent(name);
+	}
+
+	/** Restore the previously persisted primary agent from project settings. */
+	async restorePrimaryAgent(): Promise<void> {
+		const savedAgent = this.settingsManager.getDefaultPrimaryAgent();
+		if (!savedAgent || savedAgent === "build") return;
+		const definitions = await discoverPrimaryAgents({ cwd: this._cwd, agentDir: this._agentDir });
+		if (definitions.some((d) => d.name === savedAgent)) {
+			await this.switchPrimaryAgent(savedAgent);
+		}
 	}
 
 	getToolDefinition(name: string): ToolDefinition | undefined {
@@ -897,14 +908,12 @@ export class AgentSession {
 	 * Changes take effect on the next agent turn.
 	 */
 	setActiveToolsByName(toolNames: string[]): void {
+		const allToolNames = Array.from(this._toolRegistry.keys());
+		const validToolNames = resolveActiveTools(allToolNames, toolNames);
 		const tools: AgentTool[] = [];
-		const validToolNames: string[] = [];
-		for (const name of toolNames) {
+		for (const name of validToolNames) {
 			const tool = this._toolRegistry.get(name);
-			if (tool) {
-				tools.push(tool);
-				validToolNames.push(name);
-			}
+			if (tool) tools.push(tool);
 		}
 		this.agent.state.tools = tools;
 
@@ -2456,8 +2465,15 @@ export class AgentSession {
 		const previousActiveToolNames = this.getActiveToolNames();
 		const allowedToolNames = this._allowedToolNames;
 		const excludedToolNames = this._excludedToolNames;
-		const isAllowedTool = (name: string): boolean =>
-			(!allowedToolNames || allowedToolNames.has(name)) && !excludedToolNames?.has(name);
+		const isAllowedTool = (name: string): boolean => {
+			if (allowedToolNames && allowedToolNames.length > 0) {
+				if (!matchesAnyToolPattern(name, allowedToolNames)) return false;
+			}
+			if (excludedToolNames && excludedToolNames.length > 0) {
+				if (matchesAnyToolPattern(name, excludedToolNames)) return false;
+			}
+			return true;
+		};
 
 		const registeredTools = this._extensionRunner.getAllRegisteredTools();
 		const allCustomTools = [
@@ -2523,9 +2539,9 @@ export class AgentSession {
 			options?.activeToolNames ? [...options.activeToolNames] : [...previousActiveToolNames]
 		).filter((name) => isAllowedTool(name));
 
-		if (allowedToolNames) {
+		if (allowedToolNames && allowedToolNames.length > 0) {
 			for (const toolName of this._toolRegistry.keys()) {
-				if (allowedToolNames.has(toolName)) {
+				if (matchesAnyToolPattern(toolName, allowedToolNames)) {
 					nextActiveToolNames.push(toolName);
 				}
 			}

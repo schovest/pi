@@ -105,6 +105,7 @@ export interface Settings {
 	shellPath?: string; // Custom shell path (e.g., for Cygwin users on Windows)
 	quietStartup?: boolean;
 	defaultProjectTrust?: DefaultProjectTrust; // default: "ask"; global setting only
+	defaultPrimaryAgent?: string; // Active primary agent for this project (project setting)
 	shellCommandPrefix?: string; // Prefix prepended to every bash command (e.g., "shopt -s expand_aliases" for alias support)
 	npmCommand?: string[]; // Command used for npm package lookup/install operations, argv-style (e.g., ["mise", "exec", "node@20", "--", "npm"])
 	collapseChangelog?: boolean; // Show condensed changelog after update (use /changelog for full)
@@ -882,6 +883,16 @@ export class SettingsManager {
 		this.globalSettings.defaultProjectTrust = defaultProjectTrust;
 		this.markModified("defaultProjectTrust");
 		this.save();
+	}
+
+	getDefaultPrimaryAgent(): string | undefined {
+		return this.settings.defaultPrimaryAgent;
+	}
+
+	setDefaultPrimaryAgent(name: string): void {
+		this.updateProjectSettings("defaultPrimaryAgent", (settings) => {
+			settings.defaultPrimaryAgent = name;
+		});
 	}
 
 	getShellCommandPrefix(): string | undefined {
