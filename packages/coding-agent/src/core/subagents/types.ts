@@ -15,7 +15,8 @@ export interface SubagentDefinition {
 	sourcePath?: string;
 	model?: string;
 	thinking?: ThinkingLevel;
-	tools?: string[];
+	includedTools?: string[];
+	excludedTools?: string[];
 }
 
 export interface SubagentTask {
@@ -24,7 +25,8 @@ export interface SubagentTask {
 	title: string;
 	model?: string;
 	thinking?: ThinkingLevel;
-	tools?: string[];
+	includedTools?: string[];
+	excludedTools?: string[];
 }
 
 export type SubagentRunRequest =
