@@ -1,18 +1,9 @@
 import { minimatch } from "minimatch";
 
 /**
- * Check if a string contains glob metacharacters.
- */
-function isGlobPattern(pattern: string): boolean {
-	return pattern.includes("*") || pattern.includes("?") || pattern.includes("[");
-}
-
-/**
  * Test whether a single tool name matches a single pattern.
- * Exact match when no glob chars, minimatch otherwise.
  */
 export function matchesToolPattern(toolName: string, pattern: string): boolean {
-	if (!isGlobPattern(pattern)) return toolName === pattern;
 	return minimatch(toolName, pattern, { nocase: true });
 }
 
