@@ -492,3 +492,113 @@ Vercel AI Gateway example:
   }
 }
 ```
+
+## Resilience Guards
+
+Configure per-model resilience guards to control the agent loop's behavior when encountering common failure patterns. Guards are defined on a model entry in `models.json` or in `modelOverrides`.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `resilience` | `"high"` \| `"medium"` \| `"low"` | Preset guard strategy level. Omit to disable guards entirely. |
+| `maxTurns` | number | Maximum agent loop turns before forced stop. Overrides the level's default. |
+
+When `resilience` is set, four kinds of guards activate in the agent loop:
+
+### Malformed Tool Calls
+
+Triggered when a tool call has invalid arguments or references a tool that doesn't exist.
+
+| Level | Behavior |
+|-------|----------|
+| `high` | Returns `error_result` silently, agent continues |
+| `medium` | Returns `error_result` on first error; injects steering message on 2nd+ error |
+| `low` | Always injects steering with detailed fix suggestions |
+
+### Output Truncation (Max Tokens)
+
+Triggered when the model response hits the output token limit (`stopReason: "length"`).
+
+| Level | Behavior |
+|-------|----------|
+| `high` | Injects "continue from where you left off" and resumes |
+| `medium` | Same as high |
+| `low` | Injects detailed continuation message with anti-repeat guidance |
+
+### Premature Stop
+
+Triggered when the model stops without calling tools and without hitting the token limit (e.g., the model gives up early).
+
+| Level | Behavior |
+|-------|----------|
+| `high` | Accepts the stop immediately |
+| `medium` | Continues if the model has made fewer than 3 tool calls so far |
+| `low` | Continues if the model has made fewer than 5 tool calls so far |
+
+### Repeated Tool Calls
+
+Triggered when the model calls the same tool with identical arguments multiple times.
+
+| Level | Behavior |
+|-------|----------|
+| `high` | Always proceeds (no intervention) |
+| `medium` | Injects steering at 3+ repeats |
+| `low` | Injects steering at 2+ repeats, skips tool call at 4+ repeats |
+
+### Turn Limits
+
+| Level | `maxTurns` default |
+|-------|---------------------|
+| `high` | Unlimited |
+| `medium` | 50 |
+| `low` | 80 |
+
+### Configuration Examples
+
+Enable medium resilience on a custom model:
+
+```json
+{
+  "providers": {
+    "anthropic": {
+      "models": [
+        {
+          "id": "claude-sonnet-4-20250514",
+          "resilience": "medium"
+        }
+      ]
+    }
+  }
+}
+```
+
+Override resilience on a built-in model via `modelOverrides`:
+
+```json
+{
+  "providers": {
+    "openai": {
+      "modelOverrides": {
+        "gpt-4o": {
+          "resilience": "low",
+          "maxTurns": 100
+        }
+      }
+    }
+  }
+}
+```
+
+Guards are applied at the agent harness level when `resilience` is configured on the model. Models without `resilience` run without guards (equivalent to the pre-guard behavior).
+
+### Guard Events
+
+Agent loop guards emit `guard_triggered` events on the `AgentEvent` stream with the following shape:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `guard` | `"malformed_tool_call"` \| `"premature_stop"` \| `"repeated_tool_call"` \| `"max_tokens"` | Which guard fired |
+| `action` | `"error_result"` \| `"inject_steering"` \| `"abort"` \| `"stop"` \| `"continue"` \| `"escalate"` \| `"proceed"` \| `"skip"` | Action taken |
+| `turnNumber` | number | Turn number when the guard fired |
+| `details` | string | Tool name, error message, or other context |
+
+These events can be consumed by extensions via `on("agent_event")`.

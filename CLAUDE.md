@@ -168,6 +168,7 @@ AgentSession 自动持久化 + 事件通知
 - 不手改 `packages/ai/src/models.generated.ts`；更新模型改生成脚本
 - 删除看似有意存在的功能前先询问
 - 不为兼容旧行为保留复杂分支，除非用户要求
+- 功能变更必须同步更新 `packages/coding-agent/docs/` 下对应文档；新增模型字段 → `models.md`，新增设置项 → `settings.md`，新增工具 → `usage.md`，新增扩展 API → `extensions.md`，新增事件 → `sdk.md`
 
 ## 开发规范
 
