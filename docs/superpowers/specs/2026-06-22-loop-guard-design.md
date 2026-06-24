@@ -473,26 +473,42 @@ private createLoopConfig(
 
 ## 四、重试和退避增强
 
-### 4.1 Provider 层默认开启重试
+Pi 已有两层独立的重试机制：
 
-所有 provider 的 `maxRetries` 默认从 0 改为 2：
+| 层级 | 位置 | 作用域 | 默认行为 |
+|------|------|--------|---------|
+| **L1: Provider/HTTP 层** | ai/providers/ | 单次 API 调用失败自动重试 | SDK 默认 2 次（Anthropic/OpenAI），Codex 自定义循环默认 0 次 |
+| **L2: Agent-turn 层** | coding-agent/agent-session.ts | 整个 agent turn 失败后重新发起 | 默认启用，maxRetries=3，baseDelayMs=2000 |
+
+L1 先触发，耗尽后返回 error message；L2 检测 error message 后决定是否重试整个 turn。
+
+### 4.1 Provider 层重试统一
+
+**现状问题**：各 provider 的 `maxRetries` 默认值不一致——SDK 类 provider（Anthropic/OpenAI）传 `?? 0` 显式禁用 SDK 默认重试，Codex 自定义循环默认 0，Google/Mistral/Bedrock 无重试。
+
+**改动**：在 `sdk.ts` 构造 `streamFn` 时（当前已通过 `settingsManager.getProviderRetrySettings()` 传递 `maxRetries`），确保所有 provider 统一接收配置值，而非各自硬编码 `?? 0`。
+
+具体改动：将 `anthropic.ts:519`、`openai-responses.ts:125`、`openai-completions.ts:154`、`azure-openai-responses.ts:116` 中的 `?? 0` 移除，改为直接透传上层传入的 `maxRetries`（未传入时为 `undefined`，让 SDK 使用自身默认值 2）。
 
 ```typescript
-// ai/providers/*.ts
-maxRetries: options?.maxRetries ?? 2
+// 修改前
+maxRetries: options?.maxRetries ?? 0
+
+// 修改后
+maxRetries: options?.maxRetries  // undefined 时 SDK 默认 2
 ```
 
-覆盖：`anthropic.ts`、`openai-codex-responses.ts`、`openai-responses.ts`、`openai-completions.ts`、`google.ts`。
+这样用户可通过 `settings.json` 的 `retry.provider.maxRetries` 统一控制 L1 重试次数，而非当前被 `?? 0` 覆盖。
 
-### 4.2 退避加 jitter + cap
+### 4.2 L2 退避加 jitter + cap
 
-当前退避在 `agent-session.ts:2688`：
+当前 L2 退避在 `agent-session.ts:2688`：
 
 ```typescript
 const delayMs = settings.baseDelayMs * 2 ** (this._retryAttempt - 1);
 ```
 
-默认值：`baseDelayMs = 2000`，`maxRetries = 3`。当前无 jitter、无 cap。
+默认：`baseDelayMs = 2000`，`maxRetries = 3`。**无 jitter，无 cap**。
 
 改为：
 ```
@@ -518,7 +534,25 @@ private readonly MAX_OVERFLOW_RECOVERY = 3;
 
 ### 4.4 重试 off-by-one 修复
 
-AgentSession 中的重试逻辑需确保 `maxRetries=N` 时实际重试 N 次（而非 N+1 次）。具体位置需在实现时精确定位 agent-session.ts 中的重试循环，修正边界条件从 `>` 改为 `>=`（或等效调整）。
+`agent-session.ts:2688` 的 `_prepareRetry` 中（第 2685 行）：
+
+```typescript
+// 修改前
+if (this._retryAttempt > settings.maxRetries)   // maxRetries=3 时实际重试 4 次
+
+// 修改后
+if (this._retryAttempt >= settings.maxRetries)   // maxRetries=3 时重试 3 次
+```
+
+### 4.5 两层重试总次数说明
+
+用户需理解两层重试的叠加效应。以默认配置为例（L1 SDK 默认 2 + L2 maxRetries=3）：
+
+- 单次 LLM 调用：最多 (1 + 2) = 3 次 HTTP 请求
+- Agent turn 级别：最多 (1 + 3) = 4 次 LLM 调用
+- 极端情况总 HTTP 请求：3 × 4 = 12 次
+
+这是合理的行为——L1 处理瞬时网络抖动，L2 处理持续过载。UI 通过 `auto_retry_start/end` 事件展示 L2 重试状态。
 
 ---
 
@@ -583,7 +617,7 @@ interface GuardTriggeredEvent {
 | `Model.resilience` 缺失时默认 medium 可能不足 | 未配置的模型不启用 guard，无此问题；配置了的模型由用户显式指定 resilience |
 | guard 回调抛异常 | loop 中 try/catch 包裹，异常时 fallback 到默认行为 |
 | `prepareToolCall` 无法访问 `pendingMessages` | 通过返回值 `steeringMessage` 传回 `runLoop`，不直接操作局部变量 |
-| Provider 层默认重试增加延迟 | 默认只 2 次，退避有 jitter + cap，总延迟可控在 ~6s 内 |
+| Provider 层 `?? 0` 移除后 SDK 默认重试增加延迟 | SDK 默认 2 次重试，退避由 SDK 自带 jitter 控制；用户可通过 `retry.provider.maxRetries: 0` 显式禁用 |
 
 ---
 
@@ -594,5 +628,6 @@ interface GuardTriggeredEvent {
 - Guard 配置通过 `~/.pi/agent/models.json` 管理，未配置 `resilience` 的模型不启用 guard
 - `stopReason === "length"` 对应原设计中的 `"max_tokens"`，与 ai 包的实际类型一致
 - `turnNumber` / `totalToolCallsSoFar` 为 `runLoop` 新增局部变量，不改变外部接口
-- Provider 层 `maxRetries` 从 0 改为 2 是行为变更，但只影响 API 调用失败场景
+- Provider 层 `?? 0` 移除后，未配置 `maxRetries` 时 SDK 使用自身默认值（通常 2），行为从"显式禁用"变为"SDK 默认"，对已配置 `retry.provider.maxRetries` 的用户无影响
+- L2 退避加 jitter + cap 不影响重试次数，只影响延迟分布
 - 重试 off-by-one 修复是行为修正，减少一次意外重试
