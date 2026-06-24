@@ -526,6 +526,7 @@ type ImmediateToolCallOutcome = {
 	kind: "immediate";
 	result: AgentToolResult<any>;
 	isError: boolean;
+	steeringMessage?: string;
 };
 
 type ExecutedToolCallOutcome = {

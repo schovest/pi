@@ -132,6 +132,64 @@ export interface AgentLoopTurnUpdate {
 
 export interface PrepareNextTurnContext extends ShouldStopAfterTurnContext {}
 
+/** Model resilience level for loop guard strategy selection */
+export type ModelResilience = "high" | "medium" | "low";
+
+// --- Guard Context Types ---
+
+export interface MalformedToolCallContext {
+	toolCall: AgentToolCall;
+	error: string;
+	turnNumber: number;
+	recentMalformedCount: number;
+}
+
+export interface PrematureStopContext {
+	message: AssistantMessage;
+	turnNumber: number;
+	totalToolCallsSoFar: number;
+}
+
+export interface MaxTokensContext {
+	message: AssistantMessage;
+	turnNumber: number;
+	totalToolCallsSoFar: number;
+	hasIncompleteToolCalls: boolean;
+}
+
+export interface RepeatedToolCallContext {
+	toolCall: AgentToolCall;
+	previousCalls: AgentToolCall[];
+	repeatCount: number;
+}
+
+// --- Guard Action Types ---
+
+export type MalformedToolCallAction =
+	| { type: "error_result" }
+	| { type: "inject_steering"; message: string }
+	| { type: "abort" };
+
+export type PrematureStopAction = { type: "stop" } | { type: "continue"; message: string } | { type: "abort" };
+
+export type MaxTokensAction = { type: "continue"; message: string } | { type: "escalate" } | { type: "stop" };
+
+export type RepeatedToolCallAction =
+	| { type: "proceed" }
+	| { type: "inject_steering"; message: string }
+	| { type: "skip" }
+	| { type: "abort" };
+
+// --- Guard Triggered Event ---
+
+export interface GuardTriggeredEvent {
+	type: "guard_triggered";
+	guard: "malformed_tool_call" | "premature_stop" | "repeated_tool_call" | "max_tokens";
+	action: string;
+	turnNumber: number;
+	details?: string;
+}
+
 export interface AgentLoopConfig extends SimpleStreamOptions {
 	model: Model<any>;
 
@@ -274,6 +332,18 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
 	 * The hook receives the agent abort signal and is responsible for honoring it.
 	 */
 	afterToolCall?: (context: AfterToolCallContext, signal?: AbortSignal) => Promise<AfterToolCallResult | undefined>;
+	/** Guard: tool call validation failure handler */
+	onMalformedToolCall?: (context: MalformedToolCallContext) => MalformedToolCallAction;
+	/** Guard: output length truncation handler (stopReason === "length") */
+	onMaxTokens?: (context: MaxTokensContext) => MaxTokensAction;
+	/** Guard: premature stop handler (stopReason !== "toolUse" && !== "length", no tool calls) */
+	onPrematureStop?: (context: PrematureStopContext) => PrematureStopAction;
+	/** Guard: repeated tool call handler */
+	onRepeatedToolCall?: (context: RepeatedToolCallContext) => RepeatedToolCallAction;
+	/** Maximum number of turns before forced stop with stopReason "max_turns" */
+	maxTurns?: number;
+	/** Whether to emit guard_triggered events for debugging/UI, default false */
+	emitGuardEvents?: boolean;
 }
 
 /**
@@ -403,7 +473,7 @@ export interface AgentContext {
 export type AgentEvent =
 	// Agent lifecycle
 	| { type: "agent_start" }
-	| { type: "agent_end"; messages: AgentMessage[] }
+	| { type: "agent_end"; messages: AgentMessage[]; stopReason?: "normal" | "max_turns" | "guard_abort" }
 	// Turn lifecycle - a turn is one assistant response + any tool calls/results
 	| { type: "turn_start" }
 	| { type: "turn_end"; message: AgentMessage; toolResults: ToolResultMessage[] }
@@ -415,4 +485,5 @@ export type AgentEvent =
 	// Tool execution lifecycle
 	| { type: "tool_execution_start"; toolCallId: string; toolName: string; args: any }
 	| { type: "tool_execution_update"; toolCallId: string; toolName: string; args: any; partialResult: any }
-	| { type: "tool_execution_end"; toolCallId: string; toolName: string; result: any; isError: boolean };
+	| { type: "tool_execution_end"; toolCallId: string; toolName: string; result: any; isError: boolean }
+	| GuardTriggeredEvent;
