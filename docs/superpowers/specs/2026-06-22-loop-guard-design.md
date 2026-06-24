@@ -30,10 +30,11 @@
 /** Tool call 验证失败（参数格式错误、工具不存在）时的处理策略 */
 onMalformedToolCall?: (context: MalformedToolCallContext) => MalformedToolCallAction;
 
-/** 模型因 max_tokens 截断而停止时的处理策略（优先级高于 onPrematureStop） */
+/** 模型因 output length 截断而停止时的处理策略（优先级高于 onPrematureStop）
+ *  对应 stopReason === "length"（非模型主动选择，而是资源限制） */
 onMaxTokens?: (context: MaxTokensContext) => MaxTokensAction;
 
-/** 模型主动停止（非 max_tokens、无 tool call）时的处理策略 */
+/** 模型主动停止（stopReason !== "toolUse" 且 !== "length"，无 tool call）时的处理策略 */
 onPrematureStop?: (context: PrematureStopContext) => PrematureStopAction;
 
 /** 检测到重复 tool call 时的处理策略 */
@@ -45,6 +46,8 @@ maxTurns?: number;
 /** 是否发射 guard_triggered 事件（调试/UI 展示用），默认 false */
 emitGuardEvents?: boolean;
 ```
+
+> **注意**：当前 `stopReason` 类型为 `"stop" | "length" | "toolUse" | "error" | "aborted"`，不存在 `"max_tokens"`。`"length"` 即对应模型输出达到 maxTokens 上限被截断的情况。
 
 ### 1.2 上下文类型
 
@@ -77,6 +80,8 @@ interface RepeatedToolCallContext {
 }
 ```
 
+> **注意**：当前 `runLoop` 中不存在 `turnNumber` 和 `totalToolCallsSoFar`，需新增。`turnNumber` 在每个 `turn_end` 后递增；`totalToolCallsSoFar` 在每次 tool call 执行后累加。
+
 ### 1.3 动作类型
 
 ```typescript
@@ -106,29 +111,50 @@ type RepeatedToolCallAction =
 
 ## 二、Loop 内部改动点
 
+### 2.0 新增运行时状态
+
+在 `runLoop` 中新增局部变量（当前代码中不存在）：
+
+```typescript
+let turnNumber = 0;
+let totalToolCallsSoFar = 0;
+let recentMalformedCount = 0;           // 滑动窗口（10 轮），每次成功 tool call 重置
+let recentToolCallHistory: AgentToolCall[] = [];  // 滑动窗口（最近 10 轮的 tool calls）
+```
+
+在 `turn_end` 后：`turnNumber++`；在每次 tool call 执行后：`totalToolCallsSoFar++`。
+
 ### 2.1 Malformed Tool Call — `prepareToolCall` 函数
 
 **位置**：`agent-loop.ts:619-625`（catch 块）和 `569-576`（Tool not found）
 
-在 catch 块中，返回 error result 之前调用 `onMalformedToolCall`：
+**问题**：`prepareToolCall` 无法访问 `runLoop` 的 `pendingMessages` 局部变量。
+
+**方案**：`onMalformedToolCall` 的 `inject_steering` 动作**不直接操作 `pendingMessages`**，而是通过返回值将 steering 消息传回 `runLoop`。扩展 `prepareToolCall` 的返回类型：
+
+```typescript
+type ToolCallOutcome =
+  | { kind: "deferred"; toolCall: AgentToolCall; tool: AgentTool }
+  | { kind: "immediate"; result: AgentToolResult; isError: boolean }
+  | { kind: "immediate"; result: AgentToolResult; isError: boolean; steeringMessage?: string }
+  //                                                                 ^^^^^^^^^^^^^ 新增
+```
+
+在 `runLoop` 中调用 `prepareToolCall` 后，检查返回值的 `steeringMessage`，有值则 push 到 `pendingMessages`：
 
 ```
-catch (error) {
-  if (config.onMalformedToolCall) {
-    const action = onMalformedToolCall({ toolCall, error, turnNumber, recentMalformedCount });
-    if (action.type === "inject_steering") {
-      pendingMessages.push(userMessage(action.message));
-    }
-    if (action.type === "abort") → 设置 abort 标志
-  }
-  // 所有路径都返回 error result（inject_steering 额外追加了纠正消息）
-  return { kind: "immediate", result: createErrorToolResult(...), isError: true };
+const outcome = prepareToolCall(tc, ...);
+if (outcome.steeringMessage) {
+  pendingMessages.push(userMessage(outcome.steeringMessage));
+}
+if (outcome.kind === "immediate") {
+  // 直接收集 result
 }
 ```
 
 "Tool not found" 同理走此 guard。
 
-需维护 `recentMalformedCount`：在 `runLoop` 中用滑动窗口计数器（窗口 10 轮），每次格式错误 +1，每轮成功执行 tool call 时重置。
+需维护 `recentMalformedCount`：每次格式错误 +1，每轮成功执行 tool call 时重置为 0。
 
 ### 2.2 MaxTokens — streamAssistantResponse 返回后（最高优先级）
 
@@ -137,7 +163,7 @@ catch (error) {
 在 error/aborted 检查之后、tool call 解析之前，插入 `onMaxTokens` 检查：
 
 ```
-if (message.stopReason === "max_tokens") {
+if (message.stopReason === "length") {  // "length" 对应 max_tokens 截断
   if (config.onMaxTokens) {
     const hasIncompleteToolCalls = message.content.some(c => c.type === "toolCall" && isIncomplete(c));
     const action = onMaxTokens({ message, turnNumber, totalToolCallsSoFar, hasIncompleteToolCalls });
@@ -151,7 +177,7 @@ if (message.stopReason === "max_tokens") {
 }
 ```
 
-`onMaxTokens` 优先级高于 `onPrematureStop`——`max_tokens` 截断不是模型的选择，而是资源限制，应**无条件续行**。
+`onMaxTokens` 优先级高于 `onPrematureStop`——`"length"` 截断不是模型的选择，而是资源限制，应**无条件续行**。
 
 ### 2.3 Premature Stop — 内循环退出后
 
@@ -160,19 +186,21 @@ if (message.stopReason === "max_tokens") {
 在内循环退出后、followUp 检查之前插入：
 
 ```
-// 模型说 stop/end_turn（非 toolUse），无 tool call，无 steering
-if (message.stopReason !== "toolUse" && toolCalls.length === 0) {
+// 模型说 stop（非 toolUse 且非 length），无 tool call，无 steering
+if (message.stopReason !== "toolUse" && message.stopReason !== "length" && toolCalls.length === 0) {
   if (config.onPrematureStop) {
     const action = onPrematureStop({ message, turnNumber, totalToolCallsSoFar });
     if (action.type === "continue") {
       pendingMessages = [userMessage(action.message)];
-      continue;  // 回到内循环
+      continue;  // 回到外循环，重新进入内循环
     }
     if (action.type === "abort") → break 外循环
   }
 }
 // 然后是原有的 followUp 检查
 ```
+
+**注意**：`continue` 回到外循环顶部（非内循环），因为此时已在内循环之外。外循环条件检查 `pendingMessages.length > 0` 会自动重新进入内循环。
 
 ### 2.4 Repeated Tool Call — `executeToolCalls` 前
 
@@ -187,10 +215,18 @@ for (const tc of toolCalls) {
   );
   if (prevCalls.length > 0 && config.onRepeatedToolCall) {
     const action = onRepeatedToolCall({ toolCall: tc, previousCalls: prevCalls, repeatCount: prevCalls.length + 1 });
-    // 处理 action...
+    if (action.type === "skip") {
+      // 收集一个空 result 代替执行
+      continue;
+    }
+    if (action.type === "inject_steering") {
+      pendingMessages.push(userMessage(action.message));
+    }
+    if (action.type === "abort") → 设置 abort 标志
   }
+  // 正常执行
 }
-// 执行完毕后将本轮 toolCalls 追加到 history
+// 执行完毕后将本轮 toolCalls 追加到 recentToolCallHistory
 ```
 
 ### 2.5 maxTurns — turn_end 后
@@ -450,7 +486,13 @@ maxRetries: options?.maxRetries ?? 2
 
 ### 4.2 退避加 jitter + cap
 
-当前：`delayMs = baseDelayMs * 2^(attempt-1)`（无 jitter，无 cap）
+当前退避在 `agent-session.ts:2688`：
+
+```typescript
+const delayMs = settings.baseDelayMs * 2 ** (this._retryAttempt - 1);
+```
+
+默认值：`baseDelayMs = 2000`，`maxRetries = 3`。当前无 jitter、无 cap。
 
 改为：
 ```
@@ -465,14 +507,14 @@ delayMs = min(baseDelayMs * 2^(attempt-1), maxRetryDelayMs) * (0.5 + Math.random
 
 ### 4.3 上下文溢出恢复允许多次
 
-`_overflowRecoveryAttempted` 布尔标志改为计数器：
+`agent-session.ts:303` 的 `_overflowRecoveryAttempted` 布尔标志改为计数器：
 
 ```typescript
 private _overflowRecoveryAttempts = 0;
 private readonly MAX_OVERFLOW_RECOVERY = 3;
 ```
 
-每次溢出恢复递增，成功后不重置（同一轮 agent run 内累计）。不同 prompt 调用时重置。
+每次溢出恢复递增，成功后不重置（同一轮 agent run 内累计）。不同 prompt 调用时重置（在 `_runAgentPrompt` 之前的现有重置点）。
 
 ### 4.4 重试 off-by-one 修复
 
@@ -482,17 +524,19 @@ AgentSession 中的重试逻辑需确保 `maxRetries=N` 时实际重试 N 次（
 
 ## 五、事件和类型扩展
 
-### 5.1 AgentEndEvent 扩展
+### 5.1 AgentEndEvent 新增 stopReason
 
+当前定义（types.ts:406）：
 ```typescript
-interface AgentEndEvent {
-  type: "agent_end";
-  messages: AgentMessage[];
-  stopReason?: "normal" | "max_turns" | "guard_abort";  // 新增可选字段
-}
+| { type: "agent_end"; messages: AgentMessage[] }
 ```
 
-- `"normal"` — 默认，模型自然停止
+改为：
+```typescript
+| { type: "agent_end"; messages: AgentMessage[]; stopReason?: "normal" | "max_turns" | "guard_abort" }
+```
+
+- `"normal"` — 默认，模型自然停止（包括 stop/length/error/aborted）
 - `"max_turns"` — 超过 maxTurns 限制
 - `"guard_abort"` — guard 返回 abort 动作
 - 不设值时等同于 `"normal"`，向后兼容
@@ -538,6 +582,7 @@ interface GuardTriggeredEvent {
 | `onRepeatedToolCall` 精确匹配可能漏检 | 第一版用精确 JSON 匹配，简单可靠；后续可升级为模糊匹配 |
 | `Model.resilience` 缺失时默认 medium 可能不足 | 未配置的模型不启用 guard，无此问题；配置了的模型由用户显式指定 resilience |
 | guard 回调抛异常 | loop 中 try/catch 包裹，异常时 fallback 到默认行为 |
+| `prepareToolCall` 无法访问 `pendingMessages` | 通过返回值 `steeringMessage` 传回 `runLoop`，不直接操作局部变量 |
 | Provider 层默认重试增加延迟 | 默认只 2 次，退避有 jitter + cap，总延迟可控在 ~6s 内 |
 
 ---
@@ -545,8 +590,9 @@ interface GuardTriggeredEvent {
 ## 八、向后兼容
 
 - 所有新增字段都是 optional，不配置时行为与当前完全一致
-- `AgentEndEvent.stopReason` 可选字段，现有消费者不受影响
-- `Model.resilience` 不存在于 `Model` 接口，guard 配置通过 `~/.pi/agent/model.json` 独立管理
-- 未在 `model.json` 中配置的模型不启用 guard，行为与当前完全一致
+- `AgentEndEvent.stopReason` 新增可选字段，现有消费者不受影响
+- Guard 配置通过 `~/.pi/agent/models.json` 管理，未配置 `resilience` 的模型不启用 guard
+- `stopReason === "length"` 对应原设计中的 `"max_tokens"`，与 ai 包的实际类型一致
+- `turnNumber` / `totalToolCallsSoFar` 为 `runLoop` 新增局部变量，不改变外部接口
 - Provider 层 `maxRetries` 从 0 改为 2 是行为变更，但只影响 API 调用失败场景
 - 重试 off-by-one 修复是行为修正，减少一次意外重试
