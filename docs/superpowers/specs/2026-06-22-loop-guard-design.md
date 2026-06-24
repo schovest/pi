@@ -353,6 +353,14 @@ export function createLoopGuards(
 
 `overrides` 中的字段覆盖级别默认值。例如 `resilience: "low"` 但 `maxTurns: 100` 会使用 low 级别的所有 guard 策略，但 maxTurns 覆盖为 100。
 
+**resilience 自动推导默认值**：只配 `resilience` 即可，所有 guard 行为和 `maxTurns` 自动按级别填充。用户显式指定的字段优先。
+
+| resilience | maxTurns 默认值 | 说明 |
+|------------|----------------|------|
+| high | undefined（不设上限） | 强模型无需兜底 |
+| medium | 50 | 偶尔跑偏，中等上限 |
+| low | 80 | 弱模型需要更多 turn 自纠 |
+
 **low 级别注入消息模板**：
 
 `onMalformedToolCall`:
