@@ -185,7 +185,7 @@ export type RepeatedToolCallAction =
 export interface GuardTriggeredEvent {
 	type: "guard_triggered";
 	guard: "malformed_tool_call" | "premature_stop" | "repeated_tool_call" | "max_tokens";
-	action: string;
+	action: "error_result" | "inject_steering" | "abort" | "stop" | "continue" | "escalate" | "proceed" | "skip";
 	turnNumber: number;
 	details?: string;
 }
@@ -473,6 +473,8 @@ export interface AgentContext {
 export type AgentEvent =
 	// Agent lifecycle
 	| { type: "agent_start" }
+	/** agent_end event. stopReason defaults to "normal" which covers all model-native stop reasons (stop, length, toolUse, error, aborted).
+	 *  "max_turns" and "guard_abort" are guard-specific reasons added by LoopGuard. */
 	| { type: "agent_end"; messages: AgentMessage[]; stopReason?: "normal" | "max_turns" | "guard_abort" }
 	// Turn lifecycle - a turn is one assistant response + any tool calls/results
 	| { type: "turn_start" }
