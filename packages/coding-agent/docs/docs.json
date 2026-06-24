@@ -46,6 +46,10 @@
         {
           "title": "Subagents",
           "path": "subagents.md"
+        },
+        {
+          "title": "Primary Agents",
+          "path": "primary-agents.md"
         }
       ]
     },

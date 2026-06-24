@@ -48,6 +48,7 @@ For the full first-run flow, see [Quickstart](quickstart.md).
 - [Sessions](sessions.md) - session management, branching, and tree navigation.
 - [Compaction](compaction.md) - context compaction and branch summarization.
 - [Subagents](subagents.md) - task delegation with in-memory focused agents, custom agent definitions, glob-based tool matching, and primary agent persistence.
+- [Primary Agents](primary-agents.md) - session-level agent roles that control system prompt, tool sets, model, and thinking level.
 
 ## Customization
 
