@@ -199,18 +199,30 @@ npx tsgo --noEmit 2>&1 | grep -v "packages/ai/test/"
 node --test packages/<pkg>/test/specific.test.ts
 
 # 项目根目录运行（vitest，适用于使用 vitest 断言的测试文件）
-npx vitest run packages/<pkg>/test/specific.test.ts
+# 必须用 --dir 限定搜索目录，避免 vitest 扫描到 .worktrees/ 中的旧测试
+npx vitest run --dir packages/<pkg>/test <pattern>
+# 示例：运行 subagents 相关测试
+npx vitest run --dir packages/coding-agent/test subagents
+# 示例：运行 agent-loop 测试
+npx vitest run --dir packages/agent/test agent-loop
 
 # 注意：不要从子包目录直接调用 vitest CLI，路径解析会出错。
 # 以下命令**不可用**：
 #   cd packages/tui && node ../../node_modules/vitest/dist/cli.js --run test/foo.ts  ❌
-# 必须从项目根目录运行：
-#   npx vitest run packages/tui/test/foo.ts  ✅
+# 不要直接传文件路径，会触发全目录扫描（包括 .worktrees/）：
+#   npx vitest run packages/tui/test/foo.ts  ❌
+# 必须用 --dir 限定 + pattern 匹配：
+#   npx vitest run --dir packages/tui/test foo  ✅
 ```
 
 **判断用哪种 runner**：
 - 测试文件 `import { describe, it } from "node:test"` → `node --test`
-- 测试文件 `import { describe, it } from "vitest"` 或使用 `expect()` → `npx vitest run`
+- 测试文件 `import { describe, it } from "vitest"` 或使用 `expect()` → `npx vitest run --dir`
+
+**vitest 扫描问题**：
+- vitest 默认 `include` 模式为 `**/*.{test,spec}.{ts,tsx,...}`，从项目根递归扫描
+- `.worktrees/` 下的旧分支代码会被一并发现，导致加载失败或运行错误
+- `--dir` 将搜索根限定到指定目录，彻底避免此问题
 
 #### 已知可忽略的测试错误
 
