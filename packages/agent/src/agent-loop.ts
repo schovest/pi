@@ -24,6 +24,15 @@ import type {
 
 export type AgentEventSink = (event: AgentEvent) => Promise<void> | void;
 
+/** Mutable guard runtime state, shared by reference across the loop call chain. */
+interface GuardRuntimeState {
+	turnNumber: number;
+	totalToolCallsSoFar: number;
+	recentMalformedCount: number;
+	recentToolCallHistory: AgentToolCall[];
+	abort: boolean;
+}
+
 /**
  * Start an agent loop with a new prompt message.
  * The prompt is added to the context and events are emitted for it.
@@ -166,12 +175,22 @@ async function runLoop(
 	// Check for steering messages at start (user may have typed while waiting)
 	let pendingMessages: AgentMessage[] = (await config.getSteeringMessages?.()) || [];
 
+	// Guard runtime state (shared by reference with executeToolCalls chain)
+	const guard: GuardRuntimeState = {
+		turnNumber: 0,
+		totalToolCallsSoFar: 0,
+		recentMalformedCount: 0,
+		recentToolCallHistory: [],
+		abort: false,
+	};
+
 	// Outer loop: continues when queued follow-up messages arrive after agent would stop
-	while (true) {
+	while (!guard.abort) {
 		let hasMoreToolCalls = true;
+		let lastAssistantMessage: AssistantMessage | null = null;
 
 		// Inner loop: process tool calls and steering messages
-		while (hasMoreToolCalls || pendingMessages.length > 0) {
+		while ((hasMoreToolCalls || pendingMessages.length > 0) && !guard.abort) {
 			if (!firstTurn) {
 				await emit({ type: "turn_start" });
 			} else {
@@ -192,30 +211,130 @@ async function runLoop(
 			// Stream assistant response
 			const message = await streamAssistantResponse(currentContext, config, signal, emit, streamFn);
 			newMessages.push(message);
+			lastAssistantMessage = message;
 
 			if (message.stopReason === "error" || message.stopReason === "aborted") {
 				await emit({ type: "turn_end", message, toolResults: [] });
-				await emit({ type: "agent_end", messages: newMessages });
+				await emit({
+					type: "agent_end",
+					messages: newMessages,
+					stopReason: guard.abort ? "guard_abort" : "normal",
+				});
 				return;
+			}
+
+			// Guard: onMaxTokens — stopReason === "length"
+			if (message.stopReason === "length" && config.onMaxTokens) {
+				try {
+					const hasIncompleteToolCalls = message.content.some(
+						(c): c is AgentToolCall => c.type === "toolCall" && !("name" in c),
+					);
+					const action = config.onMaxTokens({
+						message,
+						turnNumber: guard.turnNumber,
+						totalToolCallsSoFar: guard.totalToolCallsSoFar,
+						hasIncompleteToolCalls,
+					});
+					if (action.type === "continue") {
+						pendingMessages = [
+							{ role: "user", content: [{ type: "text", text: action.message }], timestamp: Date.now() },
+						];
+						if (config.emitGuardEvents) {
+							await emit({
+								type: "guard_triggered",
+								guard: "max_tokens",
+								action: "continue",
+								turnNumber: guard.turnNumber,
+							});
+						}
+						continue;
+					}
+					// "escalate" and "stop" fall through to normal flow
+				} catch {
+					// Guard must not throw
+				}
 			}
 
 			// Check for tool calls
 			const toolCalls = message.content.filter((c) => c.type === "toolCall");
 
+			// Guard: onRepeatedToolCall — check before execution
+			if (toolCalls.length > 0 && config.onRepeatedToolCall) {
+				for (const toolCall of toolCalls) {
+					const previousCalls = guard.recentToolCallHistory.filter(
+						(prev) =>
+							prev.name === toolCall.name &&
+							JSON.stringify(prev.arguments) === JSON.stringify(toolCall.arguments),
+					);
+					if (previousCalls.length > 0) {
+						try {
+							const action = config.onRepeatedToolCall({
+								toolCall,
+								previousCalls,
+								repeatCount: previousCalls.length,
+							});
+							if (config.emitGuardEvents) {
+								await emit({
+									type: "guard_triggered",
+									guard: "repeated_tool_call",
+									action: action.type,
+									turnNumber: guard.turnNumber,
+									details: `tool=${toolCall.name} repeatCount=${previousCalls.length}`,
+								});
+							}
+							if (action.type === "abort") {
+								guard.abort = true;
+								break;
+							}
+							if (action.type === "inject_steering") {
+								pendingMessages = [
+									{ role: "user", content: [{ type: "text", text: action.message }], timestamp: Date.now() },
+								];
+							}
+							// "skip" and "proceed" are handled below
+						} catch {
+							// Guard must not throw
+						}
+					}
+				}
+			}
+
 			const toolResults: ToolResultMessage[] = [];
 			hasMoreToolCalls = false;
-			if (toolCalls.length > 0) {
-				const executedToolBatch = await executeToolCalls(currentContext, message, config, signal, emit);
+			if (toolCalls.length > 0 && !guard.abort) {
+				const executedToolBatch = await executeToolCalls(currentContext, message, config, signal, emit, guard);
 				toolResults.push(...executedToolBatch.messages);
 				hasMoreToolCalls = !executedToolBatch.terminate;
+
+				// Collect steering messages from guard hooks in prepareToolCall
+				if (executedToolBatch.steeringMessages.length > 0) {
+					const steeringAsMessages: AgentMessage[] = executedToolBatch.steeringMessages.map((text) => ({
+						role: "user" as const,
+						content: [{ type: "text" as const, text }],
+						timestamp: Date.now(),
+					}));
+					pendingMessages = [...(pendingMessages || []), ...steeringAsMessages];
+				}
 
 				for (const result of toolResults) {
 					currentContext.messages.push(result);
 					newMessages.push(result);
 				}
+
+				// Update guard counters after successful tool execution
+				guard.totalToolCallsSoFar += toolCalls.length;
+				guard.recentMalformedCount = 0; // successful tool calls, reset error count
+				guard.recentToolCallHistory = [...guard.recentToolCallHistory, ...toolCalls];
 			}
 
 			await emit({ type: "turn_end", message, toolResults });
+
+			// Guard: maxTurns check
+			guard.turnNumber++;
+			if (config.maxTurns && guard.turnNumber > config.maxTurns) {
+				await emit({ type: "agent_end", messages: newMessages, stopReason: "max_turns" });
+				return;
+			}
 
 			const nextTurnContext = {
 				message,
@@ -246,11 +365,66 @@ async function runLoop(
 					newMessages,
 				})
 			) {
-				await emit({ type: "agent_end", messages: newMessages });
+				await emit({
+					type: "agent_end",
+					messages: newMessages,
+					stopReason: guard.abort ? "guard_abort" : "normal",
+				});
 				return;
 			}
 
 			pendingMessages = (await config.getSteeringMessages?.()) || [];
+		}
+
+		// Guard: onPrematureStop — inner loop exited without tool calls and not due to length
+		if (!guard.abort && !hasMoreToolCalls && pendingMessages.length === 0) {
+			// Find the last assistant message to check stopReason
+			const lastAssistant = lastAssistantMessage;
+			if (
+				lastAssistant &&
+				lastAssistant.stopReason !== "toolUse" &&
+				lastAssistant.stopReason !== "length" &&
+				config.onPrematureStop
+			) {
+				try {
+					const action = config.onPrematureStop({
+						message: lastAssistant,
+						turnNumber: guard.turnNumber,
+						totalToolCallsSoFar: guard.totalToolCallsSoFar,
+					});
+					if (action.type === "continue") {
+						pendingMessages = [
+							{ role: "user", content: [{ type: "text", text: action.message }], timestamp: Date.now() },
+						];
+						if (config.emitGuardEvents) {
+							await emit({
+								type: "guard_triggered",
+								guard: "premature_stop",
+								action: "continue",
+								turnNumber: guard.turnNumber,
+							});
+						}
+						continue;
+					}
+					if (action.type === "abort") {
+						guard.abort = true;
+						if (config.emitGuardEvents) {
+							await emit({
+								type: "guard_triggered",
+								guard: "premature_stop",
+								action: "abort",
+								turnNumber: guard.turnNumber,
+							});
+						}
+					}
+				} catch {
+					// Guard must not throw
+				}
+			}
+		}
+
+		if (guard.abort) {
+			break;
 		}
 
 		// Agent would stop here. Check for follow-up messages.
@@ -265,7 +439,7 @@ async function runLoop(
 		break;
 	}
 
-	await emit({ type: "agent_end", messages: newMessages });
+	await emit({ type: "agent_end", messages: newMessages, stopReason: guard.abort ? "guard_abort" : "normal" });
 }
 
 /**
@@ -376,20 +550,22 @@ async function executeToolCalls(
 	config: AgentLoopConfig,
 	signal: AbortSignal | undefined,
 	emit: AgentEventSink,
+	guard: GuardRuntimeState,
 ): Promise<ExecutedToolCallBatch> {
 	const toolCalls = assistantMessage.content.filter((c) => c.type === "toolCall");
 	const hasSequentialToolCall = toolCalls.some(
 		(tc) => currentContext.tools?.find((t) => t.name === tc.name)?.executionMode === "sequential",
 	);
 	if (config.toolExecution === "sequential" || hasSequentialToolCall) {
-		return executeToolCallsSequential(currentContext, assistantMessage, toolCalls, config, signal, emit);
+		return executeToolCallsSequential(currentContext, assistantMessage, toolCalls, config, signal, emit, guard);
 	}
-	return executeToolCallsParallel(currentContext, assistantMessage, toolCalls, config, signal, emit);
+	return executeToolCallsParallel(currentContext, assistantMessage, toolCalls, config, signal, emit, guard);
 }
 
 type ExecutedToolCallBatch = {
 	messages: ToolResultMessage[];
 	terminate: boolean;
+	steeringMessages: string[];
 };
 
 async function executeToolCallsSequential(
@@ -399,9 +575,11 @@ async function executeToolCallsSequential(
 	config: AgentLoopConfig,
 	signal: AbortSignal | undefined,
 	emit: AgentEventSink,
+	guard: GuardRuntimeState,
 ): Promise<ExecutedToolCallBatch> {
 	const finalizedCalls: FinalizedToolCallOutcome[] = [];
 	const messages: ToolResultMessage[] = [];
+	const steeringMessages: string[] = [];
 
 	for (const toolCall of toolCalls) {
 		await emit({
@@ -411,9 +589,12 @@ async function executeToolCallsSequential(
 			args: toolCall.arguments,
 		});
 
-		const preparation = await prepareToolCall(currentContext, assistantMessage, toolCall, config, signal);
+		const preparation = await prepareToolCall(currentContext, assistantMessage, toolCall, config, signal, guard);
 		let finalized: FinalizedToolCallOutcome;
 		if (preparation.kind === "immediate") {
+			if (preparation.steeringMessage) {
+				steeringMessages.push(preparation.steeringMessage);
+			}
 			finalized = {
 				toolCall,
 				result: preparation.result,
@@ -445,6 +626,7 @@ async function executeToolCallsSequential(
 	return {
 		messages,
 		terminate: shouldTerminateToolBatch(finalizedCalls),
+		steeringMessages,
 	};
 }
 
@@ -455,8 +637,10 @@ async function executeToolCallsParallel(
 	config: AgentLoopConfig,
 	signal: AbortSignal | undefined,
 	emit: AgentEventSink,
+	guard: GuardRuntimeState,
 ): Promise<ExecutedToolCallBatch> {
 	const finalizedCalls: FinalizedToolCallEntry[] = [];
+	const steeringMessages: string[] = [];
 
 	for (const toolCall of toolCalls) {
 		await emit({
@@ -466,8 +650,11 @@ async function executeToolCallsParallel(
 			args: toolCall.arguments,
 		});
 
-		const preparation = await prepareToolCall(currentContext, assistantMessage, toolCall, config, signal);
+		const preparation = await prepareToolCall(currentContext, assistantMessage, toolCall, config, signal, guard);
 		if (preparation.kind === "immediate") {
+			if (preparation.steeringMessage) {
+				steeringMessages.push(preparation.steeringMessage);
+			}
 			const finalized = {
 				toolCall,
 				result: preparation.result,
@@ -512,6 +699,7 @@ async function executeToolCallsParallel(
 	return {
 		messages,
 		terminate: shouldTerminateToolBatch(orderedFinalizedCalls),
+		steeringMessages,
 	};
 }
 
@@ -566,12 +754,38 @@ async function prepareToolCall(
 	toolCall: AgentToolCall,
 	config: AgentLoopConfig,
 	signal: AbortSignal | undefined,
+	guard: GuardRuntimeState,
 ): Promise<PreparedToolCall | ImmediateToolCallOutcome> {
 	const tool = currentContext.tools?.find((t) => t.name === toolCall.name);
 	if (!tool) {
+		const errorStr = `Tool ${toolCall.name} not found`;
+		guard.recentMalformedCount++;
+		if (config.onMalformedToolCall) {
+			try {
+				const action = config.onMalformedToolCall({
+					toolCall,
+					error: errorStr,
+					turnNumber: guard.turnNumber,
+					recentMalformedCount: guard.recentMalformedCount,
+				});
+				if (action.type === "inject_steering") {
+					return {
+						kind: "immediate",
+						result: createErrorToolResult(errorStr),
+						isError: true,
+						steeringMessage: action.message,
+					};
+				}
+				if (action.type === "abort") {
+					guard.abort = true;
+				}
+			} catch {
+				// Guard must not throw
+			}
+		}
 		return {
 			kind: "immediate",
-			result: createErrorToolResult(`Tool ${toolCall.name} not found`),
+			result: createErrorToolResult(errorStr),
 			isError: true,
 		};
 	}
@@ -618,9 +832,34 @@ async function prepareToolCall(
 			args: validatedArgs,
 		};
 	} catch (error) {
+		const errorStr = error instanceof Error ? error.message : String(error);
+		guard.recentMalformedCount++;
+		if (config.onMalformedToolCall) {
+			try {
+				const action = config.onMalformedToolCall({
+					toolCall,
+					error: errorStr,
+					turnNumber: guard.turnNumber,
+					recentMalformedCount: guard.recentMalformedCount,
+				});
+				if (action.type === "inject_steering") {
+					return {
+						kind: "immediate",
+						result: createErrorToolResult(errorStr),
+						isError: true,
+						steeringMessage: action.message,
+					};
+				}
+				if (action.type === "abort") {
+					guard.abort = true;
+				}
+			} catch {
+				// Guard must not throw
+			}
+		}
 		return {
 			kind: "immediate",
-			result: createErrorToolResult(error instanceof Error ? error.message : String(error)),
+			result: createErrorToolResult(errorStr),
 			isError: true,
 		};
 	}
