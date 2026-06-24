@@ -18,6 +18,7 @@ import type {
 } from "../types.ts";
 import { collectEntriesForBranchSummary, generateBranchSummary } from "./compaction/branch-summarization.ts";
 import { compact, DEFAULT_COMPACTION_SETTINGS, prepareCompaction } from "./compaction/compaction.ts";
+import { createLoopGuards } from "./loop-guards.ts";
 import { convertToLlm } from "./messages.ts";
 import { formatPromptTemplateInvocation } from "./prompt-templates.ts";
 import { formatSkillInvocation } from "./skills.ts";
@@ -196,6 +197,7 @@ export class AgentHarness<
 	private followUpQueueMode: QueueMode;
 	private nextTurnQueue: AgentMessage[] = [];
 	private handlers = new Map<string, Set<AgentHarnessHandler>>();
+	private loopGuardResolver?: (modelId: string) => import("./loop-guards.ts").ModelEntryGuardFields | undefined;
 
 	constructor(options: AgentHarnessOptions<TSkill, TPromptTemplate, TTool>) {
 		this.env = options.env;
@@ -220,6 +222,7 @@ export class AgentHarness<
 		this.validateToolNames(this.activeToolNames);
 		this.steeringQueueMode = options.steeringMode ?? "one-at-a-time";
 		this.followUpQueueMode = options.followUpMode ?? "one-at-a-time";
+		this.loopGuardResolver = options.loopGuardResolver;
 	}
 
 	private getHandlers(type: string): Set<AgentHarnessHandler> | undefined {
@@ -423,6 +426,8 @@ export class AgentHarness<
 		setTurnState: (turnState: AgentHarnessTurnState<TSkill, TPromptTemplate, TTool>) => void,
 	): AgentLoopConfig {
 		const turnState = getTurnState();
+		const guardConfig = this.loopGuardResolver?.(turnState.model.id);
+		const guards = guardConfig?.resilience ? createLoopGuards(guardConfig.resilience, guardConfig) : {};
 		return {
 			model: turnState.model,
 			reasoning: turnState.thinkingLevel === "off" ? undefined : turnState.thinkingLevel,
@@ -466,6 +471,7 @@ export class AgentHarness<
 			},
 			getSteeringMessages: async () => this.drainQueuedMessages(this.steerQueue, this.steeringQueueMode),
 			getFollowUpMessages: async () => this.drainQueuedMessages(this.followUpQueue, this.followUpQueueMode),
+			...guards,
 		};
 	}
 

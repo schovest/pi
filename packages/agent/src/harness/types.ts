@@ -845,6 +845,9 @@ export interface AgentHarnessOptions<
 	activeToolNames?: string[];
 	steeringMode?: QueueMode;
 	followUpMode?: QueueMode;
+	/** Resolves loop guard configuration for a given model ID.
+	 *  Returns undefined if no guard should be active (no resilience configured). */
+	loopGuardResolver?: (modelId: string) => import("./loop-guards.ts").ModelEntryGuardFields | undefined;
 }
 
 export type { AgentHarness } from "./agent-harness.ts";
