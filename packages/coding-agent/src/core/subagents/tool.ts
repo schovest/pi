@@ -123,7 +123,7 @@ function recentToolCalls(events: SubagentRunEvent[], max: number): string {
 		.slice(-max)
 		.map((e) => {
 			const args = formatToolArgs(e.currentTool!, e.currentToolArgs);
-			return `--${e.currentTool}${args ? ` ${args}` : ""}`;
+			return `> ${e.currentTool}${args ? ` ${args}` : ""}`;
 		})
 		.join("\n");
 }
