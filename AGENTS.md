@@ -15,139 +15,18 @@
 二进制发行应自带关键能力，避免首次运行依赖网络安装。
 新增能力时必须明确它属于哪一层。
 
-## 架构概览
+## 架构参考索引
 
-### 包依赖关系
+详细架构文档见 [`docs/specs/architecture.md`](docs/specs/architecture.md)，以下为摘要索引。**更新 `docs/specs/` 下文件时须同步更新本索引。**
 
-```
-                    ┌─────────────┐
-                    │ coding-agent │  CLI/TUI 应用，入口包
-                    └──────┬──────┘
-                           │ 依赖
-              ┌────────────┼────────────┐
-              ▼            ▼
-        ┌──────────┐ ┌──────────┐
-        │  agent   │ │   tui    │
-        │ (核心框架) │ │ (终端UI) │
-        └────┬─────┘ └──────────┘
-             │ 依赖
-             ▼
-        ┌──────────┐
-        │    ai    │
-        │(统一LLM) │
-        └──────────┘
-```
-
-### 各包职责
-
-| 包 | npm 名 | 职责 | 关键导出 |
-|---|---|---|---|
-| `agent` | `pi-agent-core` | Agent 循环、会话树、技能/模板、压缩、执行环境 | `Agent`, `AgentHarness`, `Session`, `AgentLoop` |
-| `ai` | `pi-ai` | 统一 LLM API、多 provider 适配、模型注册表、OAuth | `stream()`, `complete()`, `getModel()`, providers |
-| `tui` | `pi-tui` | 差分渲染引擎、终端组件库、键盘/快捷键系统 | `TUI`, `Terminal`, components |
-| `coding-agent` | `pi-coding-agent` | CLI/TUI/RPC 三种运行模式、内置工具、扩展系统、SDK | `createAgentSession()`, tools, `InteractiveMode` |
-
-### 核心数据流
-
-一次 prompt 的完整调用链：
-
-```
-用户输入
-  │
-  ▼
-InteractiveMode / PrintMode / RpcMode
-  │
-  ▼
-AgentSession.prompt()                    ← core/agent-session.ts
-  │  创建 TurnState，注入 nextTurn 队列
-  ▼
-AgentHarness.prompt()                    ← agent/harness/agent-harness.ts
-  │  组装 system prompt + skills + 上下文文件
-  │  创建 streamFn（处理 API key、headers、hooks）
-  ▼
-Agent.prompt()                           ← agent/agent.ts
-  │  管理 transcript、steering/follow-up 队列
-  ▼
-runAgentLoop()                           ← agent/agent-loop.ts
-  │  循环：convertToLlm → streamFn → 解析 tool calls → 执行 → 检查消息队列
-  ▼
-stream() / streamSimple()                ← ai/stream.ts
-  │  查找 provider → 调用 LLM API → 返回事件流
-  ▼
-Provider (anthropic/openai/google/...)   ← ai/providers/*.ts
-  │  发送 HTTP 请求，解析 SSE 响应
-  ▼
-AssistantMessageEventStream              ← ai/utils/event-stream.ts
-  │  text_start/delta/end, thinking_*, toolcall_*, done, error
-  ▼
-AgentLoop 处理 tool calls
-  │  beforeToolCall → 执行 → afterToolCall
-  ▼
-Session.appendMessage()                  ← agent/harness/session/session.ts
-  │  持久化到 JSONL 文件
-  ▼
-AgentSession 自动持久化 + 事件通知
-```
-
-### 三层 Agent 抽象
-
-| 层 | 类 | 文件 | 职责 |
-|---|---|---|---|
-| 低层 | `agentLoop` / `runAgentLoop` | `agent/agent-loop.ts` | 纯算法：LLM 调用循环、tool call 执行、事件发射 |
-| 中层 | `Agent` | `agent/agent.ts` | 有状态封装：transcript 管理、steering/follow-up 队列、abort |
-| 高层 | `AgentHarness` | `agent/harness/agent-harness.ts` | 生产级集成：会话持久化、技能/模板、压缩、执行环境、hooks |
-| 应用层 | `AgentSession` | `coding-agent/core/agent-session.ts` | 应用特化：内置工具、扩展事件、模型切换、自动压缩 |
-
-### 扩展点与能力归属
-
-新增能力时，按以下表格确定归属层：
-
-| 能力类型 | 归属位置 | 配置/注册方式 | 示例 |
-|---|---|---|---|
-| 核心运行时能力 | `packages/agent/src/` | 修改源码，需上游同步考虑 | 新的 AgentLoop 策略、新的 Session 条目类型 |
-| 可安装扩展 | `pi install <source>` 或 `.pi/extensions/*.ts` | install.sh 交互选择 + settings.json | todo、ask-user-question、tps 等 |
-| 项目级 skill | `.pi/skills/*.md` | SKILL.md frontmatter | add-llm-provider.md |
-| 项目级 prompt | `.pi/prompts/*.md` | YAML frontmatter | pr.md, is.md |
-| 项目级扩展 | `.pi/extensions/*.ts` | ExtensionAPI 注册 | tps.ts, redraws.ts |
-| 内置工具 | `coding-agent/core/tools/` | `createXxxTool()` 工厂 | bash, read, edit, write, find, grep, ls |
-| 工具匹配 | `coding-agent/core/tool-matcher.ts` | glob 模式（minimatch），支持 `includedTools`/`excludedTools` | subagent 工具过滤、`--tools`/`--exclude-tools` CLI |
-| Primary Agent | `~/.pi/agent/primary-agents/*.md` 或 `.pi/primary-agents/*.md` | `defaultPrimaryAgent` settings | build, plan |
-| Subagent | `~/.pi/agent/subagents/*.md` 或 `.pi/subagents/*.md` | `includedTools`/`excludedTools` frontmatter | explorer, worker |
-| MCP 工具 | Claude-compatible 插件（写入 `mcp.json`） | `plugins` / `pluginMarketplaces` settings | 外部 MCP server |
-| Claude 兼容插件 | npm 包安装 | `plugins` / `pluginMarketplaces` settings | 社区插件 |
-| 用户配置 | `~/.pi/agent/settings.json` | SettingsManager 读写 | API key、默认模型 |
-| 项目配置 | `.pi/settings.json` | SettingsManager 读写 | 项目级 mcpServers、model overrides、defaultPrimaryAgent |
-| 系统提示词 | `coding-agent/core/system-prompt.ts:buildSystemPrompt()` | 优先级：Primary Agent → SYSTEM.md → 默认 → APPEND_SYSTEM.md → 上下文文件 → Skills | `.pi/SYSTEM.md`、`APPEND_SYSTEM.md`、`--system-prompt` |
-| 主题 | `.pi/themes/*.json` | Theme 类加载 | dark.json, light.json |
-| 快捷键 | `.pi/keybindings.json` | KeybindingsManager | 自定义键绑定 |
-
-**关键约束**：
-- 扩展通过 `pi install` 安装或 `.pi/extensions/` 发现；核心扩展列表见 `install.sh`
-- MCP 能力通过 Claude-compatible 插件系统间接支持，插件安装时将 MCP 服务器配置写入 `mcp.json`；默认 proxy 模式控制上下文占用
-- Claude 兼容插件使用独立 `plugins` settings，不污染 Pi 原生 `packages` 配置
-- Subagent 工具通过 `includedTools`/`excludedTools` glob 模式控制工具权限；旧 `tools` 字段自动映射
-- Primary agent 的 system prompt 始终 prepend 在 SYSTEM.md 之前
-- 内置工具默认启用 `read, bash, edit, write`；`grep, find, ls` 按需启用
-
-### 关键路径入口
-
-修改以下功能时，从这些入口开始追踪：
-
-| 功能 | 主入口 | 关键调用链 |
-|---|---|---|
-| **工具注册** | `coding-agent/core/sdk.ts:createAgentSession()` | → `createXxxTool()` → `AgentTool` 接口 → `AgentHarness` 注册 |
-| **工具匹配** | `coding-agent/core/tool-matcher.ts:resolveActiveTools()` | glob 模式 → `includedTools`/`excludedTools` → 最终工具集 |
-| **模型解析** | `coding-agent/core/model-resolver.ts:findInitialModel()` | → `ModelRegistry.getModel()` → `ai/models.ts` → provider 匹配 |
-| **会话持久化** | `agent/harness/session/jsonl-storage.ts` | → `Session.appendMessage()` → `JsonlSessionStorage.saveEntry()` |
-| **扩展加载** | `coding-agent/core/extensions/loader.ts:discoverAndLoadExtensions()` | → `ExtensionRunner` → 事件分发 → 扩展 handler |
-| **技能加载** | `agent/harness/skills.ts:loadSkills()` | → 目录扫描 → SKILL.md 解析 → `formatSkillsForSystemPrompt()` |
-| **系统提示词** | `coding-agent/core/system-prompt.ts:buildSystemPrompt()` | Primary Agent → SYSTEM.md → 默认 → Append → 上下文文件 → Skills |
-| **Primary Agent** | `coding-agent/core/primary-agents/discovery.ts` | → `switchPrimaryAgent()` → 工具重解析 → `defaultPrimaryAgent` 持久化 |
-| **压缩** | `coding-agent/core/compaction/compaction.ts:compact()` | → `findCutPoint()` → `generateSummary()` → 会话条目重写 |
-| **子 agent** | `coding-agent/core/subagents/runner.ts:runSubagents()` | → `SubagentDefinition` → `resolveActiveTools()` → 独立 AgentSession |
-| **MCP 连接** | Claude Plugin 系统（写入 `mcp.json`） | → 外部 MCP 客户端进程读取配置 → tool 注册 |
-| **TUI 渲染** | `tui/src/tui.ts:TUI.render()` | → 差分计算 → `Terminal.write()` |
-| **交互模式** | `coding-agent/modes/interactive/interactive-mode.ts` | → 键盘事件循环 → 消息渲染 → 斜杠命令处理 |
+| 章节 | 文件 | 摘要 |
+|------|------|------|
+| 包依赖关系 | `docs/specs/architecture.md#包依赖关系` | coding-agent → agent + tui → ai |
+| 各包职责 | `docs/specs/architecture.md#各包职责` | agent/ai/tui/coding-agent 四包职责与关键导出 |
+| 核心数据流 | `docs/specs/architecture.md#核心数据流` | 一次 prompt 的完整调用链：Mode → AgentSession → Agent → runAgentLoop → streamSimple → Provider → EventStream |
+| Agent 抽象层 | `docs/specs/architecture.md#agent-抽象层` | 低层 agentLoop → 中层 Agent → 应用层 AgentSession；AgentHarness 为独立抽象，不在主调用链 |
+| 扩展点与能力归属 | `docs/specs/architecture.md#扩展点与能力归属` | 16 类能力的归属位置、配置方式和关键约束 |
+| 关键路径入口 | `docs/specs/architecture.md#关键路径入口` | 13 个功能模块的入口文件和调用链 |
 
 ## 交流风格
 
@@ -306,6 +185,10 @@ git tag vx.y.z
 ## 更新覆盖
 
 项目中发生变更与 `AGENTS.md` 不一致的可对 `AGENTS.md` 修改，但需要主动告知用户变更内容
+
+### 架构文档索引同步
+
+更新 `docs/specs/` 下的文件时，须同步更新本文件中「架构参考索引」的摘要列，确保索引与实际内容一致。新增章节须在索引表中新增对应行；删除章节须移除对应行；章节内容变更须更新摘要描述。
 
 ## 用户覆盖
 
