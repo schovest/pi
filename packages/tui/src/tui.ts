@@ -1300,10 +1300,6 @@ export class TUI extends Container {
 
 	/** Composite all overlays into content lines (sorted by focusOrder, higher = on top). */
 	private compositeOverlays(lines: string[], termWidth: number, termHeight: number): string[] {
-		if (this.overlayStack.length === 0) {
-			this.renderedOverlayLayouts = [];
-			return lines;
-		}
 		const result = [...lines];
 
 		// Pre-render all visible overlays and calculate positions
@@ -1618,7 +1614,8 @@ export class TUI extends Container {
 		// Truncate to screen height
 		newLines = newLines.slice(0, height);
 
-		// Composite overlays
+		// Composite overlays (clear stale layout cache first, then let compositeOverlays refill it)
+		this.renderedOverlayLayouts = [];
 		if (this.overlayStack.length > 0) {
 			newLines = this.compositeOverlays([...newLines], width, height);
 		}
