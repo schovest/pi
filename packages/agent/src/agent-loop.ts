@@ -24,6 +24,14 @@ import type {
 
 export type AgentEventSink = (event: AgentEvent) => Promise<void> | void;
 
+/** Pending guard_triggered event collected during prepareToolCall, emitted later by runLoop. */
+interface PendingGuardEvent {
+	guard: "malformed_tool_call" | "premature_stop" | "repeated_tool_call" | "max_tokens";
+	action: "error_result" | "inject_steering" | "abort" | "stop" | "continue" | "escalate" | "proceed" | "skip";
+	turnNumber: number;
+	details?: string;
+}
+
 /** Mutable guard runtime state, shared by reference across the loop call chain. */
 interface GuardRuntimeState {
 	turnNumber: number;
@@ -31,6 +39,8 @@ interface GuardRuntimeState {
 	recentMalformedCount: number;
 	recentToolCallHistory: AgentToolCall[];
 	abort: boolean;
+	skippedToolCallIds: Set<string>;
+	pendingGuardEvents: PendingGuardEvent[];
 }
 
 /**
@@ -182,6 +192,8 @@ async function runLoop(
 		recentMalformedCount: 0,
 		recentToolCallHistory: [],
 		abort: false,
+		skippedToolCallIds: new Set(),
+		pendingGuardEvents: [],
 	};
 
 	// Outer loop: continues when queued follow-up messages arrive after agent would stop
@@ -291,7 +303,10 @@ async function runLoop(
 									{ role: "user", content: [{ type: "text", text: action.message }], timestamp: Date.now() },
 								];
 							}
-							// "skip" and "proceed" are handled below
+							if (action.type === "skip") {
+								guard.skippedToolCallIds.add(toolCall.id);
+							}
+							// "proceed" requires no action
 						} catch {
 							// Guard must not throw
 						}
@@ -301,7 +316,27 @@ async function runLoop(
 
 			const toolResults: ToolResultMessage[] = [];
 			hasMoreToolCalls = false;
-			if (toolCalls.length > 0 && !guard.abort) {
+
+			// Handle skipped tool calls (from onRepeatedToolCall skip action)
+			const activeToolCalls = toolCalls.filter((tc) => !guard.skippedToolCallIds.has(tc.id));
+			const skippedToolCalls = toolCalls.filter((tc) => guard.skippedToolCallIds.has(tc.id));
+			guard.skippedToolCallIds.clear();
+
+			// Create placeholder results for skipped tool calls
+			for (const skipped of skippedToolCalls) {
+				const placeholder: ToolResultMessage = {
+					role: "toolResult",
+					toolCallId: skipped.id,
+					toolName: skipped.name,
+					content: [{ type: "text", text: "[skipped by repeated_tool_call guard]" }],
+					details: {},
+					isError: false,
+					timestamp: Date.now(),
+				};
+				toolResults.push(placeholder);
+			}
+
+			if (activeToolCalls.length > 0 && !guard.abort) {
 				const executedToolBatch = await executeToolCalls(currentContext, message, config, signal, emit, guard);
 				toolResults.push(...executedToolBatch.messages);
 				hasMoreToolCalls = !executedToolBatch.terminate;
@@ -316,15 +351,30 @@ async function runLoop(
 					pendingMessages = [...(pendingMessages || []), ...steeringAsMessages];
 				}
 
-				for (const result of toolResults) {
-					currentContext.messages.push(result);
-					newMessages.push(result);
+				// Emit pending guard events collected during prepareToolCall
+				if (config.emitGuardEvents && guard.pendingGuardEvents.length > 0) {
+					for (const ge of guard.pendingGuardEvents) {
+						await emit({
+							type: "guard_triggered",
+							guard: ge.guard,
+							action: ge.action,
+							turnNumber: ge.turnNumber,
+							details: ge.details,
+						});
+					}
+					guard.pendingGuardEvents = [];
 				}
 
 				// Update guard counters after successful tool execution
-				guard.totalToolCallsSoFar += toolCalls.length;
+				guard.totalToolCallsSoFar += activeToolCalls.length;
 				guard.recentMalformedCount = 0; // successful tool calls, reset error count
-				guard.recentToolCallHistory = [...guard.recentToolCallHistory, ...toolCalls];
+				guard.recentToolCallHistory = [...guard.recentToolCallHistory, ...activeToolCalls];
+			}
+
+			// Persist all tool results (including skipped placeholders)
+			for (const result of toolResults) {
+				currentContext.messages.push(result);
+				newMessages.push(result);
 			}
 
 			await emit({ type: "turn_end", message, toolResults });
@@ -768,6 +818,14 @@ async function prepareToolCall(
 					turnNumber: guard.turnNumber,
 					recentMalformedCount: guard.recentMalformedCount,
 				});
+				if (config.emitGuardEvents) {
+					guard.pendingGuardEvents.push({
+						guard: "malformed_tool_call",
+						action: action.type,
+						turnNumber: guard.turnNumber,
+						details: `tool=${toolCall.name} error=${errorStr}`,
+					});
+				}
 				if (action.type === "inject_steering") {
 					return {
 						kind: "immediate",
@@ -842,6 +900,14 @@ async function prepareToolCall(
 					turnNumber: guard.turnNumber,
 					recentMalformedCount: guard.recentMalformedCount,
 				});
+				if (config.emitGuardEvents) {
+					guard.pendingGuardEvents.push({
+						guard: "malformed_tool_call",
+						action: action.type,
+						turnNumber: guard.turnNumber,
+						details: `tool=${toolCall.name} error=${errorStr}`,
+					});
+				}
 				if (action.type === "inject_steering") {
 					return {
 						kind: "immediate",
