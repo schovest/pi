@@ -225,21 +225,120 @@ type ModelResilience = "high" | "medium" | "low";
 // low:    7B-14B 本地模型 — 频繁格式错误，容易跑偏，过早停止
 ```
 
-在 `@earendil-works/pi-ai` 的 `Model<TApi>` 接口（ai/types.ts:568-598）中新增可选字段：
+### 3.2 模型 Guard 配置
 
-```typescript
-interface Model<TApi = string> {
-  // ... 现有字段
-  resilience?: ModelResilience;  // 不设值时默认 "medium"
+在现有 `~/.pi/agent/models.json` 的模型条目上扩展 `resilience` 和 guard 覆盖字段。**只有配置了 `resilience` 的模型才启用 guard，未配置的模型行为与当前完全一致。**
+
+现有配置格式（扩展前）：
+
+```json
+{
+  "providers": {
+    "cli-proxy-api": {
+      "baseUrl": "http://api.et.net:8317",
+      "api": "anthropic-messages",
+      "apiKey": "sk-cpa-kali",
+      "models": [
+        { "id": "deepseek-v4-pro", "contextWindow": 1000000, "reasoning": true },
+        { "id": "glm-5.1", "reasoning": true, "contextWindow": 200000 }
+      ]
+    }
+  }
 }
 ```
 
-### 3.2 Guard 策略工厂
+扩展后（loop-guard 生效）：
+
+```json
+{
+  "providers": {
+    "cli-proxy-api": {
+      "baseUrl": "http://api.et.net:8317",
+      "api": "anthropic-messages",
+      "apiKey": "sk-cpa-kali",
+      "models": [
+        {
+          "id": "deepseek-v4-pro",
+          "contextWindow": 1000000,
+          "reasoning": true,
+          "thinkingLevelMap": { "xhigh": "xhigh" },
+          "resilience": "high"
+        },
+        {
+          "id": "deepseek-v4-flash",
+          "contextWindow": 1000000,
+          "reasoning": true,
+          "thinkingLevelMap": { "xhigh": "xhigh" },
+          "resilience": "medium"
+        },
+        {
+          "id": "glm-5.1",
+          "reasoning": true,
+          "contextWindow": 200000,
+          "thinkingLevelMap": { "xhigh": "xhigh" },
+          "resilience": "medium",
+          "maxTurns": 60
+        },
+        {
+          "id": "qwen3.6-35b-a3b",
+          "reasoning": true,
+          "contextWindow": 128000,
+          "thinkingLevelMap": { "xhigh": "xhigh" },
+          "resilience": "low",
+          "maxTurns": 100
+        },
+        {
+          "id": "kimi-k2.6",
+          "contextWindow": 256000,
+          "reasoning": true,
+          "thinkingLevelMap": { "xhigh": "xhigh" }
+        }
+      ]
+    }
+  }
+}
+```
+
+上例中 `kimi-k2.6` 没有 `resilience` 字段，不启用 guard。
+
+类型扩展（在现有模型条目类型上追加）：
+
+```typescript
+/** models.json 模型条目的 guard 扩展字段 */
+interface ModelEntryGuardFields {
+  resilience?: ModelResilience;   // 启用 guard 的标记，同时指定韧性级别
+  maxTurns?: number;              // 覆盖级别默认的 maxTurns
+  onPrematureStop?: "stop" | "continue" | "abort";  // 覆盖级别默认策略
+  onMalformedToolCall?: "error_result" | "inject_steering" | "abort";
+  onMaxTokens?: "continue" | "escalate" | "stop";
+  onRepeatedToolCall?: "proceed" | "inject_steering" | "skip" | "abort";
+}
+```
+
+查找逻辑：
+
+```typescript
+export function findModelGuardConfig(
+  modelsJson: ModelsJsonConfig,
+  modelId: string,
+): ModelEntryGuardFields | undefined {
+  for (const provider of Object.values(modelsJson.providers)) {
+    const model = provider.models.find(m => m.id === modelId);
+    if (model?.resilience) return model;
+  }
+  return undefined;
+}
+```
+
+### 3.3 Guard 策略工厂
 
 新增文件 `packages/agent/src/harness/loop-guards.ts`：
 
 ```typescript
-export function createLoopGuards(level: ModelResilience): Partial<AgentLoopConfig>
+export function createLoopGuards(
+  level: ModelResilience,
+  overrides?: ModelEntryGuardFields,
+): Partial<AgentLoopConfig>
 ```
 
 三级策略：
@@ -251,6 +350,8 @@ export function createLoopGuards(level: ModelResilience): Partial<AgentLoopConfi
 | `onPrematureStop` | `stop` | `continue`（toolCallsSoFar < 3 时） | `continue`（toolCallsSoFar < 5 时） |
 | `onRepeatedToolCall` | `proceed` | `inject_steering`（repeatCount ≥ 3） | `inject_steering`（repeatCount ≥ 2）+ `skip`（≥ 4） |
 | `maxTurns` | undefined（不设上限） | 50 | 80 |
+
+`overrides` 中的字段覆盖级别默认值。例如 `resilience: "low"` 但 `maxTurns: 100` 会使用 low 级别的所有 guard 策略，但 maxTurns 覆盖为 100。
 
 **low 级别注入消息模板**：
 
@@ -287,7 +388,7 @@ incomplete part."
 you may be stuck in a loop. Consider a different approach or verify the tool result."
 ```
 
-### 3.3 AgentHarness 集成
+### 3.4 AgentHarness 集成
 
 在 `AgentHarness.createLoopConfig()` (agent-harness.ts:421-470) 中注入 guard：
 
@@ -297,34 +398,32 @@ private createLoopConfig(
   setTurnState: (turnState: AgentHarnessTurnState<...>) => void,
 ): AgentLoopConfig {
   const turnState = getTurnState();
-  const resilience = turnState.model.resilience ?? "medium";
-  const guards = createLoopGuards(resilience);
+  const modelId = turnState.model.id;
+
+  // 从 models.json 查找 guard 配置，未配置 resilience 则不启用
+  const guardConfig = findModelGuardConfig(this.modelsJsonConfig, modelId);
+  const guards = guardConfig
+    ? createLoopGuards(guardConfig.resilience!, guardConfig)
+    : {};
+
   return {
     model: turnState.model,
     // ... 现有字段
-    ...guards,  // guard 回调展开到 config 中
+    ...guards,  // 未配置时为空对象，行为与当前一致
   };
 }
 ```
 
-`setModel()` 切换模型时，通过 `prepareNextTurn` 回调在下一个 turn 重新注入对应级别的 guards（`prepareNextTurn` 已在 `createLoopConfig` 中配置，会调用 `createTurnState()` 获取最新模型）。
+`AgentHarness` 构造时接收 `modelsJsonConfig`（已在现有代码中加载 `models.json`，直接复用）。
 
-### 3.4 用户显式配置覆盖
+`setModel()` 切换模型时，通过 `prepareNextTurn` 回调在下一个 turn 重新查找对应模型的 guard 配置（`prepareNextTurn` 已在 `createLoopConfig` 中配置，会调用 `createTurnState()` 获取最新模型）。
 
-用户可在 `settings.json` 中覆盖任何 guard 默认值：
+### 3.5 不改 Model 接口和生成脚本
 
-```json
-{
-  "loopGuards": {
-    "maxTurns": 100,
-    "resilience": "low"
-  }
-}
-```
-
-显式配置优先于模型级别默认值。优先级：用户 settings > 模型 `resilience` 字段 > 级别默认策略。
-
-AgentHarness 构造时接收可选的 `loopGuards` 配置，在 `createLoopConfig()` 中与模型级别 guards 合并（用户配置覆盖模型默认）。
+- `Model<TApi>` 接口不加 `resilience` 字段
+- `generate-models.ts` 不改动
+- `models.generated.ts` 不改动
+- Guard 配置完全在 agent 运行时层，与 ai 包解耦
 
 ---
 
@@ -413,6 +512,8 @@ interface GuardTriggeredEvent {
 | `Agent` 类 (`agent.ts`) | guard 通过 AgentLoopConfig 传入，Agent 只是透传 |
 | `streamAssistantResponse` | 错误恢复由 AgentSession 处理 |
 | `AgentHarness` 核心流程 | 只在 `createLoopConfig()` 中追加 guard 字段，不改其他方法 |
+| `Model<TApi>` 接口 | 不加 resilience 字段，guard 配置与 ai 包解耦 |
+| `generate-models.ts` / `models.generated.ts` | 不改生成脚本和生成产物 |
 | `convertToLlm` / `transformContext` | 与 guard 无关 |
 | 压缩算法 (`compaction.ts`) | 只改溢出恢复次数，不改压缩逻辑 |
 | 事件序列基本结构 | guard 注入走现有 message_start/message_end 流程 |
@@ -427,7 +528,7 @@ interface GuardTriggeredEvent {
 | `onPrematureStop` 误判续行 | 续行消息含"如果确实做完了请明确告知"；low 级别仅在 toolCallsSoFar < 5 时续行 |
 | `onMaxTokens` 无限续行循环 | maxTurns 硬上限兜底；续行消息明确要求"不要重复已写内容" |
 | `onRepeatedToolCall` 精确匹配可能漏检 | 第一版用精确 JSON 匹配，简单可靠；后续可升级为模糊匹配 |
-| `Model.resilience` 缺失时默认 medium 可能不足 | 用户可通过 settings.json 覆盖；长期靠生成脚本预设 |
+| `Model.resilience` 缺失时默认 medium 可能不足 | 未配置的模型不启用 guard，无此问题；配置了的模型由用户显式指定 resilience |
 | guard 回调抛异常 | loop 中 try/catch 包裹，异常时 fallback 到默认行为 |
 | Provider 层默认重试增加延迟 | 默认只 2 次，退避有 jitter + cap，总延迟可控在 ~6s 内 |
 
@@ -437,6 +538,7 @@ interface GuardTriggeredEvent {
 
 - 所有新增字段都是 optional，不配置时行为与当前完全一致
 - `AgentEndEvent.stopReason` 可选字段，现有消费者不受影响
-- `Model.resilience` 默认 `"medium"`，行为接近当前
+- `Model.resilience` 不存在于 `Model` 接口，guard 配置通过 `~/.pi/agent/model.json` 独立管理
+- 未在 `model.json` 中配置的模型不启用 guard，行为与当前完全一致
 - Provider 层 `maxRetries` 从 0 改为 2 是行为变更，但只影响 API 调用失败场景
 - 重试 off-by-one 修复是行为修正，减少一次意外重试
