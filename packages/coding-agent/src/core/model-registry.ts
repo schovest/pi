@@ -166,6 +166,8 @@ const ModelDefinitionSchema = Type.Object({
 	),
 	contextWindow: Type.Optional(Type.Number()),
 	maxTokens: Type.Optional(Type.Number()),
+	resilience: Type.Optional(Type.Union([Type.Literal("high"), Type.Literal("medium"), Type.Literal("low")])),
+	maxTurns: Type.Optional(Type.Number()),
 	headers: Type.Optional(Type.Record(Type.String(), Type.String())),
 	compat: Type.Optional(ProviderCompatSchema),
 });
@@ -408,6 +410,7 @@ export class ModelRegistry {
 	private providerRequestConfigs: Map<string, ProviderRequestConfig> = new Map();
 	private modelRequestHeaders: Map<string, Record<string, string>> = new Map();
 	private registeredProviders: Map<string, ProviderConfigInput> = new Map();
+	private loopGuardConfigs: Map<string, { resilience?: "high" | "medium" | "low"; maxTurns?: number }> = new Map();
 	private loadError: string | undefined = undefined;
 	readonly authStorage: AuthStorage;
 	private modelsJsonPath: string | undefined;
@@ -432,6 +435,7 @@ export class ModelRegistry {
 	refresh(): void {
 		this.providerRequestConfigs.clear();
 		this.modelRequestHeaders.clear();
+		this.loopGuardConfigs.clear();
 		this.loadError = undefined;
 
 		// Ensure dynamic API/OAuth registrations are rebuilt from current provider state.
@@ -663,6 +667,14 @@ export class ModelRegistry {
 				const compat = mergeCompat(providerConfig.compat, modelDef.compat);
 				this.storeModelHeaders(providerName, modelDef.id, modelDef.headers);
 
+				// Store loop guard config if resilience is specified
+				if (modelDef.resilience !== undefined || modelDef.maxTurns !== undefined) {
+					this.loopGuardConfigs.set(modelDef.id, {
+						resilience: modelDef.resilience,
+						maxTurns: modelDef.maxTurns,
+					});
+				}
+
 				const defaultCost = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
 				models.push({
 					id: modelDef.id,
@@ -706,6 +718,14 @@ export class ModelRegistry {
 	 */
 	find(provider: string, modelId: string): Model<Api> | undefined {
 		return this.models.find((m) => m.provider === provider && m.id === modelId);
+	}
+
+	/**
+	 * Get loop guard config (resilience, maxTurns) for a model.
+	 * Returns undefined if no resilience is configured for the model.
+	 */
+	getLoopGuardConfig(modelId: string): { resilience?: "high" | "medium" | "low"; maxTurns?: number } | undefined {
+		return this.loopGuardConfigs.get(modelId);
 	}
 
 	/**
@@ -967,6 +987,14 @@ export class ModelRegistry {
 				const api = modelDef.api || config.api;
 				this.storeModelHeaders(providerName, modelDef.id, modelDef.headers);
 
+				// Store loop guard config if resilience is specified
+				if (modelDef.resilience !== undefined || modelDef.maxTurns !== undefined) {
+					this.loopGuardConfigs.set(modelDef.id, {
+						resilience: modelDef.resilience,
+						maxTurns: modelDef.maxTurns,
+					});
+				}
+
 				this.models.push({
 					id: modelDef.id,
 					name: modelDef.name,
@@ -1028,6 +1056,8 @@ export interface ProviderConfigInput {
 		cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
 		contextWindow: number;
 		maxTokens: number;
+		resilience?: "high" | "medium" | "low";
+		maxTurns?: number;
 		headers?: Record<string, string>;
 		compat?: Model<Api>["compat"];
 	}>;
