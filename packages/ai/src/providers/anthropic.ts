@@ -516,7 +516,7 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
 			const requestOptions = {
 				...(options?.signal ? { signal: options.signal } : {}),
 				...(options?.timeoutMs !== undefined ? { timeout: options.timeoutMs } : {}),
-				maxRetries: options?.maxRetries ?? 0,
+				maxRetries: options?.maxRetries,
 			};
 			const response = await client.messages.create({ ...params, stream: true }, requestOptions).asResponse();
 			await options?.onResponse?.({ status: response.status, headers: headersToRecord(response.headers) }, model);
