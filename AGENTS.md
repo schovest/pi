@@ -96,8 +96,17 @@ npx vitest run --dir packages/agent/test agent-loop
 ```
 
 **判断用哪种 runner**：
-- 测试文件 `import { describe, it } from "node:test"` → `node --test`
-- 测试文件 `import { describe, it } from "vitest"` 或使用 `expect()` → `npx vitest run --dir`
+
+| 包 | Runner | 命令 | 断言风格 |
+|---|---|---|---|
+| **tui** | `node:test` | `node --test test/*.test.ts`（从包目录） | `import assert from "node:assert"` |
+| **agent** | vitest | `npx vitest run --dir packages/agent/test <pattern>` | `import { describe, expect, it } from "vitest"` |
+| **ai** | vitest | `npx vitest run --dir packages/ai/test <pattern>` | `import { describe, expect, it } from "vitest"` |
+| **coding-agent** | vitest | `npx vitest run --dir packages/coding-agent/test <pattern>` | `import { describe, expect, it } from "vitest"` |
+
+- 测试文件 `import { describe, it } from "node:test"` → `node --test`（仅 tui）
+- 测试文件 `import { describe, it } from "vitest"` 或使用 `expect()` → `npx vitest run --dir`（agent/ai/coding-agent）
+- **禁止混用**：tui 测试只用 `node:test` + `node:assert`，其他包只用 vitest；新增测试文件须遵循所属包的 runner
 
 **vitest 扫描问题**：
 - vitest 默认 `include` 模式为 `**/*.{test,spec}.{ts,tsx,...}`，从项目根递归扫描
