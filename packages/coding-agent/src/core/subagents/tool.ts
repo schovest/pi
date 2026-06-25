@@ -1,10 +1,12 @@
 import { Text } from "@earendil-works/pi-tui";
+import { minimatch } from "minimatch";
 import { Type } from "typebox";
 import { theme } from "../../modes/interactive/theme/theme.ts";
 import type { AgentSession } from "../agent-session.ts";
 import { defineTool } from "../extensions/types.ts";
+import type { Skill } from "../skills.ts";
 import { discoverSubagentsSync } from "./discovery.ts";
-import type { SubagentRunEvent, SubagentRunResult } from "./types.ts";
+import type { SubagentDefinition, SubagentRunEvent, SubagentRunResult } from "./types.ts";
 
 const ThinkingSchema = Type.Union([
 	Type.Literal("off"),
@@ -61,6 +63,19 @@ interface SubagentToolDetails {
 	result?: SubagentRunResult;
 	events: SubagentRunEvent[];
 	children: Map<number, AgentSession>;
+}
+
+function formatSubagentDescription(def: SubagentDefinition, availableSkills: Skill[]): string {
+	let desc = def.description;
+	if (def.skills && def.skills.length > 0) {
+		const matchedNames = availableSkills
+			.filter((s) => def.skills!.some((p) => minimatch(s.name, p, { nocase: true })))
+			.map((s) => s.name);
+		if (matchedNames.length > 0) {
+			desc += `\n\nAvailable skills: ${matchedNames.join(", ")}`;
+		}
+	}
+	return desc;
 }
 
 function validateMode(input: SubagentToolInput): void {
@@ -181,8 +196,12 @@ export function createSubagentToolDefinition(session: AgentSession) {
 		scope: "both",
 	});
 	const subagentNames = availableAgents.map((agent) => agent.name);
+	const availableSkills = session.resourceLoader.getSkills().skills;
 	const agentSummary = availableAgents
-		.map((agent) => `${agent.name} (${agent.scope}) - ${agent.description}`)
+		.map((agent) => {
+			const desc = formatSubagentDescription(agent, availableSkills);
+			return `${agent.name} (${agent.scope}) - ${desc}`;
+		})
 		.join("; ");
 	const parameterSummary = `agent must be one of: ${subagentNames.join(", ")}. Use subagentScope="project" or "both" for project-defined subagents.`;
 	const usageGuidance =

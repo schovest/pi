@@ -96,6 +96,7 @@ import {
 	SessionManager,
 } from "./session-manager.ts";
 import type { SettingsManager } from "./settings-manager.ts";
+import type { Skill } from "./skills.ts";
 import type { SlashCommandInfo } from "./slash-commands.ts";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.ts";
 import type {
@@ -209,6 +210,8 @@ export interface AgentSessionConfig {
 	extensionRunnerRef?: { current?: ExtensionRunner };
 	/** Session start event metadata emitted when extensions bind to this runtime. */
 	sessionStartEvent?: SessionStartEvent;
+	/** Override skills for subagent child sessions. When set, used instead of resourceLoader skills. */
+	skillsOverride?: Skill[];
 }
 
 export interface ExtensionBindings {
@@ -333,6 +336,7 @@ export class AgentSession {
 	private _allowedToolNames?: string[];
 	private _excludedToolNames?: string[];
 	private _baseToolsOverride?: Record<string, AgentTool>;
+	private _skillsOverride?: Skill[];
 	private _sessionStartEvent: SessionStartEvent;
 	private _extensionUIContext?: ExtensionUIContext;
 	private _extensionMode: ExtensionMode = "print";
@@ -373,6 +377,7 @@ export class AgentSession {
 		this._allowedToolNames = config.allowedToolNames;
 		this._excludedToolNames = config.excludedToolNames;
 		this._baseToolsOverride = config.baseToolsOverride;
+		this._skillsOverride = config.skillsOverride;
 		this._sessionStartEvent = config.sessionStartEvent ?? { type: "session_start", reason: "startup" };
 
 		// Always subscribe to agent events for internal handling
@@ -1005,6 +1010,7 @@ export class AgentSession {
 		model: Model<any>;
 		thinkingLevel: ThinkingLevel;
 		tools: string[];
+		skills?: Skill[];
 	}): AgentSession {
 		const agent = new Agent({
 			initialState: {
@@ -1035,6 +1041,7 @@ export class AgentSession {
 			agentDir: this._agentDir,
 			scopedModels: this._scopedModels,
 			resourceLoader: this._resourceLoader,
+			skillsOverride: options.skills,
 			customTools: this._customTools.filter((tool) => tool.name !== "subagent"),
 			modelRegistry: this._modelRegistry,
 			initialActiveToolNames: options.tools,
@@ -1088,7 +1095,7 @@ export class AgentSession {
 		const loaderAppendSystemPrompt = this._resourceLoader.getAppendSystemPrompt();
 		const appendSystemPrompt =
 			loaderAppendSystemPrompt.length > 0 ? loaderAppendSystemPrompt.join("\n\n") : undefined;
-		const loadedSkills = this._resourceLoader.getSkills().skills;
+		const loadedSkills = this._skillsOverride ?? this._resourceLoader.getSkills().skills;
 		const loadedContextFiles = this._resourceLoader.getAgentsFiles().agentsFiles;
 
 		this._baseSystemPromptOptions = {

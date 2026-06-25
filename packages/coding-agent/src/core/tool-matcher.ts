@@ -1,4 +1,5 @@
 import { minimatch } from "minimatch";
+import type { Skill } from "./skills.ts";
 
 /**
  * Test whether a single tool name matches a single pattern.
@@ -36,4 +37,15 @@ export function resolveActiveTools(
 		return allToolNames.filter((t) => !matchesAnyToolPattern(t, excludedPatterns));
 	}
 	return defaults ?? allToolNames;
+}
+
+/**
+ * Resolve the active skill set from a list of glob patterns matched against all available skills.
+ *
+ * - If `patterns` is undefined or empty, returns an empty array (no skills for subagent).
+ * - Otherwise, returns skills whose name matches at least one pattern (using minimatch).
+ */
+export function resolveActiveSkills(allSkills: Skill[], patterns: string[] | undefined): Skill[] {
+	if (!patterns || patterns.length === 0) return [];
+	return allSkills.filter((skill) => matchesAnyToolPattern(skill.name, patterns));
 }

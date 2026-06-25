@@ -3,7 +3,7 @@ import type { Model, Usage } from "@earendil-works/pi-ai";
 import { clampThinkingLevel, modelsAreEqual } from "@earendil-works/pi-ai";
 import type { AgentSession } from "../agent-session.ts";
 import { DEFAULT_THINKING_LEVEL } from "../defaults.ts";
-import { resolveActiveTools } from "../tool-matcher.ts";
+import { resolveActiveSkills, resolveActiveTools } from "../tool-matcher.ts";
 import { discoverSubagents } from "./discovery.ts";
 import type {
 	SubagentDefinition,
@@ -26,6 +26,7 @@ interface ResolvedTask {
 	model: Model<any>;
 	thinking: ThinkingLevel;
 	tools: string[];
+	skills: string[];
 	prompt: string;
 }
 
@@ -166,6 +167,7 @@ async function resolveTask(
 		const thinking = resolveThinking(session, model, task, definition);
 		const includedTools = task.includedTools ?? definition.includedTools;
 		const excludedTools = task.excludedTools ?? definition.excludedTools;
+		const skillsPatterns = task.skills ?? definition.skills;
 		const resolvedTools = resolveActiveTools(allToolNames, includedTools, excludedTools, [
 			"read",
 			"bash",
@@ -180,6 +182,7 @@ async function resolveTask(
 			model,
 			thinking,
 			tools: resolvedTools,
+			skills: skillsPatterns ?? [],
 			prompt: buildPrompt(definition, task.task),
 		};
 	} catch (error) {
@@ -266,10 +269,14 @@ async function runOne(
 		options.onEvent?.(event, child);
 	};
 
+	const allSkills = session.resourceLoader.getSkills().skills;
+	const resolvedSkills = resolveActiveSkills(allSkills, resolved.skills.length > 0 ? resolved.skills : undefined);
+
 	const child = session.createSubagentChildSession({
 		model: resolved.model,
 		thinkingLevel: resolved.thinking,
 		tools: resolved.tools,
+		skills: resolvedSkills,
 	});
 	const unsubscribe = child.subscribe((event) => {
 		if (event.type === "tool_execution_start" || event.type === "tool_execution_update") {

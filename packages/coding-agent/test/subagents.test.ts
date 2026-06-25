@@ -9,8 +9,11 @@ import { ModelRegistry } from "../src/core/model-registry.ts";
 import { createAgentSession } from "../src/core/sdk.ts";
 import { SessionManager } from "../src/core/session-manager.ts";
 import { SettingsManager } from "../src/core/settings-manager.ts";
+import type { Skill } from "../src/core/skills.ts";
+import { createSyntheticSourceInfo } from "../src/core/source-info.ts";
 import { discoverSubagents } from "../src/core/subagents/discovery.ts";
 import type { SubagentRunEvent, SubagentRunRequest } from "../src/core/subagents/types.ts";
+import { resolveActiveSkills } from "../src/core/tool-matcher.ts";
 import { createHarness, getMessageText } from "./suite/harness.ts";
 
 describe("subagents discovery", () => {
@@ -354,6 +357,82 @@ describe("AgentSession subagents", () => {
 
 			expect(maxActive).toBe(1);
 			expect(harness.session.messages.filter((message) => message.role === "toolResult")).toHaveLength(2);
+		} finally {
+			harness.cleanup();
+		}
+	});
+});
+
+function createTestSkill(name: string): Skill {
+	return {
+		name,
+		description: `${name} skill`,
+		filePath: `/test/skills/${name}/SKILL.md`,
+		baseDir: `/test/skills/${name}`,
+		sourceInfo: createSyntheticSourceInfo(`/test/skills/${name}/SKILL.md`, { source: "test" }),
+		disableModelInvocation: false,
+	};
+}
+
+describe("resolveActiveSkills", () => {
+	const allSkills = [
+		createTestSkill("search-files"),
+		createTestSkill("search-code"),
+		createTestSkill("inspect"),
+		createTestSkill("build"),
+	];
+
+	it("returns empty array when patterns is undefined", () => {
+		expect(resolveActiveSkills(allSkills, undefined)).toEqual([]);
+	});
+
+	it("returns empty array when patterns is empty", () => {
+		expect(resolveActiveSkills(allSkills, [])).toEqual([]);
+	});
+
+	it("matches exact skill names", () => {
+		const result = resolveActiveSkills(allSkills, ["inspect"]);
+		expect(result.map((s) => s.name)).toEqual(["inspect"]);
+	});
+
+	it("matches glob patterns", () => {
+		const result = resolveActiveSkills(allSkills, ["search-*"]);
+		expect(result.map((s) => s.name)).toEqual(["search-files", "search-code"]);
+	});
+
+	it("matches multiple patterns", () => {
+		const result = resolveActiveSkills(allSkills, ["search-*", "build"]);
+		expect(result.map((s) => s.name)).toEqual(["search-files", "search-code", "build"]);
+	});
+
+	it("returns empty when no skills match patterns", () => {
+		const result = resolveActiveSkills(allSkills, ["nonexistent-*"]);
+		expect(result).toEqual([]);
+	});
+
+	it("matches all skills with wildcard", () => {
+		const result = resolveActiveSkills(allSkills, ["*"]);
+		expect(result.map((s) => s.name)).toEqual(["search-files", "search-code", "inspect", "build"]);
+	});
+});
+
+describe("subagent skills discovery", () => {
+	it("parses skills from subagent frontmatter", async () => {
+		const harness = await createHarness();
+		try {
+			const userAgentsDir = join(harness.tempDir, "subagents");
+			mkdirSync(userAgentsDir, { recursive: true });
+			writeFileSync(
+				join(userAgentsDir, "worker.md"),
+				"---\ndescription: Skilled worker\nskills:\n  - search-*\n  - inspect\n---\nWorker prompt",
+			);
+
+			const agents = await discoverSubagents({ cwd: harness.tempDir, agentDir: harness.tempDir, scope: "user" });
+			const worker = agents.find((agent) => agent.name === "worker");
+			expect(worker).toMatchObject({
+				description: "Skilled worker",
+				skills: ["search-*", "inspect"],
+			});
 		} finally {
 			harness.cleanup();
 		}

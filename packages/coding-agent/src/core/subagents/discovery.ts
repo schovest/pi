@@ -11,6 +11,7 @@ interface AgentFrontmatter extends Record<string, unknown> {
 	tools?: unknown; // deprecated, mapped to includedTools
 	includedTools?: unknown;
 	excludedTools?: unknown;
+	skills?: unknown;
 }
 
 export interface DiscoverSubagentsOptions {
@@ -71,6 +72,7 @@ function readAgentFile(path: string, scope: SubagentDefinitionScope): SubagentDe
 			return parsedIncluded !== undefined ? parsedIncluded : parsedLegacy;
 		})(),
 		excludedTools: stringArray(parsed.frontmatter.excludedTools),
+		skills: stringArray(parsed.frontmatter.skills),
 	};
 }
 

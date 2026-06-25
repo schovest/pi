@@ -17,6 +17,7 @@ export interface SubagentDefinition {
 	thinking?: ThinkingLevel;
 	includedTools?: string[];
 	excludedTools?: string[];
+	skills?: string[]; // glob 模式列表，匹配主 agent 已加载的 skills
 }
 
 export interface SubagentTask {
@@ -27,6 +28,7 @@ export interface SubagentTask {
 	thinking?: ThinkingLevel;
 	includedTools?: string[];
 	excludedTools?: string[];
+	skills?: string[]; // 运行时覆盖 definition 的 skills
 }
 
 export type SubagentRunRequest =
