@@ -694,6 +694,7 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 
 	// Score an entry against the query (higher = better match)
 	// isDirectory adds bonus to prioritize folders
+	// Depth penalty: shallower paths rank higher (breadth-first ordering)
 	private scoreEntry(filePath: string, query: string, isDirectory: boolean): number {
 		const fileName = basename(filePath);
 		const lowerFileName = fileName.toLowerCase();
@@ -712,6 +713,11 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 
 		// Directories get a bonus to appear first
 		if (isDirectory && score > 0) score += 10;
+
+		// Depth penalty: -5 per path segment, so shallow files outrank deep ones
+		// e.g. "index.html" (depth 0) gets 0 penalty, "src/index.html" (depth 1) gets -5
+		const depth = filePath.split("/").length - 1;
+		score -= depth * 5;
 
 		return score;
 	}

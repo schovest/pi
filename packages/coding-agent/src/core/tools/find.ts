@@ -184,13 +184,6 @@ export function createFindToolDefinition(
 								if (p.startsWith(searchPath)) return toPosixPath(p.slice(searchPath.length + 1));
 								return toPosixPath(path.relative(searchPath, p));
 							});
-							// Sort: direct children (depth=0) first, then recursive content.
-							relativized.sort((a, b) => {
-								const depthA = a.split("/").length - 1;
-								const depthB = b.split("/").length - 1;
-								if (depthA !== depthB) return depthA - depthB;
-								return a.localeCompare(b);
-							});
 							const resultLimitReached = relativized.length >= effectiveLimit;
 							const rawOutput = relativized.join("\n");
 							const truncation = truncateHead(rawOutput, { maxLines: Number.MAX_SAFE_INTEGER });
@@ -318,15 +311,6 @@ export function createFindToolDefinition(
 								if (hadTrailingSlash && !relativePath.endsWith("/")) relativePath += "/";
 								relativized.push(toPosixPath(relativePath));
 							}
-
-							// Sort: direct children (depth=0) first, then recursive content.
-							// Within the same depth, sort alphabetically.
-							relativized.sort((a, b) => {
-								const depthA = a.split("/").length - 1;
-								const depthB = b.split("/").length - 1;
-								if (depthA !== depthB) return depthA - depthB;
-								return a.localeCompare(b);
-							});
 
 							const resultLimitReached = relativized.length >= effectiveLimit;
 							const rawOutput = relativized.join("\n");
