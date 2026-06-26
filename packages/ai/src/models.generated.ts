@@ -9241,9 +9241,10 @@ export const MODELS = {
 		"qwen3.7-max": {
 			id: "qwen3.7-max",
 			name: "Qwen3.7 Max",
-			api: "anthropic-messages",
+			api: "openai-completions",
 			provider: "opencode-go",
-			baseUrl: "https://opencode.ai/zen/go",
+			baseUrl: "https://opencode.ai/zen/go/v1",
+			compat: {"maxTokensField":"max_tokens"},
 			reasoning: true,
 			input: ["text"],
 			cost: {
@@ -9254,13 +9255,14 @@ export const MODELS = {
 			},
 			contextWindow: 1000000,
 			maxTokens: 65536,
-		} satisfies Model<"anthropic-messages">,
+		} satisfies Model<"openai-completions">,
 		"qwen3.7-plus": {
 			id: "qwen3.7-plus",
 			name: "Qwen3.7 Plus",
-			api: "anthropic-messages",
+			api: "openai-completions",
 			provider: "opencode-go",
-			baseUrl: "https://opencode.ai/zen/go",
+			baseUrl: "https://opencode.ai/zen/go/v1",
+			compat: {"maxTokensField":"max_tokens"},
 			reasoning: true,
 			input: ["text", "image"],
 			cost: {
@@ -9271,7 +9273,7 @@ export const MODELS = {
 			},
 			contextWindow: 1000000,
 			maxTokens: 65536,
-		} satisfies Model<"anthropic-messages">,
+		} satisfies Model<"openai-completions">,
 	},
 	"openrouter": {
 		"ai21/jamba-large-1.7": {
@@ -10603,9 +10605,9 @@ export const MODELS = {
 			reasoning: true,
 			input: ["text"],
 			cost: {
-				input: 0.15,
-				output: 0.8999999999999999,
-				cacheRead: 0.049999999999999996,
+				input: 0.12,
+				output: 0.48,
+				cacheRead: 0,
 				cacheWrite: 0,
 			},
 			contextWindow: 204800,
@@ -10620,8 +10622,8 @@ export const MODELS = {
 			reasoning: true,
 			input: ["text"],
 			cost: {
-				input: 0.24,
-				output: 0.96,
+				input: 0.18,
+				output: 0.72,
 				cacheRead: 0,
 				cacheWrite: 0,
 			},
@@ -11114,13 +11116,13 @@ export const MODELS = {
 			reasoning: true,
 			input: ["text"],
 			cost: {
-				input: 0.09,
-				output: 0.44999999999999996,
+				input: 0.08499999999999999,
+				output: 0.39999999999999997,
 				cacheRead: 0,
 				cacheWrite: 0,
 			},
 			contextWindow: 1000000,
-			maxTokens: 4096,
+			maxTokens: 16384,
 		} satisfies Model<"openai-completions">,
 		"nvidia/nemotron-3-super-120b-a12b:free": {
 			id: "nvidia/nemotron-3-super-120b-a12b:free",
@@ -11908,13 +11910,13 @@ export const MODELS = {
 			reasoning: true,
 			input: ["text"],
 			cost: {
-				input: 0.039,
-				output: 0.18,
+				input: 0.03,
+				output: 0.15,
 				cacheRead: 0,
 				cacheWrite: 0,
 			},
 			contextWindow: 131072,
-			maxTokens: 4096,
+			maxTokens: 131072,
 		} satisfies Model<"openai-completions">,
 		"openai/gpt-oss-120b:free": {
 			id: "openai/gpt-oss-120b:free",
