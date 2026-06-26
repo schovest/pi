@@ -722,6 +722,14 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 		return score;
 	}
 
+	// Score entries by depth only (used when no query text is provided).
+	// Shallower paths rank higher; directories get a small bonus.
+	private depthScore(filePath: string, isDirectory: boolean): number {
+		const depth = filePath.split("/").length - 1;
+		// Base 100, -10 per depth level, directories +5
+		return 100 - depth * 10 + (isDirectory ? 5 : 0);
+	}
+
 	// Fuzzy file search using fd (fast, respects .gitignore)
 	private async getFuzzyFileSuggestions(
 		query: string,
@@ -743,7 +751,9 @@ export class CombinedAutocompleteProvider implements AutocompleteProvider {
 			const scoredEntries = entries
 				.map((entry) => ({
 					...entry,
-					score: fdQuery ? this.scoreEntry(entry.path, fdQuery, entry.isDirectory) : 1,
+					score: fdQuery
+						? this.scoreEntry(entry.path, fdQuery, entry.isDirectory)
+						: this.depthScore(entry.path, entry.isDirectory),
 				}))
 				.filter((entry) => entry.score > 0);
 
