@@ -258,8 +258,10 @@ export class SubagentOverlayComponent extends Container {
 		this.rightPanel.addChild(new Spacer(1));
 
 		const messages = this.getMessagesForAgent(item);
-		// Completed subagents (no live child session) default to expanded view
-		const isCompleted = item.status !== "running" && !this.getChildSession(item.index);
+		// Historical entries (subagentEntryId) are never "running"; only check
+		// live child session for current-run items to avoid false matches.
+		const isCompleted =
+			item.subagentEntryId != null || (item.status !== "running" && !this.getChildSession(item.index));
 		const effectiveExpanded = this.expanded || isCompleted;
 		if (messages.length > 0) {
 			this.renderMessages(messages, this.rightContent, effectiveExpanded);
@@ -287,6 +289,11 @@ export class SubagentOverlayComponent extends Container {
 		const items = toListItems(this.data);
 		const item = items[this.selectedIndex];
 		if (!item) return;
+
+		// Historical entries should not subscribe to a live child session —
+		// getChildSession(index) would return the wrong session for a historical
+		// item that shares the same task index as a currently running subagent.
+		if (item.subagentEntryId) return;
 
 		const child = this.getChildSession(item.index);
 		if (!child) return;
@@ -319,19 +326,24 @@ export class SubagentOverlayComponent extends Container {
 	}
 
 	private getMessagesForAgent(item: AgentListItem): AgentMessage[] {
-		// 1. Live child session
-		const child = this.getChildSession(item.index);
-		if (child) {
-			return child.messages;
-		}
-		// 2. Result from current run
-		if (this.data.result) {
-			const taskResult = this.data.result.results.find(
-				(r: SubagentTaskResult) =>
-					r.index === item.index && (item.runId === undefined || r.events.some((e) => e.runId === item.runId)),
-			);
-			if (taskResult) {
-				return taskResult.messages;
+		// Historical entries (with subagentEntryId) must skip live session lookup —
+		// getChildSession(index) only uses the task index and would return the
+		// currently running session even for a historical item sharing the same index.
+		if (!item.subagentEntryId) {
+			// 1. Live child session (current run only)
+			const child = this.getChildSession(item.index);
+			if (child) {
+				return child.messages;
+			}
+			// 2. Result from current run
+			if (this.data.result) {
+				const taskResult = this.data.result.results.find(
+					(r: SubagentTaskResult) =>
+						r.index === item.index && (item.runId === undefined || r.events.some((e) => e.runId === item.runId)),
+				);
+				if (taskResult) {
+					return taskResult.messages;
+				}
 			}
 		}
 		// 3. Inline historical messages from parent session (by subagentEntryId)

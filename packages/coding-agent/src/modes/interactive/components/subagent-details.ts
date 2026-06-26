@@ -211,15 +211,10 @@ export function resultItems(data: SubagentDetailsData): SubagentDetailsItem[] {
 		}
 	}
 
-	// Sort by creation time descending (newest first), fallback to index for items without timestamp
-	return items.sort((a, b) => {
-		if (a.timestamp && b.timestamp) {
-			return b.timestamp.localeCompare(a.timestamp);
-		}
-		if (a.timestamp) return -1;
-		if (b.timestamp) return 1;
-		return b.index - a.index;
-	});
+	// Preserve insertion order: live items first (by index), then historical entries.
+	// Do NOT sort by timestamp — sorting mixes live and historical items with the
+	// same task index, causing getChildSession(index) to return the wrong session.
+	return items;
 }
 
 export function statusColor(status: string): "success" | "error" | "warning" | "muted" {
