@@ -1,6 +1,6 @@
 # 自定义 Agents 开发规则
 
-本仓库基于 `0.6.1` Pi 开发自己的 agents、工具链和发行版。默认目标不是维护上游 `pi-mono`，而是在保留 Pi 核心能力的基础上，迭代适合本地工作流的 agent 运行时、内置扩展、MCP 能力、技能和二进制分发。
+本仓库基于上游 `0.79.1`的 Pi 开发自己的 agents、工具链和发行版。默认目标不是维护上游 `pi`，而是在保留 Pi 核心能力的基础上，迭代适合本地工作流的 agent 运行时、内置扩展、MCP 能力、技能和二进制分发。
 
 ## 项目目标
 
@@ -41,13 +41,12 @@
 - 禁止 inline import（`await import()`、`import("pkg").Type`）；使用顶层 import
 - 禁止 erasable syntax 违规（参数属性、`enum`、`namespace`/`module`、`import =`、`export =`）
 - 不通过删除或降级功能修复类型错误；依赖过旧时优先升级
-- 单一调用点的单行 helper 直接内联
 - 外部 API 类型以 `node_modules` 或官方文档为准，不猜测
-- 不硬编码快捷键；默认快捷键放入 keybindings 配置
-- 不手改 `packages/ai/src/models.generated.ts`；更新模型改生成脚本
-- 删除看似有意存在的功能前先询问
+- 不硬编码快捷键；默认快捷键放入 `keybindings` 配置
+- 不手改 `packages/ai/src/models.generated.ts`；这是编译自动生成的
+- 删除内容前需充分考量是否会影响其他功能，如果有影响需要向用户汇报，得到批准以后进行。
 - 不为兼容旧行为保留复杂分支，除非用户要求
-- 功能变更必须同步更新 `packages/coding-agent/docs/` 下对应文档；新增模型字段 → `models.md`，新增设置项 → `settings.md`，新增工具 → `usage.md`，新增扩展 API → `extensions.md`，新增事件 → `sdk.md`
+- **每次变更完毕后必须自查 `packages/coding-agent/docs/` 是否需要更新**：对照变更内容逐项检查 docs 下各文件，确认文档与代码一致；不需要更新时也须明确说明"已自查，docs 无需更新"，禁止跳过此步。
 
 ## 开发规范
 
@@ -113,10 +112,6 @@ npx vitest run --dir packages/agent/test agent-loop
 - `.worktrees/` 下的旧分支代码会被一并发现，导致加载失败或运行错误
 - `--dir` 将搜索根限定到指定目录，彻底避免此问题
 
-#### 已知可忽略的测试错误
-
-- `packages/ai/test/` 下的 TS2345 错误：预存的 `"gpt-4o"` 模型类型不匹配，与业务改动无关
-
 ### 依赖安全
 
 - npm 依赖和 lockfile 变更视为代码变更，需审查；直接外部依赖固定精确版本
@@ -160,7 +155,8 @@ node scripts/generate-coding-agent-shrinkwrap.mjs
 # 6. 构建并打包 tgz
 cd packages/coding-agent && npm run build:tgz
 
-# 7. 提交并打 tag
+# 7. 更新 CHANGELOG [`packages/coding-agent/CHANGELOG.md`]（将 [Unreleased] 条目移入新版本段落）
+# 8. 提交并打 tag
 git add <相关文件>
 git commit -m "chore: bump version to x.y.z"
 git tag vx.y.z
@@ -184,12 +180,10 @@ git tag vx.y.z
 
 ### Changelog
 
-- 只在用户明确要求时修改 `packages/*/CHANGELOG.md`
+- **打 tag 必须同步更新 `packages/coding-agent/CHANGELOG.md`**，将 `[Unreleased]` 下的条目移入对应版本段落
 - 新条目放入 `## [Unreleased]`，不修改已发布版本段落
-
-## 上游合并
-
-合并上游 `pi-remote` 新版本时，加载 skill `merge-remote-pi`（`.agents/skills/merge-remote-pi/SKILL.md`）。核心原则：**本地开发优先**，获取新特性的同时不破坏本地变更；矛盾冲突时舍去上游部分并报告。
+- CHANGELOG 条目按 `### Added` / `### Changed` / `### Fixed` / `### Removed` 分类，每条一行简述
+- 版本升级流程中 step 7（提交打 tag）之前必须完成 CHANGELOG 更新
 
 ## 更新覆盖
 

@@ -9217,7 +9217,7 @@ export const MODELS = {
 				cacheRead: 0.02,
 				cacheWrite: 0,
 			},
-			contextWindow: 512000,
+			contextWindow: 1000000,
 			maxTokens: 131072,
 		} satisfies Model<"anthropic-messages">,
 		"qwen3.6-plus": {
@@ -9241,10 +9241,9 @@ export const MODELS = {
 		"qwen3.7-max": {
 			id: "qwen3.7-max",
 			name: "Qwen3.7 Max",
-			api: "openai-completions",
+			api: "anthropic-messages",
 			provider: "opencode-go",
-			baseUrl: "https://opencode.ai/zen/go/v1",
-			compat: {"maxTokensField":"max_tokens"},
+			baseUrl: "https://opencode.ai/zen/go",
 			reasoning: true,
 			input: ["text"],
 			cost: {
@@ -9255,14 +9254,13 @@ export const MODELS = {
 			},
 			contextWindow: 1000000,
 			maxTokens: 65536,
-		} satisfies Model<"openai-completions">,
+		} satisfies Model<"anthropic-messages">,
 		"qwen3.7-plus": {
 			id: "qwen3.7-plus",
 			name: "Qwen3.7 Plus",
-			api: "openai-completions",
+			api: "anthropic-messages",
 			provider: "opencode-go",
-			baseUrl: "https://opencode.ai/zen/go/v1",
-			compat: {"maxTokensField":"max_tokens"},
+			baseUrl: "https://opencode.ai/zen/go",
 			reasoning: true,
 			input: ["text", "image"],
 			cost: {
@@ -9273,7 +9271,7 @@ export const MODELS = {
 			},
 			contextWindow: 1000000,
 			maxTokens: 65536,
-		} satisfies Model<"openai-completions">,
+		} satisfies Model<"anthropic-messages">,
 	},
 	"openrouter": {
 		"ai21/jamba-large-1.7": {
