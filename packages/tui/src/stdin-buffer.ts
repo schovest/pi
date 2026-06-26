@@ -439,6 +439,12 @@ export class StdinBuffer extends EventEmitter<StdinBufferEventMap> {
 		const mouseEvent = parseSGRMouseEvent(sequence);
 		if (mouseEvent) {
 			this.emit("mouse", mouseEvent);
+			// Mouse sequences are handled exclusively via the "mouse" event channel.
+			// Do not also emit "data" — otherwise tui.handleInput receives the raw
+			// SGR sequence alongside handleMouseEvent, causing double-delivery and
+			// potential misinterpretation (e.g. a partial mouse sequence flushed on
+			// timeout could look like an arrow key to the focused component).
+			return;
 		}
 
 		const rawCodepoint = sequence.length === 1 ? sequence.codePointAt(0) : undefined;

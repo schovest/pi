@@ -7,11 +7,13 @@
 
 import assert from "node:assert";
 import { beforeEach, describe, it } from "node:test";
+import type { MouseEvent } from "../src/stdin-buffer.ts";
 import { StdinBuffer } from "../src/stdin-buffer.ts";
 
 describe("StdinBuffer", () => {
 	let buffer: StdinBuffer;
 	let emittedSequences: string[];
+	let emittedMouseEvents: MouseEvent[];
 
 	beforeEach(() => {
 		buffer = new StdinBuffer({ timeout: 10 });
@@ -20,6 +22,12 @@ describe("StdinBuffer", () => {
 		emittedSequences = [];
 		buffer.on("data", (sequence) => {
 			emittedSequences.push(sequence);
+		});
+
+		// Collect emitted mouse events
+		emittedMouseEvents = [];
+		buffer.on("mouse", (event) => {
+			emittedMouseEvents.push(event);
 		});
 	});
 
@@ -51,10 +59,13 @@ describe("StdinBuffer", () => {
 	});
 
 	describe("Complete Escape Sequences", () => {
-		it("should pass through complete mouse SGR sequences", () => {
+		it("should emit mouse SGR sequences via mouse event only", () => {
 			const mouseSeq = "\x1b[<35;20;5m";
 			processInput(mouseSeq);
-			assert.deepStrictEqual(emittedSequences, [mouseSeq]);
+			// SGR mouse sequences are emitted via the "mouse" channel, not "data"
+			assert.deepStrictEqual(emittedSequences, []);
+			assert.strictEqual(emittedMouseEvents.length, 1);
+			assert.strictEqual(emittedMouseEvents[0]?.type, "mouseUp");
 		});
 
 		it("should pass through complete arrow key sequences", () => {
@@ -93,7 +104,10 @@ describe("StdinBuffer", () => {
 			assert.strictEqual(buffer.getBuffer(), "\x1b[<35");
 
 			processInput(";20;5m");
-			assert.deepStrictEqual(emittedSequences, ["\x1b[<35;20;5m"]);
+			// Complete SGR mouse sequence goes to "mouse" channel only
+			assert.deepStrictEqual(emittedSequences, []);
+			assert.strictEqual(emittedMouseEvents.length, 1);
+			assert.strictEqual(emittedMouseEvents[0]?.type, "mouseUp");
 			assert.strictEqual(buffer.getBuffer(), "");
 		});
 
@@ -121,7 +135,10 @@ describe("StdinBuffer", () => {
 			processInput("5");
 			processInput("m");
 
-			assert.deepStrictEqual(emittedSequences, ["\x1b[<35;20;5m"]);
+			// SGR mouse sequence goes to "mouse" channel only
+			assert.deepStrictEqual(emittedSequences, []);
+			assert.strictEqual(emittedMouseEvents.length, 1);
+			assert.strictEqual(emittedMouseEvents[0]?.type, "mouseUp");
 		});
 
 		it("should flush incomplete sequence after timeout", async () => {
@@ -157,7 +174,10 @@ describe("StdinBuffer", () => {
 			assert.strictEqual(buffer.getBuffer(), "\x1b[<35");
 
 			processInput(";20;5m");
-			assert.deepStrictEqual(emittedSequences, ["a", "b", "c", "\x1b[<35;20;5m"]);
+			// SGR mouse sequence goes to "mouse" channel only
+			assert.deepStrictEqual(emittedSequences, ["a", "b", "c"]);
+			assert.strictEqual(emittedMouseEvents.length, 1);
+			assert.strictEqual(emittedMouseEvents[0]?.type, "mouseUp");
 		});
 	});
 
@@ -253,19 +273,27 @@ describe("StdinBuffer", () => {
 	});
 
 	describe("Mouse Events", () => {
-		it("should handle mouse press event", () => {
+		it("should emit mouse press via mouse channel only", () => {
 			processInput("\x1b[<0;10;5M");
-			assert.deepStrictEqual(emittedSequences, ["\x1b[<0;10;5M"]);
+			assert.deepStrictEqual(emittedSequences, []);
+			assert.strictEqual(emittedMouseEvents.length, 1);
+			assert.strictEqual(emittedMouseEvents[0]?.type, "mouseDown");
 		});
 
-		it("should handle mouse release event", () => {
+		it("should emit mouse release via mouse channel only", () => {
 			processInput("\x1b[<0;10;5m");
-			assert.deepStrictEqual(emittedSequences, ["\x1b[<0;10;5m"]);
+			assert.deepStrictEqual(emittedSequences, []);
+			assert.strictEqual(emittedMouseEvents.length, 1);
+			assert.strictEqual(emittedMouseEvents[0]?.type, "mouseUp");
 		});
 
-		it("should handle mouse move event", () => {
+		it("should emit mouse move via mouse channel only", () => {
 			processInput("\x1b[<35;20;5m");
-			assert.deepStrictEqual(emittedSequences, ["\x1b[<35;20;5m"]);
+			assert.deepStrictEqual(emittedSequences, []);
+			assert.strictEqual(emittedMouseEvents.length, 1);
+			// cb=35 with lowercase 'm' (release) → mouseUp, not mouseMove
+			// (isRelease check takes priority over isMotion in parseSGRMouseEvent)
+			assert.strictEqual(emittedMouseEvents[0]?.type, "mouseUp");
 		});
 
 		it("should handle split mouse events", () => {
@@ -273,15 +301,24 @@ describe("StdinBuffer", () => {
 			processInput("5;1");
 			processInput("5;");
 			processInput("10m");
-			assert.deepStrictEqual(emittedSequences, ["\x1b[<35;15;10m"]);
+			assert.deepStrictEqual(emittedSequences, []);
+			assert.strictEqual(emittedMouseEvents.length, 1);
+			assert.strictEqual(emittedMouseEvents[0]?.type, "mouseUp");
 		});
 
 		it("should handle multiple mouse events", () => {
 			processInput("\x1b[<35;1;1m\x1b[<35;2;2m\x1b[<35;3;3m");
-			assert.deepStrictEqual(emittedSequences, ["\x1b[<35;1;1m", "\x1b[<35;2;2m", "\x1b[<35;3;3m"]);
+			assert.deepStrictEqual(emittedSequences, []);
+			assert.strictEqual(emittedMouseEvents.length, 3);
+			// SGR mouse release events (lowercase 'm')
+			assert.strictEqual(emittedMouseEvents[0]?.type, "mouseUp");
+			assert.strictEqual(emittedMouseEvents[1]?.type, "mouseUp");
+			assert.strictEqual(emittedMouseEvents[2]?.type, "mouseUp");
 		});
 
 		it("should handle old-style mouse sequence (ESC[M + 3 bytes)", () => {
+			// Old-style sequences are NOT parsed as SGR mouse events,
+			// so they still go through the "data" channel
 			processInput("\x1b[M abc");
 			assert.deepStrictEqual(emittedSequences, ["\x1b[M ab", "c"]);
 		});
@@ -379,6 +416,12 @@ describe("StdinBuffer", () => {
 			emittedSequences = [];
 			buffer.on("data", (sequence) => {
 				emittedSequences.push(sequence);
+			});
+
+			// Collect emitted mouse events
+			emittedMouseEvents = [];
+			buffer.on("mouse", (event) => {
+				emittedMouseEvents.push(event);
 			});
 
 			// Collect paste events

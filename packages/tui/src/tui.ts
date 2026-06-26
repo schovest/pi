@@ -338,6 +338,10 @@ export class TUI extends Container {
 	private pendingScrollDelta = 0;
 	private scrollDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 	private static readonly SCROLL_DEBOUNCE_MS = 8;
+	// Timestamp of the last mouse wheel event, used to suppress spurious
+	// arrow-key sequences that some terminals emit alongside scroll events.
+	private lastMouseWheelTime = 0;
+	private static readonly MOUSE_WHEEL_SUPPRESS_MS = 50;
 	onCopySelection?: (text: string) => void;
 	onScrollOffsetChange?: (offset: number) => void;
 
@@ -744,6 +748,7 @@ export class TUI extends Container {
 
 	handleMouseEvent(event: MouseEvent): void {
 		if (event.type === "mouseWheel") {
+			this.lastMouseWheelTime = Date.now();
 			if (this.focusedComponent?.handleInput) {
 				const direction = event.button === 64 ? "scrollUp" : "scrollDown";
 				const consumed = this.focusedComponent.handleInput(`\x1b[${direction}`);
@@ -1103,6 +1108,17 @@ export class TUI extends Container {
 					this.setFocus(restoreState.resume.target);
 				}
 			}
+		}
+
+		// Suppress arrow keys that arrive shortly after a mouse wheel event.
+		// Some terminals (or intermediate layers like tmux) occasionally convert
+		// scroll events into arrow-key sequences; without this guard those
+		// spurious keys trigger unwanted actions such as input-history navigation.
+		if (
+			Date.now() - this.lastMouseWheelTime < TUI.MOUSE_WHEEL_SUPPRESS_MS &&
+			(matchesKey(data, "up") || matchesKey(data, "down"))
+		) {
+			return;
 		}
 
 		// Pass input to focused component first. If it returns true, it consumed the input.
