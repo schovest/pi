@@ -54,7 +54,7 @@ Modifier combinations: `ctrl+shift+x`, `alt+ctrl+x`, `ctrl+shift+alt+x`, `ctrl+1
 
 | Keybinding id | Default | Description |
 |--------|---------|-------------|
-| `tui.input.newLine` | `shift+enter` | Insert new line |
+| `tui.input.newLine` | `shift+enter`, `ctrl+j`, `alt+enter` | Insert new line |
 | `tui.input.submit` | `enter` | Submit input |
 | `tui.input.tab` | `tab` | Tab / autocomplete |
 
@@ -119,7 +119,7 @@ Modifier combinations: `ctrl+shift+x`, `alt+ctrl+x`, `ctrl+shift+alt+x`, `ctrl+1
 | Keybinding id | Default | Description |
 |--------|---------|-------------|
 | `app.tools.expand` | `ctrl+o` | Collapse or expand tool output |
-| `app.message.followUp` | `alt+enter` | Queue follow-up message |
+| `app.message.followUp` | `ctrl+enter` | Queue follow-up message |
 | `app.message.dequeue` | `alt+up` | Restore queued messages to editor |
 
 ### Tree Navigation
@@ -179,7 +179,7 @@ On native Windows, `app.suspend` has no default binding because Windows terminal
   "tui.editor.cursorWordRight": ["alt+right", "alt+f"],
   "tui.editor.deleteCharForward": ["delete", "ctrl+d"],
   "tui.editor.deleteCharBackward": ["backspace", "ctrl+h"],
-  "tui.input.newLine": ["shift+enter", "ctrl+j"]
+  "tui.input.newLine": ["shift+enter", "ctrl+j", "alt+enter"]
 }
 ```
 

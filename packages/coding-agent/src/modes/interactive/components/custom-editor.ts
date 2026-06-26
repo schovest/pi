@@ -66,6 +66,13 @@ export class CustomEditor extends Editor {
 			// Fall through to editor handling for delete-char-forward when not empty
 		}
 
+		// New line takes priority over app actions (e.g. app.message.followUp also binds alt+enter,
+		// but in the editor alt+enter should insert a newline, not queue a follow-up message).
+		if (this.keybindings.matches(data, "tui.input.newLine")) {
+			super.handleInput(data);
+			return;
+		}
+
 		// Check all other app actions
 		for (const [action, handler] of this.actionHandlers) {
 			if (action !== "app.interrupt" && action !== "app.exit" && this.keybindings.matches(data, action)) {
