@@ -43,7 +43,7 @@
 - 不通过删除或降级功能修复类型错误；依赖过旧时优先升级
 - 外部 API 类型以 `node_modules` 或官方文档为准，不猜测
 - 不硬编码快捷键；默认快捷键放入 `keybindings` 配置
-- 不手改 `packages/ai/src/models.generated.ts`；这是编译自动生成的
+- 不手改 `packages/ai/src/models.generated.ts` ,`image-models.generated.ts`；这是编译自动生成的
 - 删除内容前需充分考量是否会影响其他功能，如果有影响需要向用户汇报，得到批准以后进行。
 - 不为兼容旧行为保留复杂分支，除非用户要求
 - **每次变更完毕后必须自查 `packages/coding-agent/docs/` 是否需要更新**：对照变更内容逐项检查 docs 下各文件，确认文档与代码一致；不需要更新时也须明确说明"已自查，docs 无需更新"，禁止跳过此步。
