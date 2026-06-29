@@ -773,7 +773,7 @@ export class InteractiveMode {
 		};
 
 		this.ui.start();
-		this.ui.setFixedBottomCount(4);
+		this.ui.setFixedBottomCount(5);
 		this.isInitialized = true;
 
 		// Initialize extensions first so resources are shown before messages
