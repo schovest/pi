@@ -122,13 +122,15 @@ fi
 #   name:    extension identifier
 #   desc:    short description
 #   default: 1 = selected in standard set, 0 = not
-#   install: installation spec (file: = file copy, otherwise pi install)
+#   install: installation spec (file: = file copy to extensions/, agent: = file copy to primary-agents/, otherwise pi install)
 
 EXT_NAMES=(
 	"pi-mcp-adapter"
 	"@juicesharp/rpiv-todo"
 	"@juicesharp/rpiv-ask-user-question"
 	"tps"
+	"config"
+	"coding"
 	"context-mode"
 	"@juicesharp/rpiv-btw"
 )
@@ -137,15 +139,19 @@ EXT_DESCS=(
 	"任务管理插件"
 	"用户交互问答"
 	"Tokens-per-second 监控"
+	"配置管理 Agent (primary-agent)"
+	"编码实现 Agent (primary-agent)"
 	"智能上下文模式切换"
 	"侧边栏问答命令"
 )
-EXT_DEFAULTS=(1 1 1 0 0 0)
+EXT_DEFAULTS=(1 1 1 0 1 0 0 0)
 EXT_INSTALLS=(
 	"npm:pi-mcp-adapter"
 	"npm:@juicesharp/rpiv-todo"
 	"npm:@juicesharp/rpiv-ask-user-question"
 	"file:tps.ts"
+	"agent:config.md"
+	"agent:coding.md"
 	"npm:context-mode"
 	"npm:@juicesharp/rpiv-btw"
 )
@@ -309,7 +315,7 @@ for i in $(seq 0 $((NUM - 1))); do
 	any_installed=1
 
 	if [ "${install_spec#file:}" != "$install_spec" ]; then
-		# File copy install
+		# File copy install (extensions)
 		src_file="${install_spec#file:}"
 		echo "Installing $name (file copy)..."
 		ext_dir="$HOME/.pi/agent/extensions"
@@ -319,6 +325,18 @@ for i in $(seq 0 $((NUM - 1))); do
 			echo "  copied $src_file to $ext_dir/"
 		else
 			echo "  warning - $src_file not found in $SCRIPT_DIR/extensions/"
+		fi
+	elif [ "${install_spec#agent:}" != "$install_spec" ]; then
+		# File copy install (primary agents)
+		src_file="${install_spec#agent:}"
+		echo "Installing $name (primary agent)..."
+		agent_dir="$HOME/.pi/agent/primary-agents"
+		mkdir -p "$agent_dir"
+		if [ -f "$SCRIPT_DIR/primary-agents/$src_file" ]; then
+			cp "$SCRIPT_DIR/primary-agents/$src_file" "$agent_dir/$src_file"
+			echo "  copied $src_file to $agent_dir/"
+		else
+			echo "  warning - $src_file not found in $SCRIPT_DIR/primary-agents/"
 		fi
 	else
 		# pi install

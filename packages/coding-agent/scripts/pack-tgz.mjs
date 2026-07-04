@@ -35,6 +35,7 @@ const fileList = [
 	"assets",
 	"export-html",
 	"extensions",
+	"primary-agents",
 	"docs",
 	"examples",
 	"photon_rs_bg.wasm",
