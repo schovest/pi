@@ -128,6 +128,7 @@ npx vitest run --dir packages/agent/test agent-loop
 - 只提交当前会话修改的文件；用显式路径 stage（`git add path1 path2`）
 - 禁止 `git add -A`、`git add .`、`git reset --hard`、`git checkout .`、`git clean -fd`、`git stash`、`git commit --no-verify`
 - 提交前 `git status` 确认只 stage 自己的文件
+- 提交前必须检查 `docs/superpowers/` 下是否有未跟踪的文件，有则一并提交，避免遗漏设计文档
 - 只解决自己修改过的文件里的冲突；冲突在他人文件时停止并询问
 - 不 force push
 - **升级版本必须打 tag**
