@@ -317,8 +317,15 @@ export class TUI extends Container {
 	private fullRedrawCount = 0;
 	private stopped = false;
 	private fixedBottomCount = 0;
-	// biome-ignore lint/correctness/noUnusedPrivateClassMembers: reserved for future mouse coordinate mapping
+	// Scrollable viewport top in the full-lines buffer; used for mouse coordinate mapping
 	private currentScrollableViewportTop = 0;
+	// Full-lines buffer (pre-overlay, pre-highlight) cached each render for selection
+	// coordinate mapping and text extraction. Equals [...scrollableLines, ...fixedLines].
+	// biome-ignore lint/correctness/noUnusedPrivateClassMembers: used in later tasks (selection highlight / text extraction)
+	private currentFullLines: string[] = [];
+	private currentScrollableLinesLength: number = 0;
+	// biome-ignore lint/correctness/noUnusedPrivateClassMembers: used in later task for auto-scroll during selection drag
+	private autoScrollDirection: -1 | 1 = -1;
 	private selection: SelectionState | null = null;
 	private scrollOffset = 0;
 	private autoFollow = true;
@@ -960,6 +967,41 @@ export class TUI extends Container {
 			}
 		}
 		return null;
+	}
+
+	/**
+	 * Convert a screen row (0-indexed terminal row) to a buffer-absolute row index
+	 * in `this.currentFullLines`. Used by mouseDown/mouseMove to set selection
+	 * anchor/focus in stable buffer coordinates that survive scrolling.
+	 *
+	 * - Screen rows in the scrollable area map to:
+	 *   currentScrollableViewportTop + screenRow
+	 * - Screen rows in the fixed area map to:
+	 *   currentScrollableLinesLength + (screenRow - lastScrollableViewport)
+	 */
+	// biome-ignore lint/correctness/noUnusedPrivateClassMembers: used from test via as unknown as cast
+	private screenToBufferRow(screenRow: number): number {
+		const svp = this.lastScrollableViewport;
+		if (screenRow < svp) {
+			return this.currentScrollableViewportTop + screenRow;
+		}
+		return this.currentScrollableLinesLength + (screenRow - svp);
+	}
+
+	/**
+	 * Convert a buffer-absolute row index back to a screen row.
+	 * Returns -1 if the buffer row is a scrollable line currently outside the viewport.
+	 * Fixed-area buffer rows always map to a visible screen row.
+	 */
+	// biome-ignore lint/correctness/noUnusedPrivateClassMembers: used from test via as unknown as cast
+	private bufferToScreenRow(bufferRow: number): number {
+		const scrollableLen = this.currentScrollableLinesLength;
+		if (bufferRow < scrollableLen) {
+			const screenRow = bufferRow - this.currentScrollableViewportTop;
+			if (screenRow < 0 || screenRow >= this.lastScrollableViewport) return -1;
+			return screenRow;
+		}
+		return this.lastScrollableViewport + (bufferRow - scrollableLen);
 	}
 
 	private applySelectionHighlight(newLines: string[], viewportTop: number, height: number): void {
@@ -1613,6 +1655,11 @@ export class TUI extends Container {
 		}
 		if (this.scrollOffset > maxScroll) this.scrollOffset = maxScroll;
 		this.previousScrollableLineCount = scrollableLines.length;
+
+		// Cache full lines (pre-overlay, pre-highlight) for selection text extraction
+		// and absolute-row coordinate mapping
+		this.currentFullLines = [...scrollableLines, ...fixedLines];
+		this.currentScrollableLinesLength = scrollableLines.length;
 
 		// Determine visible scrollable lines
 		const scrollableViewportTop = Math.max(0, scrollableLines.length - scrollableViewport - this.scrollOffset);
