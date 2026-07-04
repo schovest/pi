@@ -800,7 +800,10 @@ export class TUI extends Container {
 			this.selection.focusCol = col;
 			if (event.row <= 1) {
 				this.startAutoScroll(-1);
-			} else if (event.row >= this.terminal.rows) {
+			} else if (event.row >= this.lastScrollableViewport) {
+				// Trigger downward autoScroll at the bottom of the scrollable area,
+				// not the terminal bottom — the latter would require crossing any fixed
+				// bottom region (e.g. the input box) before scrolling kicks in.
 				this.startAutoScroll(1);
 			} else {
 				this.clearAutoScrollTimer();

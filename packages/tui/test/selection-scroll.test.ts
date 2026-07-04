@@ -219,7 +219,7 @@ describe("selection-scroll: autoScroll across viewport boundary", () => {
 
 		// mouseDown at screen row 3 (buffer row 2, "L02"), col 1
 		tui.handleMouseEvent({ type: "mouseDown", button: 0, col: 1, row: 3, shift: false, alt: false, ctrl: false });
-		// mouseMove to bottom edge (row = terminal.rows = 6) triggers autoScroll(+1)
+		// mouseMove to bottom of scrollable area (row = lastScrollableViewport = 6, no fixed region)
 		tui.handleMouseEvent({ type: "mouseMove", button: 0, col: 1, row: 6, shift: false, alt: false, ctrl: false });
 
 		await new Promise<void>((resolve) => setTimeout(resolve, 350));
@@ -259,6 +259,59 @@ describe("selection-scroll: autoScroll across viewport boundary", () => {
 		// After mouseUp, clearAutoScrollTimer is called
 		const timerAfter = (tui as unknown as { autoScrollTimer: unknown }).autoScrollTimer;
 		assert.strictEqual(timerAfter, null);
+	});
+
+	it("triggers downward autoScroll at scrollable-area bottom, not terminal bottom, when fixed region exists", async () => {
+		// 20 scrollable lines + 2 fixed lines, terminal 8 rows.
+		// scrollableViewport = 8 - 2 = 6. scrollable region is screen rows 0..5,
+		// fixed region is screen rows 6..7. autoScroll(+1) should trigger at
+		// scrollable-area bottom (row=6, i.e. event.row = lastScrollableViewport = 6),
+		// NOT at terminal bottom (row=8).
+		const scrollableLines = Array.from({ length: 20 }, (_, i) => `L${i.toString().padStart(2, "0")}`);
+		const fixedLines = ["FIXED1", "FIXED2"];
+		const terminal = new VirtualTerminal(40, 8);
+		const tui = new TUI(terminal);
+		tui.setFixedBottomCount(1);
+		tui.addChild(new FixedLinesComponent(scrollableLines));
+		tui.addChild(new FixedLinesComponent(fixedLines));
+		const copied: string[] = [];
+		tui.onCopySelection = (text) => {
+			copied.push(text);
+		};
+		tui.requestRender();
+		await settleRender();
+
+		// Scroll to oldest: maxScroll = 20 - 6 = 14, viewportTop = 0
+		tui.setAutoFollow(false);
+		tui.setScrollOffset(14);
+		await settleRender();
+
+		// mouseDown at screen row 2 (buffer row 2, "L02")
+		tui.handleMouseEvent({ type: "mouseDown", button: 0, col: 1, row: 3, shift: false, alt: false, ctrl: false });
+		// mouseMove to screen row 6 (lastScrollableViewport = 6, the bottom of scrollable area, just above fixed region)
+		tui.handleMouseEvent({ type: "mouseMove", button: 0, col: 1, row: 6, shift: false, alt: false, ctrl: false });
+
+		// autoScroll timer should be active
+		const timerActive = (tui as unknown as { autoScrollTimer: unknown }).autoScrollTimer;
+		assert.ok(
+			timerActive !== null && timerActive !== undefined,
+			"autoScrollTimer should be active at scrollable-area bottom",
+		);
+
+		// Let it scroll a few ticks
+		await new Promise<void>((resolve) => setTimeout(resolve, 350));
+
+		tui.handleMouseEvent({ type: "mouseMove", button: 0, col: 1, row: 4, shift: false, alt: false, ctrl: false });
+		tui.handleMouseEvent({ type: "mouseUp", button: 0, col: 1, row: 4, shift: false, alt: false, ctrl: false });
+
+		assert.strictEqual(copied.length, 1);
+		const text = copied[0]!;
+		const includedLines = text.split("\n");
+		assert.ok(includedLines.length > 1, `expected multi-line selection, got: ${JSON.stringify(text)}`);
+		assert.ok(includedLines.includes("L02"), `expected L02 in selection: ${JSON.stringify(text)}`);
+		// Should have scrolled down enough to include lines beyond the original viewport
+		const newLine = includedLines.find((l) => /^L0[6-9]$/.test(l) || /^L1[0-9]$/.test(l));
+		assert.ok(newLine, `expected a line from buffer rows 6-19: ${JSON.stringify(text)}`);
 	});
 });
 
@@ -333,11 +386,15 @@ describe("selection-scroll: highlight survives scroll", () => {
 		await terminal.flush();
 
 		// Read xterm cell attributes to detect inverse video (fg !== 0 = inverse flag set)
-		const buf = (terminal as unknown as { xterm: { buffer: { active: { viewportY: number; getLine: (n: number) => unknown } } } }).xterm.buffer.active;
+		const buf = (
+			terminal as unknown as {
+				xterm: { buffer: { active: { viewportY: number; getLine: (n: number) => unknown } } };
+			}
+		).xterm.buffer.active;
 		for (let screenRow = 0; screenRow < 6; screenRow++) {
 			const line = buf.getLine(buf.viewportY + screenRow) as { getCell: (c: number) => unknown } | null;
 			const cell = line?.getCell(0);
-			const isInverse = cell ? ((cell as unknown as { fg: number }).fg !== 0) : false;
+			const isInverse = cell ? (cell as unknown as { fg: number }).fg !== 0 : false;
 			if (screenRow <= 3) {
 				assert.ok(isInverse, `screen row ${screenRow} should be highlighted`);
 			} else {
@@ -358,12 +415,22 @@ describe("selection-scroll: extractSelectionText from buffer", () => {
 		tui.requestRender();
 		await settleRender();
 
-		(tui as unknown as { selection: { active: boolean; anchorRow: number; anchorCol: number; focusRow: number; focusCol: number } | null }).selection = {
+		(
+			tui as unknown as {
+				selection: {
+					active: boolean;
+					anchorRow: number;
+					anchorCol: number;
+					focusRow: number;
+					focusCol: number;
+				} | null;
+			}
+		).selection = {
 			active: true,
 			anchorRow: 5,
 			anchorCol: 0,
 			focusRow: 25,
-			focusCol: 2,  // covers "L25" (L=0,2=1,5=2 → col 2 inclusive = "L25")
+			focusCol: 2, // covers "L25" (L=0,2=1,5=2 → col 2 inclusive = "L25")
 		};
 
 		const text = (tui as unknown as { extractSelectionText: () => string }).extractSelectionText();
@@ -383,7 +450,17 @@ describe("selection-scroll: extractSelectionText from buffer", () => {
 		tui.requestRender();
 		await settleRender();
 
-		(tui as unknown as { selection: { active: boolean; anchorRow: number; anchorCol: number; focusRow: number; focusCol: number } | null }).selection = {
+		(
+			tui as unknown as {
+				selection: {
+					active: boolean;
+					anchorRow: number;
+					anchorCol: number;
+					focusRow: number;
+					focusCol: number;
+				} | null;
+			}
+		).selection = {
 			active: true,
 			anchorRow: -2,
 			anchorCol: 0,
@@ -408,7 +485,17 @@ describe("selection-scroll: extractSelectionText from buffer", () => {
 		tui.requestRender();
 		await settleRender();
 
-		(tui as unknown as { selection: { active: boolean; anchorRow: number; anchorCol: number; focusRow: number; focusCol: number } | null }).selection = {
+		(
+			tui as unknown as {
+				selection: {
+					active: boolean;
+					anchorRow: number;
+					anchorCol: number;
+					focusRow: number;
+					focusCol: number;
+				} | null;
+			}
+		).selection = {
 			active: true,
 			anchorRow: 10,
 			anchorCol: 0,
