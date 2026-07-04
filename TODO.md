@@ -12,7 +12,7 @@
 |--------|------|
 | 超时阈值 | 新增 `settings.json` 配置项（默认 120s），LLM 工具参数传入的 `timeout` 优先 |
 | 完成通知 | 进程结束后注入一条 **user message**（复用 `followUpQueue`），内容含命令、退出码、输出摘要 |
-| 并发处理 | 通知**排队不打断**——进入 `followUpQueue`，等 agent 当前任务完成后注入 |
+| 并发处理 | 通知**排队不打断**——agent 正在 streaming 时进入 `followUpQueue`；agent 空闲时直接调用 `prompt()` 触发新 turn |
 | 管理界面 | ctrl-Down 打开后台进程列表，支持**查看输出 + 手动 Kill** |
 
 #### 实现要点

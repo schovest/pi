@@ -1484,14 +1484,19 @@ export class AgentSession {
 				: snapshot.content;
 			text += `\n\nOutput:\n${preview}`;
 		}
-		// Use the internal follow-up queue directly (pre-expanded, no command check).
-		this._followUpMessages.push(text);
-		this._emitQueueUpdate();
-		this.agent.followUp({
-			role: "user",
-			content: [{ type: "text", text }],
-			timestamp: Date.now(),
-		});
+		if (this.isStreaming) {
+			// Agent is busy — queue as follow-up to be delivered after current turn.
+			this._followUpMessages.push(text);
+			this._emitQueueUpdate();
+			this.agent.followUp({
+				role: "user",
+				content: [{ type: "text", text }],
+				timestamp: Date.now(),
+			});
+		} else {
+			// Agent is idle — directly start a new turn.
+			await this.prompt(text, { expandPromptTemplates: false });
+		}
 	}
 
 	/**

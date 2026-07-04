@@ -107,17 +107,19 @@ interface BackgroundProcessManager {
 ### 进程完成通知
 
 ```
-1. BackgroundProcessManager 监听 child.on('exit')
+1. BackgroundProcessManager 监听 child.on('close')
 2. 进程退出：
    ├─ 记录 exitCode、endedAt
    ├─ output.finish() 拿到最终输出快照
    ├─ status 设为 "completed"
-   └─ 触发 onCompleted 回调
+   ├─ untrackDetachedChildPid(pid)
+   └─ 触发 onCompleted 回调 + emitChange
 3. AgentSession 的 onCompleted 回调：
    ├─ 组装通知文本："[后台命令完成] `make build` 退出码 0，输出:\n...（完整输出: /tmp/...）"
-   └─ 调用 this._queueFollowUp(notificationText) 注入 followUpQueue
-4. followUpQueue 在 agent 当前任务完成后自动注入该消息
-5. agent 收到通知，决定下一步
+   └─ 根据 agent 状态选择注入方式：
+       ├─ agent 正在 streaming → 放入 followUpQueue，等当前 turn 结束后处理
+       └─ agent 空闲 → 直接调用 prompt() 触发新 turn
+4. agent 收到通知，决定下一步
 ```
 
 ### ctrl+Down 管理界面

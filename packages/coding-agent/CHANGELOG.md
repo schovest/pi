@@ -8,6 +8,11 @@
 
 - 命令后台运行：bash 命令超时后自动转入后台运行，新增 `Ctrl+Down` 管理后台进程，进程结束后自动通知 agent
 - 新增 settings 配置项 `bashBackgroundTimeout`（默认 120 秒），控制命令转后台的超时阈值
+- footer 显示后台进程运行计数和快捷键提示 `bg:N(ctrl+down)`
+
+### Fixed
+
+- 后台进程完成通知在 agent 空闲时无法触发：agent streaming 时放入 followUpQueue，agent 空闲时直接调用 prompt()
 
 ## [0.7.0] - 2026-07-04
 
