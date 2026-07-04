@@ -321,7 +321,6 @@ export class TUI extends Container {
 	private currentScrollableViewportTop = 0;
 	// Full-lines buffer (pre-overlay, pre-highlight) cached each render for selection
 	// coordinate mapping and text extraction. Equals [...scrollableLines, ...fixedLines].
-	// biome-ignore lint/correctness/noUnusedPrivateClassMembers: used in later tasks (selection highlight / text extraction)
 	private currentFullLines: string[] = [];
 	private currentScrollableLinesLength: number = 0;
 	// biome-ignore lint/correctness/noUnusedPrivateClassMembers: used in later task for auto-scroll during selection drag
@@ -781,25 +780,29 @@ export class TUI extends Container {
 		if (event.type === "mouseDown") {
 			const screenRow = event.row - 1;
 			const rawCol = event.col - 1;
-			const line = this.previousLines[screenRow];
-			const screenCol = line != null ? snapColToGraphemeBoundary(line, rawCol) : rawCol;
+			const bufferRow = this.screenToBufferRow(screenRow);
+			const line = this.currentFullLines[bufferRow];
+			const col = line != null ? snapColToGraphemeBoundary(line, rawCol) : rawCol;
 			this.selection = {
 				active: true,
-				anchorRow: screenRow,
-				anchorCol: screenCol,
-				focusRow: screenRow,
-				focusCol: screenCol,
+				anchorRow: bufferRow,
+				anchorCol: col,
+				focusRow: bufferRow,
+				focusCol: col,
 			};
 			this.requestRender();
 		} else if (event.type === "mouseMove" && this.selection) {
 			const screenRow = event.row - 1;
 			const rawCol = event.col - 1;
-			const line = this.previousLines[screenRow];
-			const screenCol = line != null ? snapColToGraphemeBoundary(line, rawCol) : rawCol;
-			this.selection.focusRow = screenRow;
-			this.selection.focusCol = screenCol;
+			const bufferRow = this.screenToBufferRow(screenRow);
+			const line = this.currentFullLines[bufferRow];
+			const col = line != null ? snapColToGraphemeBoundary(line, rawCol) : rawCol;
+			this.selection.focusRow = bufferRow;
+			this.selection.focusCol = col;
 			if (event.row <= 1) {
-				this.startAutoScroll();
+				this.startAutoScroll(-1);
+			} else if (event.row >= this.terminal.rows) {
+				this.startAutoScroll(1);
 			} else {
 				this.clearAutoScrollTimer();
 			}
@@ -888,7 +891,7 @@ export class TUI extends Container {
 		this.fixedBottomCount = count;
 	}
 
-	private startAutoScroll(): void {
+	private startAutoScroll(_direction: -1 | 1): void {
 		if (this.autoScrollTimer) return;
 		this.autoFollow = false;
 		this.autoScrollTimer = setInterval(() => {
@@ -979,7 +982,6 @@ export class TUI extends Container {
 	 * - Screen rows in the fixed area map to:
 	 *   currentScrollableLinesLength + (screenRow - lastScrollableViewport)
 	 */
-	// biome-ignore lint/correctness/noUnusedPrivateClassMembers: used from test via as unknown as cast
 	private screenToBufferRow(screenRow: number): number {
 		const svp = this.lastScrollableViewport;
 		if (screenRow < svp) {

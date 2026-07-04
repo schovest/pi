@@ -135,3 +135,57 @@ describe("selection-scroll: screenToBufferRow / bufferToScreenRow", () => {
 		assert.strictEqual(buf12, 8);
 	});
 });
+
+describe("selection-scroll: mouseDown→mouseUp without scroll", () => {
+	it("selects and copies a single-line drag selection", async () => {
+		const lines = ["hello world"];
+		const terminal = new VirtualTerminal(40, 6);
+		const tui = new TUI(terminal);
+		tui.addChild(new FixedLinesComponent(lines));
+		const copied: string[] = [];
+		tui.onCopySelection = (text) => {
+			copied.push(text);
+		};
+		tui.requestRender();
+		await settleRender();
+
+		// mouseDown at row=1 col=1 → anchor at (buffer row 0, col 0) = 'h'
+		tui.handleMouseEvent({ type: "mouseDown", button: 0, col: 1, row: 1, shift: false, alt: false, ctrl: false });
+		// mouseMove at row=1 col=6 → focus at (buffer row 0, col 5) = ' '
+		tui.handleMouseEvent({ type: "mouseMove", button: 0, col: 6, row: 1, shift: false, alt: false, ctrl: false });
+		// mouseUp finalizes the selection (does not update focus)
+		tui.handleMouseEvent({ type: "mouseUp", button: 0, col: 6, row: 1, shift: false, alt: false, ctrl: false });
+
+		// anchor=(0,0), focus=(0,5). startCol=0, endCol=5 inclusive → cols 0..5 = "hello "
+		assert.strictEqual(copied.length, 1);
+		assert.strictEqual(copied[0], "hello ");
+	});
+
+	it("selects multi-line drag range within viewport", async () => {
+		const lines = ["ABCDE", "FGHIJ", "KLMNO"];
+		const terminal = new VirtualTerminal(40, 6);
+		const tui = new TUI(terminal);
+		tui.addChild(new FixedLinesComponent(lines));
+		const copied: string[] = [];
+		tui.onCopySelection = (text) => {
+			copied.push(text);
+		};
+		tui.requestRender();
+		await settleRender();
+
+		// 3 lines, all fit in viewport (height 6). viewportTop = 0.
+		// mouseDown at row=1 col=2 → anchor at (buffer row 0, col 1) = 'B'
+		tui.handleMouseEvent({ type: "mouseDown", button: 0, col: 2, row: 1, shift: false, alt: false, ctrl: false });
+		// mouseMove at row=3 col=4 → focus at (buffer row 2, col 3) = 'M'
+		tui.handleMouseEvent({ type: "mouseMove", button: 0, col: 4, row: 3, shift: false, alt: false, ctrl: false });
+		// mouseUp finalizes the selection
+		tui.handleMouseEvent({ type: "mouseUp", button: 0, col: 4, row: 3, shift: false, alt: false, ctrl: false });
+
+		// anchor=(0,1), focus=(2,3). startRow=0, endRow=2.
+		// Row 0 (start row, not end row): startCol=1, rowEndCol=visibleWidth-1=4 → cols 1..4 = "BCDE"
+		// Row 1 (middle): full line = "FGHIJ"
+		// Row 2 (end row): startCol=0, rowEndCol=endCol=3 → cols 0..3 = "KLMN"
+		// Result: "BCDE\nFGHIJ\nKLMN"
+		assert.strictEqual(copied[0], "BCDE\nFGHIJ\nKLMN");
+	});
+});
