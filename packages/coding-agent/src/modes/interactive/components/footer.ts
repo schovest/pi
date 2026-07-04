@@ -3,6 +3,7 @@ import { type Component, truncateToWidth, visibleWidth } from "@schovest/pi-tui"
 import type { AgentSession } from "../../../core/agent-session.ts";
 import type { ReadonlyFooterDataProvider } from "../../../core/footer-data-provider.ts";
 import { theme } from "../theme/theme.ts";
+import { keyText } from "./keybinding-hints.ts";
 
 /**
  * Sanitize text for display in a single-line status.
@@ -146,6 +147,13 @@ export class FooterComponent implements Component {
 		}
 		if (runningSubagents > 0) {
 			statsParts.push(theme.fg("warning", `subagents:${runningSubagents}`));
+		}
+
+		// Show background process count with keybinding hint
+		const bgCount = this.session.backgroundProcessManager.getRunningCount();
+		if (bgCount > 0) {
+			const bgKey = keyText("app.backgroundProcesses");
+			statsParts.push(theme.fg("accent", `bg:${bgCount}`) + theme.fg("dim", `(${bgKey})`));
 		}
 
 		// Colorize context percentage based on usage

@@ -135,6 +135,7 @@ export interface Settings {
 	sessionDir?: string; // Custom session storage directory (same format as --session-dir CLI flag)
 	httpIdleTimeoutMs?: number; // HTTP header/body idle timeout in milliseconds; 0 disables it
 	websocketConnectTimeoutMs?: number; // WebSocket connect/open handshake timeout in milliseconds; 0 disables it
+	bashBackgroundTimeout?: number; // Default timeout in seconds before a bash command is moved to background (default: 120)
 }
 
 /** Deep merge settings: project/overrides take precedence, nested objects merge recursively */
@@ -899,6 +900,10 @@ export class SettingsManager {
 
 	getShellCommandPrefix(): string | undefined {
 		return this.settings.shellCommandPrefix;
+	}
+
+	getBashBackgroundTimeout(): number | undefined {
+		return this.settings.bashBackgroundTimeout;
 	}
 
 	setShellCommandPrefix(prefix: string | undefined): void {

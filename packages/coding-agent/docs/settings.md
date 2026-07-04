@@ -165,6 +165,7 @@ Keep `retry.provider.maxRetries` at `0` unless provider-level retries are explic
 |---------|------|---------|-------------|
 | `shellPath` | string | - | Custom shell path (e.g., for Cygwin on Windows) |
 | `shellCommandPrefix` | string | - | Prefix for every bash command (e.g., `"shopt -s expand_aliases"`) |
+| `bashBackgroundTimeout` | number | `120` | Default timeout in seconds before a bash command is moved to background instead of killed. The tool argument `timeout` takes precedence. When unset or `0`, only commands with an explicit `timeout` argument will be backgrounded. |
 | `npmCommand` | string[] | - | Command argv used for npm package lookup/install operations (e.g., `["mise", "exec", "node@20", "--", "npm"]`) |
 
 ```json
@@ -174,6 +175,15 @@ Keep `retry.provider.maxRetries` at `0` unless provider-level retries are explic
 ```
 
 `npmCommand` is used for all npm package-manager operations, including installs, uninstalls, and dependency installs inside git packages. User-scoped npm packages install under `~/.pi/agent/npm/`; project-scoped npm packages install under `.pi/npm/`. Use argv-style entries exactly as the process should be launched. When `npmCommand` is configured, git package dependency installs use plain `install` to avoid npm-specific flags in wrappers or alternate package managers.
+
+#### Background Command Execution
+
+When a bash command exceeds the timeout threshold, it is automatically moved to the background instead of being killed:
+
+- **Timeout threshold**: tool argument `timeout` > `bashBackgroundTimeout` setting (default 120s). When neither is set, commands run indefinitely.
+- **Background behavior**: the tool returns immediately with a message indicating the command is running in the background. The process continues as a child of pi and is cleaned up on exit.
+- **Completion notification**: when the background process finishes, a message is automatically delivered to the agent with the exit code and output summary. If the agent is idle, a new turn is triggered; if the agent is busy, the message is queued.
+- **Management UI**: press `Ctrl+Down` to view all background processes, inspect their output, or kill running ones. The footer shows `bg:N(ctrl+down)` when background processes are active.
 
 ### Subagents
 

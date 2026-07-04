@@ -101,6 +101,7 @@ import { ensureTool } from "../../utils/tools-manager.ts";
 import { AgentSelectorComponent } from "./components/agent-selector.ts";
 import { ArminComponent } from "./components/armin.ts";
 import { AssistantMessageComponent } from "./components/assistant-message.ts";
+import { BackgroundProcessSelector } from "./components/background-process-selector.ts";
 import { BashExecutionComponent } from "./components/bash-execution.ts";
 import { BorderedLoader } from "./components/bordered-loader.ts";
 import { BranchSummaryMessageComponent } from "./components/branch-summary-message.ts";
@@ -458,6 +459,11 @@ export class InteractiveMode {
 		// Register themes from resource loader and initialize
 		setRegisteredThemes(this.session.resourceLoader.getThemes().themes);
 		initTheme(this.settingsManager.getTheme(), true);
+
+		// Re-render footer when background process count changes
+		this.session.backgroundProcessManager.onChange(() => {
+			this.ui.requestRender();
+		});
 	}
 
 	private getAutocompleteSourceTag(sourceInfo?: SourceInfo): string | undefined {
@@ -2541,6 +2547,7 @@ export class InteractiveMode {
 		this.defaultEditor.onAction("app.session.fork", () => this.showUserMessageSelector());
 		this.defaultEditor.onAction("app.session.resume", () => this.showSessionSelector());
 		this.defaultEditor.onAction("app.commandPalette", () => this.showCommandPalette());
+		this.defaultEditor.onAction("app.backgroundProcesses", () => this.showBackgroundProcesses());
 
 		this.defaultEditor.onChange = (text: string) => {
 			const wasBashMode = this.isBashMode;
@@ -2566,6 +2573,15 @@ export class InteractiveMode {
 			category: "navigation",
 			keybinding: "ctrl+p",
 			handler: () => this.showCommandPalette(),
+		});
+
+		registry.register({
+			id: "app.backgroundProcesses",
+			label: "后台进程",
+			description: "管理后台运行的命令",
+			category: "tools",
+			keybinding: "ctrl+down",
+			handler: () => this.showBackgroundProcesses(),
 		});
 
 		registry.register({
@@ -5028,6 +5044,23 @@ export class InteractiveMode {
 				},
 				initialSearchInput,
 			);
+			return { component: selector, focus: selector };
+		});
+	}
+
+	private showBackgroundProcesses(): void {
+		this.showSelector((done) => {
+			const selector = new BackgroundProcessSelector({
+				manager: this.session.backgroundProcessManager,
+				tui: this.ui,
+				onClose: () => {
+					done();
+					this.ui.requestRender();
+				},
+				onStatus: (message) => {
+					this.showStatus(message);
+				},
+			});
 			return { component: selector, focus: selector };
 		});
 	}
