@@ -322,7 +322,7 @@ export class TUI extends Container {
 	// Full-lines buffer (pre-overlay, pre-highlight) cached each render for selection
 	// coordinate mapping and text extraction. Equals [...scrollableLines, ...fixedLines].
 	private currentFullLines: string[] = [];
-	// biome-ignore lint/correctness/noUnusedPrivateClassMembers: Overlay-composited lines (post-overlay, pre-highlight) cached each render for text extraction and grapheme snapping when an overlay covers a row
+	// Overlay-composited lines (post-overlay, pre-highlight) cached each render for text extraction and grapheme snapping when an overlay covers a row
 	private currentCompositedLines: string[] = [];
 	private currentScrollableLinesLength: number = 0;
 	private autoScrollDirection: -1 | 1 = -1;
@@ -951,10 +951,15 @@ export class TUI extends Container {
 		const parts: string[] = [];
 		for (let row = startRow; row <= endRow; row++) {
 			if (row < 0 || row >= lines.length) continue;
-			const line = lines[row];
 			// Apply selectionClip from overlays that cover this screen row
 			const screenRow = this.bufferToScreenRow(row);
 			const clip = screenRow >= 0 ? this.getSelectionClipForRow(screenRow) : null;
+			// Overlay-covered rows: extract from composited lines (overlay content).
+			// Non-overlay rows: extract from full buffer (supports cross-viewport selection).
+			const line =
+				clip != null && screenRow >= 0 && screenRow < this.currentCompositedLines.length
+					? this.currentCompositedLines[screenRow]
+					: lines[row];
 			const rowStartCol = row === startRow ? startCol : 0;
 			const rowEndCol = row === endRow ? endCol : visibleWidth(line) - 1;
 			let clipStart = rowStartCol;
@@ -965,7 +970,10 @@ export class TUI extends Container {
 				clipEnd = Math.min(clipEnd, clip.col + clip.width - 1);
 			}
 			if (clipStart > clipEnd) continue;
-			parts.push(stripAnsi(sliceByColumn(line, clipStart, clipEnd - clipStart + 1)));
+			const extracted = stripAnsi(sliceByColumn(line, clipStart, clipEnd - clipStart + 1));
+			// Trim trailing whitespace from composited lines since compositeLineAt
+			// pads them to terminal width with spaces, followed by ANSI resets.
+			parts.push(clip ? extracted.trimEnd() : extracted);
 		}
 		return parts.join("\n");
 	}

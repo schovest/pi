@@ -547,3 +547,80 @@ describe("overlay-selection: currentCompositedLines cache", () => {
 		assert.strictEqual(composited.length, 0);
 	});
 });
+
+describe("overlay-selection: extractSelectionText from overlay content", () => {
+	it("extracts text from overlay-composited lines, not base content", async () => {
+		// Base content is "base0".."base5". Overlay covers full screen with "ovly0".."ovly5".
+		// Selecting should extract overlay text, not base text.
+		const terminal = new VirtualTerminal(20, 6);
+		const tui = new TUI(terminal);
+		tui.addChild(new FixedLinesComponent(Array.from({ length: 6 }, (_, i) => `base${i}`)));
+		tui.requestRender();
+		await settleRender();
+
+		const overlay = new FixedLinesComponent(Array.from({ length: 6 }, (_, i) => `ovly${i}`));
+		tui.showOverlay(overlay, {
+			row: 0,
+			col: 0,
+			width: "100%",
+			maxHeight: "100%",
+			selectionClip: () => ({ col: 0, width: 20 }),
+		});
+		tui.requestRender();
+		await settleRender();
+
+		// Set selection spanning buffer rows 0..2 (all within viewport)
+		(
+			tui as unknown as {
+				selection: {
+					active: boolean;
+					anchorRow: number;
+					anchorCol: number;
+					focusRow: number;
+					focusCol: number;
+				} | null;
+			}
+		).selection = {
+			active: true,
+			anchorRow: 0,
+			anchorCol: 0,
+			focusRow: 2,
+			focusCol: 4, // "ovly2" = 5 chars, col 4 inclusive = full line
+		};
+
+		const text = (tui as unknown as { extractSelectionText: () => string }).extractSelectionText();
+		// Should extract overlay content: "ovly0", "ovly1", "ovly2"
+		assert.strictEqual(text, "ovly0\novly1\novly2");
+	});
+
+	it("extracts from currentFullLines when no overlay covers the row", async () => {
+		// No overlay — should use currentFullLines (same as before)
+		const lines = ["AAAAA", "BBBBB", "CCCCC"];
+		const terminal = new VirtualTerminal(20, 6);
+		const tui = new TUI(terminal);
+		tui.addChild(new FixedLinesComponent(lines));
+		tui.requestRender();
+		await settleRender();
+
+		(
+			tui as unknown as {
+				selection: {
+					active: boolean;
+					anchorRow: number;
+					anchorCol: number;
+					focusRow: number;
+					focusCol: number;
+				} | null;
+			}
+		).selection = {
+			active: true,
+			anchorRow: 0,
+			anchorCol: 0,
+			focusRow: 2,
+			focusCol: 4,
+		};
+
+		const text = (tui as unknown as { extractSelectionText: () => string }).extractSelectionText();
+		assert.strictEqual(text, "AAAAA\nBBBBB\nCCCCC");
+	});
+});
