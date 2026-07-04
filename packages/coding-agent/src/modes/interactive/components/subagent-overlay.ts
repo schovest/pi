@@ -22,6 +22,8 @@ export interface SubagentOverlayOptions {
 	getTerminalHeight: () => number;
 	/** Load historical subagent messages from inline session data */
 	getSubagentMessages?: (subagentEntryId: string) => AgentMessage[];
+	/** Clear TUI selection when overlay scrolls (prevents stale highlight) */
+	clearSelection?: () => void;
 }
 
 interface AgentListItem {
@@ -64,6 +66,7 @@ export class SubagentOverlayComponent extends Container {
 	private requestRender: () => void;
 	private getTerminalHeight: () => number;
 	private getSubagentMessages?: (subagentEntryId: string) => AgentMessage[];
+	private clearSelection?: () => void;
 
 	private selectedIndex = 0;
 	private expanded = false;
@@ -85,6 +88,7 @@ export class SubagentOverlayComponent extends Container {
 		this.requestRender = options.requestRender;
 		this.getTerminalHeight = options.getTerminalHeight;
 		this.getSubagentMessages = options.getSubagentMessages;
+		this.clearSelection = options.clearSelection;
 
 		this.leftPanel = new Container();
 		this.rightPanel = new Container();
@@ -142,32 +146,38 @@ export class SubagentOverlayComponent extends Container {
 		const pageAmount = this.getTerminalHeight() - 4;
 		if (keyData === "\x1b[scrollUp") {
 			this.detailScrollOffset = Math.max(0, this.detailScrollOffset - 3);
+			this.clearSelection?.();
 			this.rebuildRightPanel();
 			this.requestRender();
 			return true;
 		} else if (keyData === "\x1b[scrollDown") {
 			this.detailScrollOffset += 3;
+			this.clearSelection?.();
 			this.rebuildRightPanel();
 			this.requestRender();
 			return true;
 		} else if (matchesKey(keyData, "pageUp")) {
 			this.detailScrollOffset = Math.max(0, this.detailScrollOffset - pageAmount);
+			this.clearSelection?.();
 			this.rebuildRightPanel();
 			this.requestRender();
 			return true;
 		} else if (matchesKey(keyData, "pageDown")) {
 			this.detailScrollOffset += pageAmount;
+			this.clearSelection?.();
 			this.rebuildRightPanel();
 			this.requestRender();
 			return true;
 		} else if (matchesKey(keyData, "home") || keyData === "g") {
 			this.detailScrollOffset = 0;
+			this.clearSelection?.();
 			this.rebuildRightPanel();
 			this.requestRender();
 			return true;
 		} else if (matchesKey(keyData, "end") || keyData === "G") {
 			this.detailScrollOffset = Number.MAX_SAFE_INTEGER;
 			this.clampScrollOffset();
+			this.clearSelection?.();
 			this.rebuildRightPanel();
 			this.requestRender();
 			return true;

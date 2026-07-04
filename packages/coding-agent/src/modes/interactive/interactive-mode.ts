@@ -4207,6 +4207,9 @@ export class InteractiveMode {
 			getSubagentMessages: (subagentEntryId: string) => {
 				return this.sessionManager.getSubagentMessages(subagentEntryId);
 			},
+			clearSelection: () => {
+				this.ui.clearSelection();
+			},
 		});
 		this.subagentOverlayComponent = overlay;
 		this.subagentOverlayHandle = this.ui.showOverlay(overlay, {
