@@ -317,8 +317,13 @@ export class TUI extends Container {
 	private fullRedrawCount = 0;
 	private stopped = false;
 	private fixedBottomCount = 0;
-	// biome-ignore lint/correctness/noUnusedPrivateClassMembers: reserved for future mouse coordinate mapping
+	// Scrollable viewport top in the full-lines buffer; used for mouse coordinate mapping
 	private currentScrollableViewportTop = 0;
+	// Full-lines buffer (pre-overlay, pre-highlight) cached each render for selection
+	// coordinate mapping and text extraction. Equals [...scrollableLines, ...fixedLines].
+	private currentFullLines: string[] = [];
+	private currentScrollableLinesLength: number = 0;
+	private autoScrollDirection: -1 | 1 = -1;
 	private selection: SelectionState | null = null;
 	private scrollOffset = 0;
 	private autoFollow = true;
@@ -774,25 +779,29 @@ export class TUI extends Container {
 		if (event.type === "mouseDown") {
 			const screenRow = event.row - 1;
 			const rawCol = event.col - 1;
-			const line = this.previousLines[screenRow];
-			const screenCol = line != null ? snapColToGraphemeBoundary(line, rawCol) : rawCol;
+			const bufferRow = this.screenToBufferRow(screenRow);
+			const line = this.currentFullLines[bufferRow];
+			const col = line != null ? snapColToGraphemeBoundary(line, rawCol) : rawCol;
 			this.selection = {
 				active: true,
-				anchorRow: screenRow,
-				anchorCol: screenCol,
-				focusRow: screenRow,
-				focusCol: screenCol,
+				anchorRow: bufferRow,
+				anchorCol: col,
+				focusRow: bufferRow,
+				focusCol: col,
 			};
 			this.requestRender();
 		} else if (event.type === "mouseMove" && this.selection) {
 			const screenRow = event.row - 1;
 			const rawCol = event.col - 1;
-			const line = this.previousLines[screenRow];
-			const screenCol = line != null ? snapColToGraphemeBoundary(line, rawCol) : rawCol;
-			this.selection.focusRow = screenRow;
-			this.selection.focusCol = screenCol;
+			const bufferRow = this.screenToBufferRow(screenRow);
+			const line = this.currentFullLines[bufferRow];
+			const col = line != null ? snapColToGraphemeBoundary(line, rawCol) : rawCol;
+			this.selection.focusRow = bufferRow;
+			this.selection.focusCol = col;
 			if (event.row <= 1) {
-				this.startAutoScroll();
+				this.startAutoScroll(-1);
+			} else if (event.row >= this.terminal.rows) {
+				this.startAutoScroll(1);
 			} else {
 				this.clearAutoScrollTimer();
 			}
@@ -881,19 +890,33 @@ export class TUI extends Container {
 		this.fixedBottomCount = count;
 	}
 
-	private startAutoScroll(): void {
-		if (this.autoScrollTimer) return;
+	private startAutoScroll(direction: -1 | 1): void {
+		// 同方向已运行则不重启，避免定时器堆积
+		if (this.autoScrollTimer && this.autoScrollDirection === direction) return;
+		this.clearAutoScrollTimer();
 		this.autoFollow = false;
+		this.autoScrollDirection = direction;
 		this.autoScrollTimer = setInterval(() => {
 			const maxOffset = this.getMaxScrollOffset();
-			if (this.scrollOffset < maxOffset) {
+			if (direction < 0) {
+				// 向旧内容方向滚动（视口顶向缓冲区起始扩展）
+				if (this.scrollOffset >= maxOffset) return;
 				this.scrollOffset = Math.min(maxOffset, this.scrollOffset + AUTO_SCROLL_ROWS);
-				this.onScrollOffsetChange?.(this.scrollOffset);
 				if (this.selection) {
-					this.selection.focusRow = 0;
+					// focus 指向视口顶行（刚滚入视野的更旧内容）
+					this.selection.focusRow = this.currentScrollableViewportTop;
 				}
-				this.requestRender();
+			} else {
+				// 向新内容方向滚动（视口顶向缓冲区末尾收缩）
+				if (this.scrollOffset <= 0) return;
+				this.scrollOffset = Math.max(0, this.scrollOffset - AUTO_SCROLL_ROWS);
+				if (this.selection) {
+					// focus 指向视口底行（刚滚入视野的更新内容）
+					this.selection.focusRow = this.currentScrollableViewportTop + this.lastScrollableViewport - 1;
+				}
 			}
+			this.onScrollOffsetChange?.(this.scrollOffset);
+			this.requestRender();
 		}, AUTO_SCROLL_INTERVAL_MS);
 	}
 
@@ -907,7 +930,7 @@ export class TUI extends Container {
 	private extractSelectionText(): string {
 		if (!this.selection) return "";
 		const sel = this.selection;
-		const lines = this.previousLines;
+		const lines = this.currentFullLines;
 		if (lines.length === 0) return "";
 		const startRow = Math.min(sel.anchorRow, sel.focusRow);
 		const endRow = Math.max(sel.anchorRow, sel.focusRow);
@@ -924,8 +947,9 @@ export class TUI extends Container {
 		for (let row = startRow; row <= endRow; row++) {
 			if (row < 0 || row >= lines.length) continue;
 			const line = lines[row];
-			// Apply selectionClip from overlays that cover this row
-			const clip = this.getSelectionClipForRow(row);
+			// Apply selectionClip from overlays that cover this screen row
+			const screenRow = this.bufferToScreenRow(row);
+			const clip = screenRow >= 0 ? this.getSelectionClipForRow(screenRow) : null;
 			const rowStartCol = row === startRow ? startCol : 0;
 			const rowEndCol = row === endRow ? endCol : visibleWidth(line) - 1;
 			let clipStart = rowStartCol;
@@ -962,45 +986,79 @@ export class TUI extends Container {
 		return null;
 	}
 
-	private applySelectionHighlight(newLines: string[], viewportTop: number, height: number): void {
+	/**
+	 * Convert a screen row (0-indexed terminal row) to a buffer-absolute row index
+	 * in `this.currentFullLines`. Used by mouseDown/mouseMove to set selection
+	 * anchor/focus in stable buffer coordinates that survive scrolling.
+	 *
+	 * - Screen rows in the scrollable area map to:
+	 *   currentScrollableViewportTop + screenRow
+	 * - Screen rows in the fixed area map to:
+	 *   currentScrollableLinesLength + (screenRow - lastScrollableViewport)
+	 */
+	private screenToBufferRow(screenRow: number): number {
+		const svp = this.lastScrollableViewport;
+		if (screenRow < svp) {
+			return this.currentScrollableViewportTop + screenRow;
+		}
+		return this.currentScrollableLinesLength + (screenRow - svp);
+	}
+
+	/**
+	 * Convert a buffer-absolute row index back to a screen row.
+	 * Returns -1 if the buffer row is a scrollable line currently outside the viewport.
+	 * Fixed-area buffer rows always map to a visible screen row.
+	 */
+	private bufferToScreenRow(bufferRow: number): number {
+		const scrollableLen = this.currentScrollableLinesLength;
+		if (bufferRow < scrollableLen) {
+			const screenRow = bufferRow - this.currentScrollableViewportTop;
+			if (screenRow < 0 || screenRow >= this.lastScrollableViewport) return -1;
+			return screenRow;
+		}
+		return this.lastScrollableViewport + (bufferRow - scrollableLen);
+	}
+
+	private applySelectionHighlight(newLines: string[], height: number): void {
 		if (!this.selection) return;
 		const sel = this.selection;
-		const startRow = Math.min(sel.anchorRow, sel.focusRow);
-		const endRow = Math.max(sel.anchorRow, sel.focusRow);
+		const startBufferRow = Math.min(sel.anchorRow, sel.focusRow);
+		const endBufferRow = Math.max(sel.anchorRow, sel.focusRow);
 		let startCol: number;
 		let endCol: number;
-		if (startRow === endRow) {
+		if (startBufferRow === endBufferRow) {
 			startCol = Math.min(sel.anchorCol, sel.focusCol);
 			endCol = Math.max(sel.anchorCol, sel.focusCol);
 		} else {
-			startCol = startRow === sel.anchorRow ? sel.anchorCol : sel.focusCol;
-			endCol = endRow === sel.anchorRow ? sel.anchorCol : sel.focusCol;
+			startCol = startBufferRow === sel.anchorRow ? sel.anchorCol : sel.focusCol;
+			endCol = endBufferRow === sel.anchorRow ? sel.anchorCol : sel.focusCol;
 		}
-		for (let row = startRow; row <= endRow; row++) {
-			const screenRow = row - viewportTop;
+
+		for (let bufferRow = startBufferRow; bufferRow <= endBufferRow; bufferRow++) {
+			const screenRow = this.bufferToScreenRow(bufferRow);
 			if (screenRow < 0 || screenRow >= height) continue;
-			if (row < 0 || row >= newLines.length) continue;
-			const line = newLines[row];
-			if (isImageLine(line)) continue;
-			const lineVisibleWidth = visibleWidth(line);
-			let colStart = row === startRow ? Math.min(startCol, lineVisibleWidth) : 0;
-			let colEnd = row === endRow ? Math.min(endCol, lineVisibleWidth - 1) : lineVisibleWidth - 1;
-			// Apply selectionClip from overlays that cover this row
-			const clip = this.getSelectionClipForRow(row);
+			if (bufferRow < 0 || bufferRow >= this.currentFullLines.length) continue;
+			const targetLine = newLines[screenRow];
+			if (!targetLine || isImageLine(targetLine)) continue;
+			const lineVisibleWidth = visibleWidth(targetLine);
+			let colStart = bufferRow === startBufferRow ? Math.min(startCol, lineVisibleWidth) : 0;
+			let colEnd = bufferRow === endBufferRow ? Math.min(endCol, lineVisibleWidth - 1) : lineVisibleWidth - 1;
+			// Apply selectionClip from overlays that cover this screen row
+			const clip = this.getSelectionClipForRow(screenRow);
 			if (clip) {
 				colStart = Math.max(colStart, clip.col);
 				colEnd = Math.min(colEnd, clip.col + clip.width - 1);
 			}
 			if (colStart > colEnd) continue;
-			const before = sliceByColumn(line, 0, colStart, true);
-			const highlighted = sliceByColumn(line, colStart, colEnd - colStart + 1);
+			const before = sliceByColumn(targetLine, 0, colStart, true);
+			const highlighted = sliceByColumn(targetLine, colStart, colEnd - colStart + 1);
 			const after =
-				colEnd + 1 < lineVisibleWidth ? sliceByColumn(line, colEnd + 1, lineVisibleWidth - colEnd - 1) : "";
+				colEnd + 1 < lineVisibleWidth ? sliceByColumn(targetLine, colEnd + 1, lineVisibleWidth - colEnd - 1) : "";
 			// Preserve reverse video across SGR resets inside the highlighted region.
 			// \x1b[0m resets ALL attributes including \x1b[7m (reverse video),
 			// which would break the selection highlight. Re-apply \x1b[7m after each reset.
 			const preservedHighlight = highlighted.replace(/\x1b\[0m/g, "\x1b[0m\x1b[7m");
-			newLines[row] = `${before}\x1b[7m${preservedHighlight}\x1b[27m${after}`;
+			newLines[screenRow] = `${before}\x1b[7m${preservedHighlight}\x1b[27m${after}`;
 		}
 	}
 
@@ -1614,6 +1672,11 @@ export class TUI extends Container {
 		if (this.scrollOffset > maxScroll) this.scrollOffset = maxScroll;
 		this.previousScrollableLineCount = scrollableLines.length;
 
+		// Cache full lines (pre-overlay, pre-highlight) for selection text extraction
+		// and absolute-row coordinate mapping
+		this.currentFullLines = [...scrollableLines, ...fixedLines];
+		this.currentScrollableLinesLength = scrollableLines.length;
+
 		// Determine visible scrollable lines
 		const scrollableViewportTop = Math.max(0, scrollableLines.length - scrollableViewport - this.scrollOffset);
 		const visibleScrollable = scrollableLines.slice(
@@ -1639,12 +1702,12 @@ export class TUI extends Container {
 		const cursorPos = this.extractCursorPosition(newLines, height);
 		newLines = this.applyLineResets(newLines);
 
-		// Selection highlight: screen-relative coordinates, no viewportTop offset
-		// because newLines is already the viewport (visible lines only)
-		this.applySelectionHighlight(newLines, 0, height);
-
-		// Scrollable viewport top in the all-lines buffer (for mouse coordinate mapping)
+		// Update viewport-top state before selection highlight, so bufferToScreenRow
+		// inside applySelectionHighlight uses the correct viewport offset.
 		this.currentScrollableViewportTop = scrollableViewportTop;
+
+		// Selection highlight: buffer-absolute row iteration via bufferToScreenRow
+		this.applySelectionHighlight(newLines, height);
 
 		const renderChanged = (): void => {
 			this.fullRedrawCount += 1;
