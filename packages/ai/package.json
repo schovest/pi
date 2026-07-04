@@ -1,6 +1,6 @@
 {
-	"name": "@earendil-works/pi-ai",
-	"version": "0.6.5",
+	"name": "@schovest/pi-ai",
+	"version": "0.7.0",
 	"description": "Unified LLM API with automatic model discovery and provider configuration",
 	"type": "module",
 	"main": "./dist/index.js",
@@ -88,11 +88,11 @@
 		"unified",
 		"api"
 	],
-	"author": "Mario Zechner",
+	"author": "schovest",
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/earendil-works/pi.git",
+		"url": "git+https://github.com/schovest/pi.git",
 		"directory": "packages/ai"
 	},
 	"engines": {

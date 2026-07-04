@@ -1,4 +1,4 @@
-import { fuzzyFilter } from "@earendil-works/pi-tui";
+import { fuzzyFilter } from "@schovest/pi-tui";
 import type { CommandPaletteItem } from "./types.ts";
 
 export class CommandRegistry {

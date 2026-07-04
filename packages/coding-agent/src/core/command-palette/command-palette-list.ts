@@ -1,4 +1,4 @@
-import type { Component } from "@earendil-works/pi-tui";
+import type { Component } from "@schovest/pi-tui";
 import { theme } from "../../modes/interactive/theme/theme.ts";
 import type { CommandPaletteItem } from "./types.ts";
 

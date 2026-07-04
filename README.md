@@ -20,9 +20,9 @@
 
 This is the home of the pi agent harness project including our self extensible coding agent.
 
-* **[@earendil-works/pi-coding-agent](packages/coding-agent)**: Interactive coding agent CLI
-* **[@earendil-works/pi-agent-core](packages/agent)**: Agent runtime with tool calling and state management
-* **[@earendil-works/pi-ai](packages/ai)**: Unified multi-provider LLM API (OpenAI, Anthropic, Google, …)
+* **[@schovest/pi-coding-agent](packages/coding-agent)**: Interactive coding agent CLI
+* **[@schovest/pi-agent-core](packages/agent)**: Agent runtime with tool calling and state management
+* **[@schovest/pi-ai](packages/ai)**: Unified multi-provider LLM API (OpenAI, Anthropic, Google, …)
 
 To learn more about pi:
 
@@ -49,12 +49,12 @@ I regularly publish my own `pi-mono` work sessions here:
 
 | Package | Description |
 |---------|-------------|
-| **[@earendil-works/pi-ai](packages/ai)** | Unified multi-provider LLM API (OpenAI, Anthropic, Google, etc.) |
-| **[@earendil-works/pi-agent-core](packages/agent)** | Agent runtime with tool calling and state management |
-| **[@earendil-works/pi-coding-agent](packages/coding-agent)** | Interactive coding agent CLI |
-| **[@earendil-works/pi-tui](packages/tui)** | Terminal UI library with differential rendering |
+| **[@schovest/pi-ai](packages/ai)** | Unified multi-provider LLM API (OpenAI, Anthropic, Google, etc.) |
+| **[@schovest/pi-agent-core](packages/agent)** | Agent runtime with tool calling and state management |
+| **[@schovest/pi-coding-agent](packages/coding-agent)** | Interactive coding agent CLI |
+| **[@schovest/pi-tui](packages/tui)** | Terminal UI library with differential rendering |
 
-For Slack/chat automation and workflows see [earendil-works/pi-chat](https://github.com/earendil-works/pi-chat).
+For Slack/chat automation and workflows see [schovest/pi-chat](https://github.com/schovest/pi-chat).
 
 ## Permissions & Containerization
 

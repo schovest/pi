@@ -1,12 +1,18 @@
 # Changelog
 
-本仓库基于上游 Pi（earendil-works/pi-mono）fork 开发，版本号从 0.6.0 起独立维护。上游变更通过合并引入，本地变更单独记录。
+本仓库基于上游 Pi（schovest/pi）fork 开发，版本号从 0.6.0 起独立维护。上游变更通过合并引入，本地变更单独记录。
 
 ## [Unreleased]
+
+## [0.7.0] - 2026-07-04
 
 ### Added
 
 - Alt+Enter 在编辑器中插入换行，followUp 改为 Ctrl+Enter
+
+### Changed
+
+- npm scope 从 @earendil-works 迁移到 @schovest，仓库 URL 统一为 github.com/schovest/pi
 
 ## [0.6.5] - 2026-06-26
 

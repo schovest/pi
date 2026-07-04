@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
+import type { ThinkingLevel } from "@schovest/pi-agent-core";
 import { parseFrontmatter } from "../../utils/frontmatter.ts";
 import type { DiscoverPrimaryAgentsOptions, PrimaryAgentDefinition, PrimaryAgentDefinitionScope } from "./types.ts";
 

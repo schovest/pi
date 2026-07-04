@@ -1,6 +1,6 @@
-import type { AgentMessage, ThinkingLevel } from "@earendil-works/pi-agent-core";
-import type { Model, Usage } from "@earendil-works/pi-ai";
-import { clampThinkingLevel, modelsAreEqual } from "@earendil-works/pi-ai";
+import type { AgentMessage, ThinkingLevel } from "@schovest/pi-agent-core";
+import type { Model, Usage } from "@schovest/pi-ai";
+import { clampThinkingLevel, modelsAreEqual } from "@schovest/pi-ai";
 import type { AgentSession } from "../agent-session.ts";
 import { DEFAULT_THINKING_LEVEL } from "../defaults.ts";
 import { resolveActiveSkills, resolveActiveTools } from "../tool-matcher.ts";

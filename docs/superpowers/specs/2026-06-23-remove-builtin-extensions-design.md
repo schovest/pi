@@ -13,11 +13,11 @@
 
 - 删除 `packages/plugins/` 目录
 - 从 `packages/coding-agent/package.json` 移除:
-  - `dependencies` 中的 `"@earendil-works/pi-plugins": "file:../plugins"`
-  - `bundledDependencies` 中的 `"@earendil-works/pi-plugins"`
+  - `dependencies` 中的 `"@schovest/pi-plugins": "file:../plugins"`
+  - `bundledDependencies` 中的 `"@schovest/pi-plugins"`
   - `build:binary` 中 `npm --prefix ../plugins run build &&`
   - `copy-binary-assets` 中拷贝 `pi-plugins` 的脚本行
-  - 移除 `node_modules/@earendil-works/pi-plugins` 软链接（如有）
+  - 移除 `node_modules/@schovest/pi-plugins` 软链接（如有）
 - root `package.json` 中移除 workspace 引用（如有）
 
 ### 2. `resource-loader.ts` 变更
@@ -25,7 +25,7 @@
 文件: `packages/coding-agent/src/core/resource-loader.ts`
 
 **删除:**
-- `import { BUILTIN_PLUGINS } from "@earendil-works/pi-plugins"`
+- `import { BUILTIN_PLUGINS } from "@schovest/pi-plugins"`
 - `DefaultResourceLoaderOptions.disabledBuiltinPlugins` 字段
 - `private disabledBuiltinPlugins` 字段声明及构造函数初始化
 - `loadExtensionFactories()` 方法内 BUILTIN_PLUGINS 循环（保留 inline factories 处理）

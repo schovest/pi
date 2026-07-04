@@ -1,5 +1,5 @@
-import type { AssistantMessage } from "@earendil-works/pi-ai";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { AssistantMessage } from "@schovest/pi-ai";
+import type { ExtensionAPI, ExtensionContext } from "@schovest/pi-coding-agent";
 
 // Runtime ExtensionAPI has more methods than the type declarations.
 type RichExtensionAPI = ExtensionAPI & {

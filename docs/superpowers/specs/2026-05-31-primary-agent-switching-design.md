@@ -38,7 +38,7 @@ Allow switching the main agent's role (system prompt + tool set) within a single
 New file: `packages/coding-agent/src/core/primary-agents/types.ts`
 
 ```typescript
-import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
+import type { ThinkingLevel } from "@schovest/pi-agent-core";
 
 export type PrimaryAgentDefinitionScope = "builtin" | "user" | "project";
 

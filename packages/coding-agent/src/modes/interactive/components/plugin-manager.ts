@@ -1,4 +1,4 @@
-import { Container, type Focusable, getKeybindings, Input, Spacer, Text } from "@earendil-works/pi-tui";
+import { Container, type Focusable, getKeybindings, Input, Spacer, Text } from "@schovest/pi-tui";
 import type { ConfiguredPlugin, PluginManager, PluginSearchResult } from "../../../core/claude-plugin-manager.ts";
 import type { SettingsManager } from "../../../core/settings-manager.ts";
 import { theme } from "../theme/theme.ts";

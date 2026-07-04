@@ -1,5 +1,5 @@
-import type { Focusable, Terminal } from "@earendil-works/pi-tui";
-import { Container, Input, type KeybindingsManager, Spacer } from "@earendil-works/pi-tui";
+import type { Focusable, Terminal } from "@schovest/pi-tui";
+import { Container, Input, type KeybindingsManager, Spacer } from "@schovest/pi-tui";
 import { DynamicBorder } from "../../modes/interactive/components/dynamic-border.ts";
 import { CommandPaletteList } from "./command-palette-list.ts";
 import type { CommandRegistry } from "./command-registry.ts";

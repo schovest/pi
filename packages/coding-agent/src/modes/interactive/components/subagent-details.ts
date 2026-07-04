@@ -1,5 +1,5 @@
-import type { SubagentRunEntry } from "@earendil-works/pi-agent-core";
-import { Container, getKeybindings, Spacer, Text, truncateToWidth } from "@earendil-works/pi-tui";
+import type { SubagentRunEntry } from "@schovest/pi-agent-core";
+import { Container, getKeybindings, Spacer, Text, truncateToWidth } from "@schovest/pi-tui";
 import type { AgentSession } from "../../../core/agent-session.ts";
 import type { SubagentRunEvent, SubagentRunResult, SubagentTaskResult } from "../../../core/subagents/types.ts";
 import { theme } from "../theme/theme.ts";

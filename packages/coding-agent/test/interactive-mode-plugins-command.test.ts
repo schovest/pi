@@ -1,4 +1,4 @@
-import { Container } from "@earendil-works/pi-tui";
+import { Container } from "@schovest/pi-tui";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { ConfiguredPlugin, PluginSearchResult } from "../src/core/claude-plugin-manager.ts";
 import { BUILTIN_SLASH_COMMANDS } from "../src/core/slash-commands.ts";

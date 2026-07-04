@@ -1,4 +1,4 @@
-import { Container, getKeybindings, Spacer, Text, truncateToWidth } from "@earendil-works/pi-tui";
+import { Container, getKeybindings, Spacer, Text, truncateToWidth } from "@schovest/pi-tui";
 import type { PrimaryAgentDefinition } from "../../../core/primary-agents/types.ts";
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";

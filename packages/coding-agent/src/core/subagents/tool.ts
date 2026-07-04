@@ -1,4 +1,4 @@
-import { Text } from "@earendil-works/pi-tui";
+import { Text } from "@schovest/pi-tui";
 import { minimatch } from "minimatch";
 import { Type } from "typebox";
 import { theme } from "../../modes/interactive/theme/theme.ts";

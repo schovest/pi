@@ -1,6 +1,6 @@
 {
-	"name": "@earendil-works/pi-agent-core",
-	"version": "0.6.5",
+	"name": "@schovest/pi-agent-core",
+	"version": "0.7.0",
 	"description": "General-purpose agent with transport abstraction, state management, and attachment support",
 	"type": "module",
 	"main": "./dist/index.js",
@@ -29,7 +29,7 @@
 		"prepublishOnly": "npm run clean && npm run build"
 	},
 	"dependencies": {
-		"@earendil-works/pi-ai": "^0.6.5",
+		"@schovest/pi-ai": "^0.7.0",
 		"ignore": "7.0.5",
 		"typebox": "1.1.38",
 		"yaml": "2.9.0"
@@ -41,11 +41,11 @@
 		"transport",
 		"state-management"
 	],
-	"author": "Mario Zechner",
+	"author": "schovest",
 	"license": "MIT",
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/earendil-works/pi.git",
+		"url": "git+https://github.com/schovest/pi.git",
 		"directory": "packages/agent"
 	},
 	"engines": {

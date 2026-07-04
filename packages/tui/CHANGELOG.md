@@ -6,62 +6,62 @@
 
 ### Added
 
-- Added `AutocompleteProvider.triggerCharacters` so editor autocomplete can naturally trigger on provider-defined token prefixes ([#4703](https://github.com/earendil-works/pi/issues/4703)).
+- Added `AutocompleteProvider.triggerCharacters` so editor autocomplete can naturally trigger on provider-defined token prefixes ([#4703](https://github.com/schovest/pi/issues/4703)).
 
 ### Fixed
 
-- Fixed IME hardware cursor positioning while slash-command autocomplete is visible ([#5283](https://github.com/earendil-works/pi/pull/5283) by [@smoosex](https://github.com/smoosex)).
-- Fixed prompt history navigation to restore the current draft when returning from history browsing ([#5494](https://github.com/earendil-works/pi/issues/5494)).
-- Fixed wrapping for mixed Latin and CJK text so unspaced CJK runs can break at grapheme boundaries without leaving large trailing gaps ([#5495](https://github.com/earendil-works/pi/issues/5495)).
+- Fixed IME hardware cursor positioning while slash-command autocomplete is visible ([#5283](https://github.com/schovest/pi/pull/5283) by [@smoosex](https://github.com/smoosex)).
+- Fixed prompt history navigation to restore the current draft when returning from history browsing ([#5494](https://github.com/schovest/pi/issues/5494)).
+- Fixed wrapping for mixed Latin and CJK text so unspaced CJK runs can break at grapheme boundaries without leaving large trailing gaps ([#5495](https://github.com/schovest/pi/issues/5495)).
 
 ## [0.79.0] - 2026-06-08
 
 ### Fixed
 
-- Fixed prompt history navigation to place the cursor at the start when browsing upward and at the end when browsing downward, so repeated Up/Down traverses multiline prompts immediately ([#5454](https://github.com/earendil-works/pi/issues/5454)).
-- Fixed intermittent Shift+Enter handling by making Kitty keyboard protocol fallback response-driven instead of timeout-driven ([#5188](https://github.com/earendil-works/pi/issues/5188)).
+- Fixed prompt history navigation to place the cursor at the start when browsing upward and at the end when browsing downward, so repeated Up/Down traverses multiline prompts immediately ([#5454](https://github.com/schovest/pi/issues/5454)).
+- Fixed intermittent Shift+Enter handling by making Kitty keyboard protocol fallback response-driven instead of timeout-driven ([#5188](https://github.com/schovest/pi/issues/5188)).
 - Fixed TUI rendering to clear stale lines when content shrinks to zero.
-- Fixed autocomplete suggestions to re-query after editor cursor movement ([#5499](https://github.com/earendil-works/pi/pull/5499) by [@Roman-Galeev](https://github.com/Roman-Galeev)).
+- Fixed autocomplete suggestions to re-query after editor cursor movement ([#5499](https://github.com/schovest/pi/pull/5499) by [@Roman-Galeev](https://github.com/Roman-Galeev)).
 
 ## [0.78.1] - 2026-06-04
 
 ### Fixed
 
-- Fixed overlay focus restoration so non-capturing overlays remain interactive after UI rerenders and explicit focus release ([#5235](https://github.com/earendil-works/pi/pull/5235) by [@nicobailon](https://github.com/nicobailon)).
-- Fixed tab width accounting in column slicing and overlay compositing so tab-containing output cannot exceed the terminal width ([#5218](https://github.com/earendil-works/pi/issues/5218)).
+- Fixed overlay focus restoration so non-capturing overlays remain interactive after UI rerenders and explicit focus release ([#5235](https://github.com/schovest/pi/pull/5235) by [@nicobailon](https://github.com/nicobailon)).
+- Fixed tab width accounting in column slicing and overlay compositing so tab-containing output cannot exceed the terminal width ([#5218](https://github.com/schovest/pi/issues/5218)).
 
 ## [0.78.0] - 2026-05-29
 
 ### Fixed
 
-- Fixed ANSI text wrapping to avoid stack overflows on very long wrapped lines ([#5185](https://github.com/earendil-works/pi-mono/issues/5185)).
-- Clarified the IME hardware cursor docs to state that cursor visibility remains opt-in ([#5200](https://github.com/earendil-works/pi-mono/issues/5200)).
-- Fixed OSC 8 hyperlinks to pass through tmux when the client supports them ([#5189](https://github.com/earendil-works/pi-mono/pull/5189) by [@mpazik](https://github.com/mpazik)).
+- Fixed ANSI text wrapping to avoid stack overflows on very long wrapped lines ([#5185](https://github.com/schovest/pi/issues/5185)).
+- Clarified the IME hardware cursor docs to state that cursor visibility remains opt-in ([#5200](https://github.com/schovest/pi/issues/5200)).
+- Fixed OSC 8 hyperlinks to pass through tmux when the client supports them ([#5189](https://github.com/schovest/pi/pull/5189) by [@mpazik](https://github.com/mpazik)).
 
 ## [0.77.0] - 2026-05-28
 
 ### Fixed
 
-- Fixed keyboard protocol negotiation to ignore mismatched or delayed terminal responses, avoiding false Kitty keyboard protocol detection ([#5091](https://github.com/earendil-works/pi/pull/5091) by [@mitsuhiko](https://github.com/mitsuhiko)).
+- Fixed keyboard protocol negotiation to ignore mismatched or delayed terminal responses, avoiding false Kitty keyboard protocol detection ([#5091](https://github.com/schovest/pi/pull/5091) by [@mitsuhiko](https://github.com/mitsuhiko)).
 
 ## [0.76.0] - 2026-05-27
 
 ### Added
 
-- Added an opt-in Markdown renderer option to preserve source ordered-list markers for transcript rendering ([#5013](https://github.com/earendil-works/pi/issues/5013)).
+- Added an opt-in Markdown renderer option to preserve source ordered-list markers for transcript rendering ([#5013](https://github.com/schovest/pi/issues/5013)).
 
 ### Fixed
 
 - Fixed `Shift+Enter` in Apple Terminal by detecting local macOS modifier state when Terminal.app sends plain Return.
-- Fixed Windows Terminal capability detection to enable OSC 8 hyperlinks, preserving clickable long URLs across wrapped lines ([#4923](https://github.com/earendil-works/pi/issues/4923)).
-- Fixed JetBrains terminal capability detection to enable truecolor while disabling unsupported OSC 8 hyperlinks ([#5037](https://github.com/earendil-works/pi-mono/pull/5037) by [@Perlence](https://github.com/Perlence)).
-- Fixed editor and input word navigation/deletion to use Unicode word boundaries while preserving ASCII punctuation boundaries ([#5022](https://github.com/earendil-works/pi-mono/pull/5022) by [@haoqixu](https://github.com/haoqixu), [#5067](https://github.com/earendil-works/pi-mono/pull/5067) by [@haoqixu](https://github.com/haoqixu), [#5068](https://github.com/earendil-works/pi-mono/pull/5068) by [@haoqixu](https://github.com/haoqixu)).
+- Fixed Windows Terminal capability detection to enable OSC 8 hyperlinks, preserving clickable long URLs across wrapped lines ([#4923](https://github.com/schovest/pi/issues/4923)).
+- Fixed JetBrains terminal capability detection to enable truecolor while disabling unsupported OSC 8 hyperlinks ([#5037](https://github.com/schovest/pi/pull/5037) by [@Perlence](https://github.com/Perlence)).
+- Fixed editor and input word navigation/deletion to use Unicode word boundaries while preserving ASCII punctuation boundaries ([#5022](https://github.com/schovest/pi/pull/5022) by [@haoqixu](https://github.com/haoqixu), [#5067](https://github.com/schovest/pi/pull/5067) by [@haoqixu](https://github.com/haoqixu), [#5068](https://github.com/schovest/pi/pull/5068) by [@haoqixu](https://github.com/haoqixu)).
 
 ## [0.75.5] - 2026-05-23
 
 ### Changed
 
-- Replaced the optional `koffi` dependency for Windows VT input with a tiny vendored native helper, reducing install size while preserving Shift+Tab handling ([#4480](https://github.com/earendil-works/pi/issues/4480)).
+- Replaced the optional `koffi` dependency for Windows VT input with a tiny vendored native helper, reducing install size while preserving Shift+Tab handling ([#4480](https://github.com/schovest/pi/issues/4480)).
 
 ## [0.75.4] - 2026-05-20
 
@@ -90,14 +90,14 @@
 
 ### Added
 
-- Added markdown list-item wrapping that preserves indentation for wrapped continuation lines ([#4327](https://github.com/earendil-works/pi-mono/pull/4327) by [@Perlence](https://github.com/Perlence)).
+- Added markdown list-item wrapping that preserves indentation for wrapped continuation lines ([#4327](https://github.com/schovest/pi/pull/4327) by [@Perlence](https://github.com/Perlence)).
 
 ### Fixed
 
-- Fixed markdown task-list checkbox rendering ([#4379](https://github.com/earendil-works/pi-mono/pull/4379) by [@Perlence](https://github.com/Perlence)).
-- Fixed markdown rendering robustness for very large markdown files ([#4463](https://github.com/earendil-works/pi-mono/pull/4463) by [@ndanielherrera](https://github.com/ndanielherrera)).
-- Fixed Kitty image placement when the viewport is shorter than the rendered image ([#4461](https://github.com/earendil-works/pi-mono/pull/4461) by [@xu0o0](https://github.com/xu0o0)).
-- Fixed WezTerm Kitty keyboard protocol edge cases so escape handling remains correct ([#4482](https://github.com/earendil-works/pi-mono/pull/4482) by [@Felixoid](https://github.com/Felixoid)).
+- Fixed markdown task-list checkbox rendering ([#4379](https://github.com/schovest/pi/pull/4379) by [@Perlence](https://github.com/Perlence)).
+- Fixed markdown rendering robustness for very large markdown files ([#4463](https://github.com/schovest/pi/pull/4463) by [@ndanielherrera](https://github.com/ndanielherrera)).
+- Fixed Kitty image placement when the viewport is shorter than the rendered image ([#4461](https://github.com/schovest/pi/pull/4461) by [@xu0o0](https://github.com/xu0o0)).
+- Fixed WezTerm Kitty keyboard protocol edge cases so escape handling remains correct ([#4482](https://github.com/schovest/pi/pull/4482) by [@Felixoid](https://github.com/Felixoid)).
 - Fixed inline image rendering to cap portrait images by height instead of always scaling them to the configured maximum width.
 
 ## [0.74.0] - 2026-05-07

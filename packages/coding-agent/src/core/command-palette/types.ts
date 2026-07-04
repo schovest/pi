@@ -1,4 +1,4 @@
-import type { KeyId } from "@earendil-works/pi-tui";
+import type { KeyId } from "@schovest/pi-tui";
 
 export type CommandCategory =
 	| "navigation"
