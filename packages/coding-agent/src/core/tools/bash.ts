@@ -316,11 +316,19 @@ export function createBashToolDefinition(
 	const spawnHook = options?.spawnHook;
 	const backgroundManager = options?.backgroundManager;
 	const defaultTimeout = options?.defaultTimeout;
+	const promptGuidelines: string[] = [];
+	if (backgroundManager) {
+		const timeoutDesc = defaultTimeout ? `default ${defaultTimeout}s` : "a configurable";
+		promptGuidelines.push(
+			`Long-running bash commands (over ${timeoutDesc} timeout) are automatically moved to the background instead of being killed. When this happens, the tool returns immediately with a message indicating the command is running in the background. You will be automatically notified when the background command completes — you do not need to poll. Continue with other work while waiting.`,
+		);
+	}
 	return {
 		name: "bash",
 		label: "bash",
-		description: `Execute a bash command in the current working directory. Returns stdout and stderr. Output is truncated to last ${DEFAULT_MAX_LINES} lines or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). If truncated, full output is saved to a temp file. Optionally provide a timeout in seconds.`,
+		description: `Execute a bash command in the current working directory. Returns stdout and stderr. Output is truncated to last ${DEFAULT_MAX_LINES} lines or ${DEFAULT_MAX_BYTES / 1024}KB (whichever is hit first). If truncated, full output is saved to a temp file. Optionally provide a timeout in seconds. Commands that exceed the timeout are automatically moved to background execution.`,
 		promptSnippet: "Execute bash commands (ls, grep, find, etc.)",
+		promptGuidelines,
 		parameters: bashSchema,
 		async execute(
 			_toolCallId,
