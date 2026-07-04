@@ -130,12 +130,20 @@ npx vitest run --dir packages/agent/test agent-loop
 - 提交前 `git status` 确认只 stage 自己的文件
 - 只解决自己修改过的文件里的冲突；冲突在他人文件时停止并询问
 - 不 force push
-- 除非用户要求，**不主动合并分支到`main`分支**
-- **升级版本必须打tag**
+- **升级版本必须打 tag**
+
+#### 分支策略
+
+- `dev`：日常开发分支，自由提交
+- `main`：保护分支，只有验证通过的版本才从 dev 合并进来
+- 一个版本一次 merge，merge commit message 填写该版本的全部变更摘要
+- tag 打在 main 的 merge commit 上，不在 dev 上打 tag
 
 #### 版本升级流程
 
 所有包使用 lockstep 版本号，统一升降。流程：
+
+以下步骤全部在 **dev 分支**上执行（步骤 1-8），然后 merge 到 main（步骤 9-11）：
 
 ```bash
 # 1. 升级版本号（所有 workspace 包统一）
@@ -156,10 +164,20 @@ node scripts/generate-coding-agent-shrinkwrap.mjs
 cd packages/coding-agent && npm run build:tgz
 
 # 7. 更新 CHANGELOG [`packages/coding-agent/CHANGELOG.md`]（将 [Unreleased] 条目移入新版本段落）
-# 8. 提交并打 tag
-git add <相关文件>
-git commit -m "chore: bump version to x.y.z"
+
+# 8. 在 dev 上提交版本升级
+PI_ALLOW_LOCKFILE_CHANGE=1 git commit -m "chore: bump version to x.y.z"
+
+# 9. 切到 main，merge dev（--no-ff 保留 merge commit）
+git checkout main
+git merge dev --no-ff -m "release vx.y.z: <变更摘要>"
+
+# 10. 在 main 上打 tag
 git tag vx.y.z
+
+# 11. push main + tag
+git push origin main
+git push origin vx.y.z
 ```
 
 注意：`npm version -ws` 会因远程仓库无对应版本报 ETARGET 错误，不影响本地版本号更新，可忽略。
