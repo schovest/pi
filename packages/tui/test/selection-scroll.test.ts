@@ -160,6 +160,67 @@ describe("selection-scroll: mouseDown→mouseUp without scroll", () => {
 	});
 });
 
+describe("selection-scroll: plain click without drag", () => {
+	it("does not copy on mouseDown→mouseUp at same position", async () => {
+		const lines = ["hello world"];
+		const terminal = new VirtualTerminal(40, 6);
+		const tui = new TUI(terminal);
+		tui.addChild(new FixedLinesComponent(lines));
+		const copied: string[] = [];
+		tui.onCopySelection = (text) => {
+			copied.push(text);
+		};
+		tui.requestRender();
+		await settleRender();
+
+		// mouseDown at row=1 col=1, then mouseUp at same position — no drag
+		tui.handleMouseEvent({ type: "mouseDown", button: 0, col: 1, row: 1, shift: false, alt: false, ctrl: false });
+		tui.handleMouseEvent({ type: "mouseUp", button: 0, col: 1, row: 1, shift: false, alt: false, ctrl: false });
+
+		assert.strictEqual(copied.length, 0);
+	});
+
+	it("does not copy even when clicking on non-whitespace character", async () => {
+		const lines = ["ABCDEF"];
+		const terminal = new VirtualTerminal(40, 6);
+		const tui = new TUI(terminal);
+		tui.addChild(new FixedLinesComponent(lines));
+		const copied: string[] = [];
+		tui.onCopySelection = (text) => {
+			copied.push(text);
+		};
+		tui.requestRender();
+		await settleRender();
+
+		// Click at col=3 (row=1 → col 2 = 'C'), no drag
+		tui.handleMouseEvent({ type: "mouseDown", button: 0, col: 3, row: 1, shift: false, alt: false, ctrl: false });
+		tui.handleMouseEvent({ type: "mouseUp", button: 0, col: 3, row: 1, shift: false, alt: false, ctrl: false });
+
+		assert.strictEqual(copied.length, 0);
+	});
+
+	it("still copies after actual drag", async () => {
+		const lines = ["hello world"];
+		const terminal = new VirtualTerminal(40, 6);
+		const tui = new TUI(terminal);
+		tui.addChild(new FixedLinesComponent(lines));
+		const copied: string[] = [];
+		tui.onCopySelection = (text) => {
+			copied.push(text);
+		};
+		tui.requestRender();
+		await settleRender();
+
+		// Drag from col 1 to col 3 → anchor col 0, focus col 2 → copies "hel"
+		tui.handleMouseEvent({ type: "mouseDown", button: 0, col: 1, row: 1, shift: false, alt: false, ctrl: false });
+		tui.handleMouseEvent({ type: "mouseMove", button: 0, col: 3, row: 1, shift: false, alt: false, ctrl: false });
+		tui.handleMouseEvent({ type: "mouseUp", button: 0, col: 3, row: 1, shift: false, alt: false, ctrl: false });
+
+		assert.strictEqual(copied.length, 1);
+		assert.strictEqual(copied[0], "hel");
+	});
+});
+
 describe("selection-scroll: autoScroll across viewport boundary", () => {
 	it("expands selection upward when dragging to top edge", async () => {
 		// 20 lines, viewport 6. autoFollow=true → scrollOffset=0.

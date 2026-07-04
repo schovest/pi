@@ -820,7 +820,10 @@ export class TUI extends Container {
 			}
 			this.requestRender();
 		} else if (event.type === "mouseUp" && this.selection) {
-			const text = this.extractSelectionText();
+			const sel = this.selection;
+			// Skip copy on plain click (no drag) to avoid polluting clipboard
+			const hasDragged = sel.anchorRow !== sel.focusRow || sel.anchorCol !== sel.focusCol;
+			const text = hasDragged ? this.extractSelectionText() : "";
 			this.clearAutoScrollTimer();
 			this.selection = null;
 			this.requestRender();

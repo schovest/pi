@@ -1,5 +1,6 @@
 import assert from "node:assert";
 import { describe, it } from "node:test";
+import { CURSOR_MARKER } from "../src/tui.ts";
 import { sliceByColumn, snapColToGraphemeBoundary, stripAnsi, visibleWidth } from "../src/utils.ts";
 
 /**
@@ -291,5 +292,23 @@ describe("selection highlight with snapped columns: wide char integrity", () => 
 		assert.strictEqual(before, "");
 		const highlighted = sliceByColumn(line, snappedCol, 2);
 		assert.strictEqual(highlighted, "你");
+	});
+});
+
+describe("stripAnsi: APC sequence (CURSOR_MARKER) handling", () => {
+	it("strips CURSOR_MARKER (ESC _ pi:c BEL) completely", () => {
+		const marker = CURSOR_MARKER; // \x1b_pi:c\x07
+		assert.strictEqual(stripAnsi(marker), "");
+	});
+
+	it("strips CURSOR_MARKER embedded in text with ANSI styling", () => {
+		// Simulates input.ts render output: prompt + marker + reverse-video space
+		const line = `> ${CURSOR_MARKER}\x1b[7m \x1b[27m`;
+		assert.strictEqual(stripAnsi(line), ">  ");
+	});
+
+	it("strips multiple APC sequences in a line", () => {
+		const line = `hello${CURSOR_MARKER}world${CURSOR_MARKER}!`;
+		assert.strictEqual(stripAnsi(line), "helloworld!");
 	});
 });

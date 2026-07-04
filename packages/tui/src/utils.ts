@@ -218,6 +218,7 @@ export function stripAnsi(str: string): string {
 	return str
 		.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, "")
 		.replace(/\x1b\].*?\x07/g, "")
+		.replace(/\x1b_.*?\x07/g, "")
 		.replace(/\x1b\[<[^>]*>/g, "");
 }
 
