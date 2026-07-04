@@ -42,7 +42,7 @@
 
 ### 4. `install.sh` 重构
 
-文件: `packages/coding-agent/scripts/install.sh` 和 `packages/coding-agent/dist/install.sh`
+文件: `packages/coding-agent/dist-assets/install.sh` 和 `packages/coding-agent/dist/install.sh`
 
 #### 扩展选择菜单
 
@@ -89,7 +89,7 @@
 - `pi install` / `pi plugins` 命令本身不受影响
 - 外部扩展加载（文件路径、npm 包）不受影响
 - MCP 功能不受影响（通过独立安装 `pi-mcp-adapter` 获得）
-- `tps.ts` 源文件保留在 `packages/coding-agent/scripts/extensions/tps.ts`（供 install.sh 拷贝）
+- `tps.ts` 源文件保留在 `packages/coding-agent/dist-assets/extensions/tps.ts`（供 install.sh 拷贝）
 
 ## plan 插件的处理
 
