@@ -518,3 +518,32 @@ describe("selection-scroll: extractSelectionText from buffer", () => {
 		assert.strictEqual(text, "");
 	});
 });
+
+describe("overlay-selection: currentCompositedLines cache", () => {
+	it("caches composited lines after render with overlay", async () => {
+		const terminal = new VirtualTerminal(20, 6);
+		const tui = new TUI(terminal);
+		tui.addChild(new FixedLinesComponent(Array.from({ length: 6 }, (_, i) => `base${i}`)));
+		tui.requestRender();
+		await settleRender();
+
+		// Show an overlay covering the full screen
+		const overlay = new FixedLinesComponent(Array.from({ length: 6 }, (_, i) => `ovly${i}`));
+		tui.showOverlay(overlay, { row: 0, col: 0, width: "100%", maxHeight: "100%" });
+		tui.requestRender();
+		await settleRender();
+
+		const composited = (tui as unknown as { currentCompositedLines: string[] }).currentCompositedLines;
+		assert.ok(composited.length > 0, "currentCompositedLines should be populated");
+		// After overlay compositing, the lines should contain overlay content, not base content
+		const hasOverlayContent = composited.some((line) => line.includes("ovly"));
+		assert.ok(hasOverlayContent, `expected overlay content in composited lines, got: ${JSON.stringify(composited)}`);
+	});
+
+	it("currentCompositedLines is empty before first render", () => {
+		const terminal = new VirtualTerminal(20, 6);
+		const tui = new TUI(terminal);
+		const composited = (tui as unknown as { currentCompositedLines: string[] }).currentCompositedLines;
+		assert.strictEqual(composited.length, 0);
+	});
+});

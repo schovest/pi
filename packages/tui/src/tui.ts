@@ -322,6 +322,8 @@ export class TUI extends Container {
 	// Full-lines buffer (pre-overlay, pre-highlight) cached each render for selection
 	// coordinate mapping and text extraction. Equals [...scrollableLines, ...fixedLines].
 	private currentFullLines: string[] = [];
+	// biome-ignore lint/correctness/noUnusedPrivateClassMembers: Overlay-composited lines (post-overlay, pre-highlight) cached each render for text extraction and grapheme snapping when an overlay covers a row
+	private currentCompositedLines: string[] = [];
 	private currentScrollableLinesLength: number = 0;
 	private autoScrollDirection: -1 | 1 = -1;
 	private selection: SelectionState | null = null;
@@ -1701,6 +1703,9 @@ export class TUI extends Container {
 		if (this.overlayStack.length > 0) {
 			newLines = this.compositeOverlays([...newLines], width, height);
 		}
+
+		// Cache composited lines (post-overlay, pre-highlight) for overlay text extraction
+		this.currentCompositedLines = [...newLines];
 
 		const cursorPos = this.extractCursorPosition(newLines, height);
 		newLines = this.applyLineResets(newLines);
