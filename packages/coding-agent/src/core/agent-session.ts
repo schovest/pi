@@ -41,6 +41,7 @@ import { stripFrontmatter } from "../utils/frontmatter.ts";
 import { resolvePath } from "../utils/paths.ts";
 import { sleep } from "../utils/sleep.ts";
 import { formatNoApiKeyFoundMessage, formatNoModelSelectedMessage } from "./auth-guidance.ts";
+import { type BackgroundProcess, BackgroundProcessManager } from "./background-process-manager.ts";
 import { type BashResult, executeBashWithOperations } from "./bash-executor.ts";
 import {
 	type CompactionResult,
@@ -322,6 +323,9 @@ export class AgentSession {
 	private _bashAbortController: AbortController | undefined = undefined;
 	private _pendingBashMessages: BashExecutionMessage[] = [];
 
+	// Background process manager for timed-out bash commands
+	private _backgroundProcessManager = new BackgroundProcessManager();
+
 	// Extension system
 	private _extensionRunner!: ExtensionRunner;
 	private _turnIndex = 0;
@@ -385,6 +389,11 @@ export class AgentSession {
 		this._unsubscribeAgent = this.agent.subscribe(this._handleAgentEvent);
 		this._installAgentToolHooks();
 
+		// Notify agent when a background process completes (via follow-up queue)
+		this._backgroundProcessManager.onCompleted((proc) => {
+			this._notifyBackgroundProcessComplete(proc).catch(() => {});
+		});
+
 		this._buildRuntime({
 			activeToolNames: this._initialActiveToolNames,
 			includeAllExtensionTools: true,
@@ -394,6 +403,11 @@ export class AgentSession {
 	/** Model registry for API key resolution and model discovery */
 	get modelRegistry(): ModelRegistry {
 		return this._modelRegistry;
+	}
+
+	/** Background process manager for timed-out bash commands */
+	get backgroundProcessManager(): BackgroundProcessManager {
+		return this._backgroundProcessManager;
 	}
 
 	private async _getRequiredRequestAuth(model: Model<any>): Promise<{
@@ -762,6 +776,7 @@ export class AgentSession {
 			this.abortCompaction();
 			this.abortBranchSummary();
 			this.abortBash();
+			this._backgroundProcessManager.killAll();
 			this.agent.abort();
 		} catch {
 			// Dispose must succeed even if an abort hook throws.
@@ -1450,6 +1465,31 @@ export class AgentSession {
 		this.agent.followUp({
 			role: "user",
 			content,
+			timestamp: Date.now(),
+		});
+	}
+
+	/**
+	 * Notify the agent that a background process has completed.
+	 * Injects a follow-up message with the command, exit code, and output summary.
+	 */
+	private async _notifyBackgroundProcessComplete(proc: BackgroundProcess): Promise<void> {
+		const snapshot = proc.output.snapshot({ persistIfTruncated: true });
+		await proc.output.closeTempFile();
+		const exitInfo = proc.exitCode === 0 ? "successfully" : `with code ${proc.exitCode}`;
+		let text = `[Background command completed] \`${proc.command}\` finished ${exitInfo}.`;
+		if (snapshot.content) {
+			const preview = snapshot.truncation.truncated
+				? `${snapshot.content}\n...(output truncated, full output: ${snapshot.fullOutputPath})`
+				: snapshot.content;
+			text += `\n\nOutput:\n${preview}`;
+		}
+		// Use the internal follow-up queue directly (pre-expanded, no command check).
+		this._followUpMessages.push(text);
+		this._emitQueueUpdate();
+		this.agent.followUp({
+			role: "user",
+			content: [{ type: "text", text }],
 			timestamp: Date.now(),
 		});
 	}
@@ -2576,6 +2616,7 @@ export class AgentSession {
 		const autoResizeImages = this.settingsManager.getImageAutoResize();
 		const shellCommandPrefix = this.settingsManager.getShellCommandPrefix();
 		const shellPath = this.settingsManager.getShellPath();
+		const bashBackgroundTimeout = this.settingsManager.getBashBackgroundTimeout() ?? 120;
 		const baseToolDefinitions = this._baseToolsOverride
 			? Object.fromEntries(
 					Object.entries(this._baseToolsOverride).map(([name, tool]) => [
@@ -2585,7 +2626,12 @@ export class AgentSession {
 				)
 			: createAllToolDefinitions(this._cwd, {
 					read: { autoResizeImages },
-					bash: { commandPrefix: shellCommandPrefix, shellPath },
+					bash: {
+						commandPrefix: shellCommandPrefix,
+						shellPath,
+						backgroundManager: this._backgroundProcessManager,
+						defaultTimeout: bashBackgroundTimeout,
+					},
 				});
 
 		this._baseToolDefinitions = new Map(

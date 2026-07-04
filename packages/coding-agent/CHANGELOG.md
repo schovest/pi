@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- 命令后台运行：bash 命令超时后自动转入后台运行，新增 `Ctrl+Down` 管理后台进程，进程结束后自动通知 agent
+- 新增 settings 配置项 `bashBackgroundTimeout`（默认 120 秒），控制命令转后台的超时阈值
+
 ## [0.7.0] - 2026-07-04
 
 ### Added

@@ -53,6 +53,7 @@ export interface AppKeybindings {
 	"app.tree.filter.cycleForward": true;
 	"app.tree.filter.cycleBackward": true;
 	"app.commandPalette": true;
+	"app.backgroundProcesses": true;
 }
 
 export type AppKeybinding = keyof AppKeybindings;
@@ -85,6 +86,10 @@ export const KEYBINDINGS = {
 	"app.commandPalette": {
 		defaultKeys: "ctrl+p",
 		description: "Open command palette",
+	},
+	"app.backgroundProcesses": {
+		defaultKeys: "ctrl+down",
+		description: "Manage background processes",
 	},
 	"app.model.select": { defaultKeys: "ctrl+l", description: "Open model selector" },
 	"app.tools.expand": { defaultKeys: "ctrl+o", description: "Toggle tool output" },

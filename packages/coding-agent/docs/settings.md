@@ -165,6 +165,7 @@ Keep `retry.provider.maxRetries` at `0` unless provider-level retries are explic
 |---------|------|---------|-------------|
 | `shellPath` | string | - | Custom shell path (e.g., for Cygwin on Windows) |
 | `shellCommandPrefix` | string | - | Prefix for every bash command (e.g., `"shopt -s expand_aliases"`) |
+| `bashBackgroundTimeout` | number | `120` | Default timeout in seconds before a bash command is moved to background instead of killed. The tool argument `timeout` takes precedence. When unset or `0`, only commands with an explicit `timeout` argument will be backgrounded. |
 | `npmCommand` | string[] | - | Command argv used for npm package lookup/install operations (e.g., `["mise", "exec", "node@20", "--", "npm"]`) |
 
 ```json

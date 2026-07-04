@@ -2,7 +2,7 @@ import { constants } from "node:fs";
 import { access as fsAccess } from "node:fs/promises";
 import type { AgentTool } from "@schovest/pi-agent-core";
 import { Container, Text, truncateToWidth } from "@schovest/pi-tui";
-import { spawn } from "child_process";
+import { type ChildProcess, spawn } from "child_process";
 import { type Static, Type } from "typebox";
 import { keyHint } from "../../modes/interactive/components/keybinding-hints.ts";
 import { truncateToVisualLines } from "../../modes/interactive/components/visual-truncate.ts";
@@ -15,6 +15,7 @@ import {
 	trackDetachedChildPid,
 	untrackDetachedChildPid,
 } from "../../utils/shell.ts";
+import type { BackgroundProcessManager } from "../background-process-manager.ts";
 import type { ToolDefinition, ToolRenderResultOptions } from "../extensions/types.ts";
 import { OutputAccumulator } from "./output-accumulator.ts";
 import { getTextOutput, invalidArgText, str } from "./render-utils.ts";
@@ -43,7 +44,9 @@ export interface BashOperations {
 	 * @param command The command to execute
 	 * @param cwd Working directory
 	 * @param options Execution options
-	 * @returns Promise resolving to exit code (null if killed)
+	 * @returns Promise resolving to exit code (null if killed). If `backgrounded`
+	 *   is true, the process was moved to the background and the caller should
+	 *   not await its exit.
 	 */
 	exec: (
 		command: string,
@@ -53,8 +56,14 @@ export interface BashOperations {
 			signal?: AbortSignal;
 			timeout?: number;
 			env?: NodeJS.ProcessEnv;
+			/**
+			 * When provided and a timeout fires, the child is handed to this
+			 * callback instead of being killed. The callback must take over
+			 * stdout/stderr consumption (remove existing listeners, attach its own).
+			 */
+			onBackground?: (child: ChildProcess) => void;
 		},
-	) => Promise<{ exitCode: number | null }>;
+	) => Promise<{ exitCode: number | null; backgrounded?: boolean }>;
 }
 
 /**
@@ -65,7 +74,7 @@ export interface BashOperations {
  */
 export function createLocalBashOperations(options?: { shellPath?: string }): BashOperations {
 	return {
-		exec: async (command, cwd, { onData, signal, timeout, env }) => {
+		exec: async (command, cwd, { onData, signal, timeout, env, onBackground }) => {
 			const { shell, args } = getShellConfig(options?.shellPath);
 			try {
 				await fsAccess(cwd, constants.F_OK);
@@ -84,20 +93,22 @@ export function createLocalBashOperations(options?: { shellPath?: string }): Bas
 				windowsHide: true,
 			});
 			if (child.pid) trackDetachedChildPid(child.pid);
-			let timedOut = false;
+			let backgrounded = false;
 			let timeoutHandle: NodeJS.Timeout | undefined;
 			const onAbort = () => {
 				if (child.pid) killProcessTree(child.pid);
 			};
 
+			// Timeout promise that resolves as "timeout" when the deadline fires.
+			// If onBackground is provided the process is handed off; otherwise it is killed.
+			let timeoutPromise: Promise<"timeout"> | undefined;
+			if (timeout !== undefined && timeout > 0) {
+				timeoutPromise = new Promise<"timeout">((resolve) => {
+					timeoutHandle = setTimeout(() => resolve("timeout"), timeout * 1000);
+				});
+			}
+
 			try {
-				// Set timeout if provided.
-				if (timeout !== undefined && timeout > 0) {
-					timeoutHandle = setTimeout(() => {
-						timedOut = true;
-						if (child.pid) killProcessTree(child.pid);
-					}, timeout * 1000);
-				}
 				// Stream stdout and stderr.
 				child.stdout?.on("data", onData);
 				child.stderr?.on("data", onData);
@@ -106,18 +117,44 @@ export function createLocalBashOperations(options?: { shellPath?: string }): Bas
 					if (signal.aborted) onAbort();
 					else signal.addEventListener("abort", onAbort, { once: true });
 				}
-				// Handle shell spawn errors and wait for the process to terminate without hanging
-				// on inherited stdio handles held by detached descendants.
-				const exitCode = await waitForChildProcess(child);
+
+				const exitPromise = waitForChildProcess(child);
+
+				// No timeout — just wait for exit.
+				if (!timeoutPromise) {
+					const exitCode = await exitPromise;
+					if (signal?.aborted) {
+						throw new Error("aborted");
+					}
+					return { exitCode };
+				}
+
+				const raceResult = await Promise.race([exitPromise, timeoutPromise]);
+
+				if (raceResult === "timeout") {
+					if (onBackground) {
+						// Hand the process off to the background manager.
+						// Remove our data listeners so the manager's sink becomes the sole consumer.
+						backgrounded = true;
+						child.stdout?.removeListener("data", onData);
+						child.stderr?.removeListener("data", onData);
+						onBackground(child);
+						return { exitCode: null, backgrounded: true };
+					}
+					// Default: kill and throw.
+					if (child.pid) killProcessTree(child.pid);
+					await exitPromise; // wait for kill to complete
+					throw new Error(`timeout:${timeout}`);
+				}
+
+				// Process exited before timeout.
 				if (signal?.aborted) {
 					throw new Error("aborted");
 				}
-				if (timedOut) {
-					throw new Error(`timeout:${timeout}`);
-				}
-				return { exitCode };
+				return { exitCode: raceResult };
 			} finally {
-				if (child.pid) untrackDetachedChildPid(child.pid);
+				// Keep the process tracked when backgrounded — the manager owns its lifecycle now.
+				if (child.pid && !backgrounded) untrackDetachedChildPid(child.pid);
 				if (timeoutHandle) clearTimeout(timeoutHandle);
 				if (signal) signal.removeEventListener("abort", onAbort);
 			}
@@ -147,6 +184,10 @@ export interface BashToolOptions {
 	shellPath?: string;
 	/** Hook to adjust command, cwd, or env before execution */
 	spawnHook?: BashSpawnHook;
+	/** When provided, timed-out commands are moved to background instead of killed */
+	backgroundManager?: BackgroundProcessManager;
+	/** Default timeout in seconds when the caller does not specify one. */
+	defaultTimeout?: number;
 }
 
 const BASH_PREVIEW_LINES = 5;
@@ -273,6 +314,8 @@ export function createBashToolDefinition(
 	const ops = options?.operations ?? createLocalBashOperations({ shellPath: options?.shellPath });
 	const commandPrefix = options?.commandPrefix;
 	const spawnHook = options?.spawnHook;
+	const backgroundManager = options?.backgroundManager;
+	const defaultTimeout = options?.defaultTimeout;
 	return {
 		name: "bash",
 		label: "bash",
@@ -288,6 +331,8 @@ export function createBashToolDefinition(
 		) {
 			const resolvedCommand = commandPrefix ? `${commandPrefix}\n${command}` : command;
 			const spawnContext = resolveSpawnContext(resolvedCommand, cwd, spawnHook);
+			// Resolve timeout: explicit tool arg > defaultTimeout (from settings) > none.
+			const effectiveTimeout = timeout ?? (backgroundManager ? defaultTimeout : undefined);
 			const output = new OutputAccumulator({ tempFilePrefix: "pi-bash" });
 			let updateTimer: NodeJS.Timeout | undefined;
 			let updateDirty = false;
@@ -375,9 +420,23 @@ export function createBashToolDefinition(
 					const result = await ops.exec(spawnContext.command, spawnContext.cwd, {
 						onData: handleData,
 						signal,
-						timeout,
+						timeout: effectiveTimeout,
 						env: spawnContext.env,
+						onBackground: backgroundManager
+							? (child) => {
+									backgroundManager.adopt(child, command, spawnContext.cwd);
+								}
+							: undefined,
 					});
+					if (result.backgrounded) {
+						const snapshot = await finishOutput();
+						const { text: partialOutput } = formatOutput(snapshot, "");
+						const bgMessage = appendStatus(
+							partialOutput,
+							`Command moved to background after ${effectiveTimeout}s timeout. It will continue running and you'll be notified when it completes. Use Ctrl+Down to manage background processes.`,
+						);
+						return { content: [{ type: "text", text: bgMessage }], details: undefined };
+					}
 					exitCode = result.exitCode;
 				} catch (err) {
 					const snapshot = await finishOutput();
