@@ -1009,7 +1009,6 @@ export class TUI extends Container {
 	 * Returns -1 if the buffer row is a scrollable line currently outside the viewport.
 	 * Fixed-area buffer rows always map to a visible screen row.
 	 */
-	// biome-ignore lint/correctness/noUnusedPrivateClassMembers: used from test via as unknown as cast
 	private bufferToScreenRow(bufferRow: number): number {
 		const scrollableLen = this.currentScrollableLinesLength;
 		if (bufferRow < scrollableLen) {
