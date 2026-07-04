@@ -59,6 +59,11 @@ const VIRTUAL_MODULES: Record<string, unknown> = {
 	"@mariozechner/pi-ai": _bundledPiAi,
 	"@mariozechner/pi-ai/oauth": _bundledPiAiOauth,
 	"@mariozechner/pi-coding-agent": _bundledPiCodingAgent,
+	"@earendil-works/pi-agent-core": _bundledPiAgentCore,
+	"@earendil-works/pi-tui": _bundledPiTui,
+	"@earendil-works/pi-ai": _bundledPiAi,
+	"@earendil-works/pi-ai/oauth": _bundledPiAiOauth,
+	"@earendil-works/pi-coding-agent": _bundledPiCodingAgent,
 };
 
 const require = createRequire(import.meta.url);
@@ -105,6 +110,11 @@ function getAliases(): Record<string, string> {
 		"@mariozechner/pi-tui": piTuiEntry,
 		"@mariozechner/pi-ai": piAiEntry,
 		"@mariozechner/pi-ai/oauth": piAiOauthEntry,
+		"@earendil-works/pi-coding-agent": piCodingAgentEntry,
+		"@earendil-works/pi-agent-core": piAgentCoreEntry,
+		"@earendil-works/pi-tui": piTuiEntry,
+		"@earendil-works/pi-ai": piAiEntry,
+		"@earendil-works/pi-ai/oauth": piAiOauthEntry,
 		typebox: typeboxEntry,
 		"typebox/compile": typeboxCompileEntry,
 		"typebox/value": typeboxValueEntry,
