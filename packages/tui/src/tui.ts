@@ -940,6 +940,17 @@ export class TUI extends Container {
 		}
 	}
 
+	/**
+	 * Clear the current selection and stop any active autoScroll.
+	 * Called by overlays when their internal scroll changes, to prevent
+	 * stale selection highlighting on shifted content.
+	 */
+	clearSelection(): void {
+		this.clearAutoScrollTimer();
+		this.selection = null;
+		this.requestRender();
+	}
+
 	private extractSelectionText(): string {
 		if (!this.selection) return "";
 		const sel = this.selection;

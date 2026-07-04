@@ -665,3 +665,42 @@ describe("overlay-selection: mouseDown/mouseMove snap uses composited lines", ()
 		);
 	});
 });
+
+describe("overlay-selection: clearSelection", () => {
+	it("clears selection and autoScroll timer", async () => {
+		const lines = Array.from({ length: 10 }, (_, i) => `L${i}`);
+		const terminal = new VirtualTerminal(40, 6);
+		const tui = new TUI(terminal);
+		tui.addChild(new FixedLinesComponent(lines));
+		tui.requestRender();
+		await settleRender();
+
+		// Create a selection
+		tui.handleMouseEvent({ type: "mouseDown", button: 0, col: 1, row: 3, shift: false, alt: false, ctrl: false });
+		tui.handleMouseEvent({ type: "mouseMove", button: 0, col: 5, row: 3, shift: false, alt: false, ctrl: false });
+
+		// Trigger autoScroll to set the timer
+		tui.handleMouseEvent({ type: "mouseMove", button: 0, col: 1, row: 1, shift: false, alt: false, ctrl: false });
+
+		const selectionBefore = (tui as unknown as { selection: unknown }).selection;
+		const timerBefore = (tui as unknown as { autoScrollTimer: unknown }).autoScrollTimer;
+		assert.ok(selectionBefore, "selection should exist before clear");
+		assert.ok(timerBefore, "autoScrollTimer should exist before clear");
+
+		tui.clearSelection();
+
+		const selectionAfter = (tui as unknown as { selection: unknown }).selection;
+		const timerAfter = (tui as unknown as { autoScrollTimer: unknown }).autoScrollTimer;
+		assert.strictEqual(selectionAfter, null, "selection should be null after clear");
+		assert.strictEqual(timerAfter, null, "autoScrollTimer should be null after clear");
+	});
+
+	it("clearSelection is safe when no selection exists", () => {
+		const terminal = new VirtualTerminal(40, 6);
+		const tui = new TUI(terminal);
+		tui.addChild(new FixedLinesComponent(["a"]));
+		// Should not throw
+		tui.clearSelection();
+		assert.strictEqual((tui as unknown as { selection: unknown }).selection, null);
+	});
+});
