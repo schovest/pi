@@ -624,3 +624,44 @@ describe("overlay-selection: extractSelectionText from overlay content", () => {
 		assert.strictEqual(text, "AAAAA\nBBBBB\nCCCCC");
 	});
 });
+
+describe("overlay-selection: mouseDown/mouseMove snap uses composited lines", () => {
+	it("mouseDown on overlay row snaps column using overlay content", async () => {
+		// Overlay line is shorter than base line. Snap should use overlay width.
+		// Base: "XXXXXXXXXXXX" (12 chars). Overlay: "HI" (2 chars).
+		// Clicking at col 14 (beyond base line's 12-char width) should snap to
+		// the composited line's width (20 cols) instead of the base line's width.
+		// Old code (base line): anchorCol = 12 (clamped to 12-char base)
+		// New code (composited line): anchorCol = 13 (within 20-char composited)
+		const terminal = new VirtualTerminal(20, 3);
+		const tui = new TUI(terminal);
+		tui.addChild(new FixedLinesComponent(["XXXXXXXXXXXX"]));
+		tui.requestRender();
+		await settleRender();
+
+		const overlay = new FixedLinesComponent(["HI"]);
+		tui.showOverlay(overlay, {
+			row: 0,
+			col: 0,
+			width: "100%",
+			maxHeight: "100%",
+			selectionClip: () => ({ col: 0, width: 20 }),
+		});
+		tui.requestRender();
+		await settleRender();
+
+		// mouseDown at row=1, col=14 (beyond base line width of 12, within composited width of 20)
+		tui.handleMouseEvent({ type: "mouseDown", button: 0, col: 14, row: 1, shift: false, alt: false, ctrl: false });
+
+		const selection = (tui as unknown as { selection: { anchorCol: number } | null }).selection;
+		assert.ok(selection, "selection should be set after mouseDown");
+		// Old code (base line "XXXXXXXXXXXX"): snapColToGraphemeBoundary clamps at 12
+		// New code (composited line with "HI" padded to 20 cols): snapColToGraphemeBoundary gives 13
+		// anchorCol === 13 proves the composited line was used
+		assert.strictEqual(
+			selection.anchorCol,
+			13,
+			`anchorCol should be 13 (snapped within 20-char composited line), got ${selection.anchorCol}`,
+		);
+	});
+});

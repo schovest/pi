@@ -782,7 +782,11 @@ export class TUI extends Container {
 			const screenRow = event.row - 1;
 			const rawCol = event.col - 1;
 			const bufferRow = this.screenToBufferRow(screenRow);
-			const line = this.currentFullLines[bufferRow];
+			const clip = this.getSelectionClipForRow(screenRow);
+			const line =
+				clip != null && screenRow < this.currentCompositedLines.length
+					? this.currentCompositedLines[screenRow]
+					: this.currentFullLines[bufferRow];
 			const col = line != null ? snapColToGraphemeBoundary(line, rawCol) : rawCol;
 			this.selection = {
 				active: true,
@@ -796,7 +800,11 @@ export class TUI extends Container {
 			const screenRow = event.row - 1;
 			const rawCol = event.col - 1;
 			const bufferRow = this.screenToBufferRow(screenRow);
-			const line = this.currentFullLines[bufferRow];
+			const clip = this.getSelectionClipForRow(screenRow);
+			const line =
+				clip != null && screenRow < this.currentCompositedLines.length
+					? this.currentCompositedLines[screenRow]
+					: this.currentFullLines[bufferRow];
 			const col = line != null ? snapColToGraphemeBoundary(line, rawCol) : rawCol;
 			this.selection.focusRow = bufferRow;
 			this.selection.focusCol = col;
