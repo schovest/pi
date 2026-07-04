@@ -346,3 +346,88 @@ describe("selection-scroll: highlight survives scroll", () => {
 		}
 	});
 });
+
+describe("selection-scroll: extractSelectionText from buffer", () => {
+	it("extracts text spanning content beyond a single viewport", async () => {
+		// 30 lines, viewport 6. autoFollow → scrollOffset=0, only L24..L29 visible.
+		// Programmatically set selection spanning buffer rows 5..25.
+		const lines = Array.from({ length: 30 }, (_, i) => `L${i.toString().padStart(2, "0")}`);
+		const terminal = new VirtualTerminal(40, 6);
+		const tui = new TUI(terminal);
+		tui.addChild(new FixedLinesComponent(lines));
+		tui.requestRender();
+		await settleRender();
+
+		(tui as unknown as { selection: { active: boolean; anchorRow: number; anchorCol: number; focusRow: number; focusCol: number } | null }).selection = {
+			active: true,
+			anchorRow: 5,
+			anchorCol: 0,
+			focusRow: 25,
+			focusCol: 2,  // covers "L25" (L=0,2=1,5=2 → col 2 inclusive = "L25")
+		};
+
+		const text = (tui as unknown as { extractSelectionText: () => string }).extractSelectionText();
+		// Buffer rows 5..25. startCol=0 (anchor at row 5), endCol=2 (focus at row 25).
+		// Middle rows (6..24): rowStartCol=0, rowEndCol=visibleWidth-1=2 → full "Lxx".
+		// End row 25: cols 0..2 → "L25"
+		// Start row 5: cols 0..2 → "L05"
+		const expected = Array.from({ length: 21 }, (_, i) => `L${(5 + i).toString().padStart(2, "0")}`);
+		assert.strictEqual(text, expected.join("\n"));
+	});
+
+	it("extractSelectionText clamps selection partially outside buffer bounds", async () => {
+		const lines = ["only line"];
+		const terminal = new VirtualTerminal(40, 6);
+		const tui = new TUI(terminal);
+		tui.addChild(new FixedLinesComponent(lines));
+		tui.requestRender();
+		await settleRender();
+
+		(tui as unknown as { selection: { active: boolean; anchorRow: number; anchorCol: number; focusRow: number; focusCol: number } | null }).selection = {
+			active: true,
+			anchorRow: -2,
+			anchorCol: 0,
+			focusRow: 5,
+			focusCol: 3,
+		};
+
+		const text = (tui as unknown as { extractSelectionText: () => string }).extractSelectionText();
+		// Only buffer row 0 is valid. anchorCol=0, focusCol=3.
+		// startRow=-2, endRow=5. Loop row -2..5, only row 0 valid.
+		// Row 0 is both start and end? No: startRow=min(-2,5)=-2, endRow=max(-2,5)=5.
+		// Row 0 is neither start nor end (start=-2, end=5). So rowStartCol=0, rowEndCol=visibleWidth("only line")-1=8.
+		// → "only line" (full line)
+		assert.strictEqual(text, "only line");
+	});
+
+	it("extractSelectionText returns empty for selection entirely outside buffer", async () => {
+		const lines = ["a", "b"];
+		const terminal = new VirtualTerminal(40, 6);
+		const tui = new TUI(terminal);
+		tui.addChild(new FixedLinesComponent(lines));
+		tui.requestRender();
+		await settleRender();
+
+		(tui as unknown as { selection: { active: boolean; anchorRow: number; anchorCol: number; focusRow: number; focusCol: number } | null }).selection = {
+			active: true,
+			anchorRow: 10,
+			anchorCol: 0,
+			focusRow: 20,
+			focusCol: 5,
+		};
+
+		const text = (tui as unknown as { extractSelectionText: () => string }).extractSelectionText();
+		assert.strictEqual(text, "");
+	});
+
+	it("extractSelectionText returns empty when no selection", async () => {
+		const terminal = new VirtualTerminal(40, 6);
+		const tui = new TUI(terminal);
+		tui.addChild(new FixedLinesComponent(["a", "b"]));
+		tui.requestRender();
+		await settleRender();
+
+		const text = (tui as unknown as { extractSelectionText: () => string }).extractSelectionText();
+		assert.strictEqual(text, "");
+	});
+});

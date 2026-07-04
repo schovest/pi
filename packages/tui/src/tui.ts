@@ -1020,7 +1020,7 @@ export class TUI extends Container {
 		return this.lastScrollableViewport + (bufferRow - scrollableLen);
 	}
 
-	private applySelectionHighlight(newLines: string[], _viewportTop: number, height: number): void {
+	private applySelectionHighlight(newLines: string[], height: number): void {
 		if (!this.selection) return;
 		const sel = this.selection;
 		const startBufferRow = Math.min(sel.anchorRow, sel.focusRow);
@@ -1708,7 +1708,7 @@ export class TUI extends Container {
 		this.currentScrollableViewportTop = scrollableViewportTop;
 
 		// Selection highlight: buffer-absolute row iteration via bufferToScreenRow
-		this.applySelectionHighlight(newLines, 0, height);
+		this.applySelectionHighlight(newLines, height);
 
 		const renderChanged = (): void => {
 			this.fullRedrawCount += 1;
