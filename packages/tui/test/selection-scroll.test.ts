@@ -20,12 +20,10 @@ class FixedLinesComponent implements Component {
 	}
 }
 
-function createTuiWithLines(opts: {
-	lines: string[];
-	cols?: number;
-	rows?: number;
-	fixedBottomCount?: number;
-}): { tui: TUI; terminal: VirtualTerminal } {
+function createTuiWithLines(opts: { lines: string[]; cols?: number; rows?: number; fixedBottomCount?: number }): {
+	tui: TUI;
+	terminal: VirtualTerminal;
+} {
 	const cols = opts.cols ?? 40;
 	const rows = opts.rows ?? 6;
 	const terminal = new VirtualTerminal(cols, rows);
@@ -51,27 +49,17 @@ describe("selection-scroll: screenToBufferRow / bufferToScreenRow", () => {
 		tui.requestRender();
 		await settleRender();
 
-		const screenRow0 = (
-			tui as unknown as { screenToBufferRow: (r: number) => number }
-		).screenToBufferRow(0);
-		const screenRow5 = (
-			tui as unknown as { screenToBufferRow: (r: number) => number }
-		).screenToBufferRow(5);
+		const screenRow0 = (tui as unknown as { screenToBufferRow: (r: number) => number }).screenToBufferRow(0);
+		const screenRow5 = (tui as unknown as { screenToBufferRow: (r: number) => number }).screenToBufferRow(5);
 		assert.strictEqual(screenRow0, 4);
 		assert.strictEqual(screenRow5, 9);
 
-		const buf4 = (
-			tui as unknown as { bufferToScreenRow: (r: number) => number }
-		).bufferToScreenRow(4);
-		const buf9 = (
-			tui as unknown as { bufferToScreenRow: (r: number) => number }
-		).bufferToScreenRow(9);
+		const buf4 = (tui as unknown as { bufferToScreenRow: (r: number) => number }).bufferToScreenRow(4);
+		const buf9 = (tui as unknown as { bufferToScreenRow: (r: number) => number }).bufferToScreenRow(9);
 		assert.strictEqual(buf4, 0);
 		assert.strictEqual(buf9, 5);
 
-		const buf0 = (
-			tui as unknown as { bufferToScreenRow: (r: number) => number }
-		).bufferToScreenRow(0);
+		const buf0 = (tui as unknown as { bufferToScreenRow: (r: number) => number }).bufferToScreenRow(0);
 		assert.strictEqual(buf0, -1);
 	});
 
@@ -86,18 +74,12 @@ describe("selection-scroll: screenToBufferRow / bufferToScreenRow", () => {
 		tui.setScrollOffset(2);
 		await settleRender();
 
-		const screenRow0 = (
-			tui as unknown as { screenToBufferRow: (r: number) => number }
-		).screenToBufferRow(0);
+		const screenRow0 = (tui as unknown as { screenToBufferRow: (r: number) => number }).screenToBufferRow(0);
 		assert.strictEqual(screenRow0, 2);
 
-		const buf2 = (
-			tui as unknown as { bufferToScreenRow: (r: number) => number }
-		).bufferToScreenRow(2);
+		const buf2 = (tui as unknown as { bufferToScreenRow: (r: number) => number }).bufferToScreenRow(2);
 		assert.strictEqual(buf2, 0);
-		const buf7 = (
-			tui as unknown as { bufferToScreenRow: (r: number) => number }
-		).bufferToScreenRow(7);
+		const buf7 = (tui as unknown as { bufferToScreenRow: (r: number) => number }).bufferToScreenRow(7);
 		assert.strictEqual(buf7, 5);
 	});
 
@@ -105,33 +87,21 @@ describe("selection-scroll: screenToBufferRow / bufferToScreenRow", () => {
 		const terminal = new VirtualTerminal(40, 9);
 		const tui = new TUI(terminal);
 		tui.setFixedBottomCount(1);
-		tui.addChild(
-			new FixedLinesComponent(
-				Array.from({ length: 10 }, (_, i) => `S${i}`),
-			),
-		);
+		tui.addChild(new FixedLinesComponent(Array.from({ length: 10 }, (_, i) => `S${i}`)));
 		tui.addChild(new FixedLinesComponent(["F0", "F1", "F2"]));
 		tui.requestRender();
 		await settleRender();
 
 		// scrollableViewport = 9 - 3 = 6, viewportTop = 10 - 6 = 4
 		// Fixed rows start at buffer index 10, 11, 12 → screen rows 6, 7, 8
-		const screenFixed0 = (
-			tui as unknown as { screenToBufferRow: (r: number) => number }
-		).screenToBufferRow(6);
+		const screenFixed0 = (tui as unknown as { screenToBufferRow: (r: number) => number }).screenToBufferRow(6);
 		assert.strictEqual(screenFixed0, 10);
-		const screenFixed2 = (
-			tui as unknown as { screenToBufferRow: (r: number) => number }
-		).screenToBufferRow(8);
+		const screenFixed2 = (tui as unknown as { screenToBufferRow: (r: number) => number }).screenToBufferRow(8);
 		assert.strictEqual(screenFixed2, 12);
 
-		const buf10 = (
-			tui as unknown as { bufferToScreenRow: (r: number) => number }
-		).bufferToScreenRow(10);
+		const buf10 = (tui as unknown as { bufferToScreenRow: (r: number) => number }).bufferToScreenRow(10);
 		assert.strictEqual(buf10, 6);
-		const buf12 = (
-			tui as unknown as { bufferToScreenRow: (r: number) => number }
-		).bufferToScreenRow(12);
+		const buf12 = (tui as unknown as { bufferToScreenRow: (r: number) => number }).bufferToScreenRow(12);
 		assert.strictEqual(buf12, 8);
 	});
 });
@@ -199,7 +169,9 @@ describe("selection-scroll: autoScroll across viewport boundary", () => {
 		const tui = new TUI(terminal);
 		tui.addChild(new FixedLinesComponent(lines));
 		const copied: string[] = [];
-		tui.onCopySelection = (text) => { copied.push(text); };
+		tui.onCopySelection = (text) => {
+			copied.push(text);
+		};
 		tui.requestRender();
 		await settleRender();
 
@@ -232,7 +204,9 @@ describe("selection-scroll: autoScroll across viewport boundary", () => {
 		const tui = new TUI(terminal);
 		tui.addChild(new FixedLinesComponent(lines));
 		const copied: string[] = [];
-		tui.onCopySelection = (text) => { copied.push(text); };
+		tui.onCopySelection = (text) => {
+			copied.push(text);
+		};
 		tui.requestRender();
 		await settleRender();
 
@@ -285,5 +259,90 @@ describe("selection-scroll: autoScroll across viewport boundary", () => {
 		// After mouseUp, clearAutoScrollTimer is called
 		const timerAfter = (tui as unknown as { autoScrollTimer: unknown }).autoScrollTimer;
 		assert.strictEqual(timerAfter, null);
+	});
+});
+
+describe("selection-scroll: highlight survives scroll", () => {
+	it("keeps highlight anchored to buffer content after wheel scroll (no drag during scroll)", async () => {
+		// 10 lines, viewport 6. mouseDown on L9 (last visible line), drag to select L9 only,
+		// wheel scroll up by 3 lines. Highlight should be on L9 content (or off-screen).
+		// Use terminal.write interception because xterm's translateToString doesn't preserve SGR.
+		const lines = Array.from({ length: 10 }, (_, i) => `L${i}`);
+		const terminal = new VirtualTerminal(40, 6);
+		const tui = new TUI(terminal);
+		tui.addChild(new FixedLinesComponent(lines));
+		tui.requestRender();
+		await settleRender();
+		// viewportTop = 10 - 6 - 0 = 4. Visible: L4..L9.
+
+		// Intercept terminal.write to capture ANSI output for highlight inspection
+		const writes: string[] = [];
+		const origWrite = terminal.write.bind(terminal);
+		terminal.write = (data: string) => {
+			writes.push(data);
+			origWrite(data);
+		};
+
+		// mouseDown + mouseMove on screen row 5 (buffer row 9 "L9") to create a selection
+		tui.handleMouseEvent({ type: "mouseDown", button: 0, col: 1, row: 6, shift: false, alt: false, ctrl: false });
+		tui.handleMouseEvent({ type: "mouseMove", button: 0, col: 3, row: 6, shift: false, alt: false, ctrl: false });
+		await settleRender();
+
+		// Verify highlight is written (screen row 5 = buffer row 9 "L9")
+		const hasHighlight = writes.some((w) => w.includes("\x1b[7m"));
+		assert.ok(hasHighlight, "expected highlight on L9 before scroll");
+
+		// Wheel scroll up 3 lines (button 64 = scrollUp → scrollOffset increases)
+		writes.length = 0;
+		tui.handleMouseEvent({ type: "mouseWheel", button: 64, col: 1, row: 3, shift: false, alt: false, ctrl: false });
+		await settleRender();
+		// scrollOffset = 3, viewportTop = 1. L9 off-screen (buffer row 9 > last visible 6).
+		const hasHighlightAfterScroll = writes.some((w) => w.includes("\x1b[7m"));
+		assert.strictEqual(hasHighlightAfterScroll, false, "L9 should be off-screen after scroll, no highlight visible");
+
+		// Scroll back down (button 65 = scrollDown → scrollOffset decreases)
+		writes.length = 0;
+		tui.handleMouseEvent({ type: "mouseWheel", button: 65, col: 1, row: 3, shift: false, alt: false, ctrl: false });
+		await settleRender();
+		// scrollOffset = 0 again, viewportTop = 4. L9 back on screen row 5.
+		const hasHighlightBack = writes.some((w) => w.includes("\x1b[7m"));
+		assert.ok(hasHighlightBack, "expected highlight back on L9 after scroll down");
+	});
+
+	it("highlights correct screen row when selection partially outside viewport", async () => {
+		// 10 lines, viewport 6. Select from L3 (buffer row 3) to L7 (buffer row 7).
+		// viewportTop=4 → L4..L9 visible. Selection 3..7 overlaps at L4..L7 (screen rows 0..3).
+		// Use xterm cell attribute inspection (fg field stores inverse flag as 1<<26).
+		const lines = Array.from({ length: 10 }, (_, i) => `L${i}`);
+		const terminal = new VirtualTerminal(40, 6);
+		const tui = new TUI(terminal);
+		tui.addChild(new FixedLinesComponent(lines));
+		tui.requestRender();
+		await settleRender();
+
+		// Set selection directly: buffer rows 3..7, cols 0..1
+		(tui as unknown as { selection: import("../src/tui.ts").SelectionState | null }).selection = {
+			active: true,
+			anchorRow: 3,
+			anchorCol: 0,
+			focusRow: 7,
+			focusCol: 1,
+		};
+		tui.requestRender();
+		await settleRender();
+		await terminal.flush();
+
+		// Read xterm cell attributes to detect inverse video (fg !== 0 = inverse flag set)
+		const buf = (terminal as unknown as { xterm: { buffer: { active: { viewportY: number; getLine: (n: number) => unknown } } } }).xterm.buffer.active;
+		for (let screenRow = 0; screenRow < 6; screenRow++) {
+			const line = buf.getLine(buf.viewportY + screenRow) as { getCell: (c: number) => unknown } | null;
+			const cell = line?.getCell(0);
+			const isInverse = cell ? ((cell as unknown as { fg: number }).fg !== 0) : false;
+			if (screenRow <= 3) {
+				assert.ok(isInverse, `screen row ${screenRow} should be highlighted`);
+			} else {
+				assert.ok(!isInverse, `screen row ${screenRow} should not be highlighted`);
+			}
+		}
 	});
 });
