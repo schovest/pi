@@ -323,7 +323,6 @@ export class TUI extends Container {
 	// coordinate mapping and text extraction. Equals [...scrollableLines, ...fixedLines].
 	private currentFullLines: string[] = [];
 	private currentScrollableLinesLength: number = 0;
-	// biome-ignore lint/correctness/noUnusedPrivateClassMembers: used in later task for auto-scroll during selection drag
 	private autoScrollDirection: -1 | 1 = -1;
 	private selection: SelectionState | null = null;
 	private scrollOffset = 0;
@@ -891,19 +890,33 @@ export class TUI extends Container {
 		this.fixedBottomCount = count;
 	}
 
-	private startAutoScroll(_direction: -1 | 1): void {
-		if (this.autoScrollTimer) return;
+	private startAutoScroll(direction: -1 | 1): void {
+		// 同方向已运行则不重启，避免定时器堆积
+		if (this.autoScrollTimer && this.autoScrollDirection === direction) return;
+		this.clearAutoScrollTimer();
 		this.autoFollow = false;
+		this.autoScrollDirection = direction;
 		this.autoScrollTimer = setInterval(() => {
 			const maxOffset = this.getMaxScrollOffset();
-			if (this.scrollOffset < maxOffset) {
+			if (direction < 0) {
+				// 向旧内容方向滚动（视口顶向缓冲区起始扩展）
+				if (this.scrollOffset >= maxOffset) return;
 				this.scrollOffset = Math.min(maxOffset, this.scrollOffset + AUTO_SCROLL_ROWS);
-				this.onScrollOffsetChange?.(this.scrollOffset);
 				if (this.selection) {
-					this.selection.focusRow = 0;
+					// focus 指向视口顶行（刚滚入视野的更旧内容）
+					this.selection.focusRow = this.currentScrollableViewportTop;
 				}
-				this.requestRender();
+			} else {
+				// 向新内容方向滚动（视口顶向缓冲区末尾收缩）
+				if (this.scrollOffset <= 0) return;
+				this.scrollOffset = Math.max(0, this.scrollOffset - AUTO_SCROLL_ROWS);
+				if (this.selection) {
+					// focus 指向视口底行（刚滚入视野的更新内容）
+					this.selection.focusRow = this.currentScrollableViewportTop + this.lastScrollableViewport - 1;
+				}
 			}
+			this.onScrollOffsetChange?.(this.scrollOffset);
+			this.requestRender();
 		}, AUTO_SCROLL_INTERVAL_MS);
 	}
 
@@ -917,7 +930,7 @@ export class TUI extends Container {
 	private extractSelectionText(): string {
 		if (!this.selection) return "";
 		const sel = this.selection;
-		const lines = this.previousLines;
+		const lines = this.currentFullLines;
 		if (lines.length === 0) return "";
 		const startRow = Math.min(sel.anchorRow, sel.focusRow);
 		const endRow = Math.max(sel.anchorRow, sel.focusRow);
@@ -934,8 +947,9 @@ export class TUI extends Container {
 		for (let row = startRow; row <= endRow; row++) {
 			if (row < 0 || row >= lines.length) continue;
 			const line = lines[row];
-			// Apply selectionClip from overlays that cover this row
-			const clip = this.getSelectionClipForRow(row);
+			// Apply selectionClip from overlays that cover this screen row
+			const screenRow = this.bufferToScreenRow(row);
+			const clip = screenRow >= 0 ? this.getSelectionClipForRow(screenRow) : null;
 			const rowStartCol = row === startRow ? startCol : 0;
 			const rowEndCol = row === endRow ? endCol : visibleWidth(line) - 1;
 			let clipStart = rowStartCol;
