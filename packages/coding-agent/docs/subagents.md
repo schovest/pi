@@ -4,10 +4,10 @@ Subagent 是一种任务委托机制，允许主 agent 将任务分配给专门�
 
 ## 内置 Agent
 
-| Agent | 描述 | 默认工具 |
-|-------|------|----------|
-| `explorer` | 快速并行搜索，返回定位和摘要 | read, grep, find, ls |
-| `worker` | 单元化任务执行，拥有全部权限 | read, bash, edit, write, grep, find, ls |
+| Agent | 描述 | 默认工具 | thinking |
+|-------|------|----------|----------|
+| `explorer` | 快速并行搜索，返回定位和摘要 | read, grep, find, ls | low |
+| `worker` | 单元化任务执行，拥有全部权限 | read, bash, edit, write, grep, find, ls | —（继承主 agent） |
 
 ## 自定义 Agent
 
@@ -32,12 +32,36 @@ includedTools: [read, grep, find, ls]
 | `description` | string | Agent 描述，用于工具提示 |
 | `model` | string | 模型 ID，如 `anthropic/claude-sonnet-4-5` |
 | `thinking` | string | 思考级别：`off`、`minimal`、`low`、`medium`、`high`、`xhigh` |
-| `includedTools` | string[] | 允许的工具列表，支持 glob 模式 |
-| `excludedTools` | string[] | 排除的工具列表，支持 glob 模式 |
+| `includedTools` | string[] | 允许的工具列表，支持 glob 模式（详见下文） |
+| `excludedTools` | string[] | 排除的工具列表，支持 glob 模式（详见下文） |
+| `skills` | string[] | 允许主 agent 已加载的 skills 列表，支持 glob 模式（详见下文） |
 
-`includedTools` 支持 glob 模式匹配（通过 minimatch，大小写不敏感）。例如 `"read*"` 匹配 `read`、`readFile` 等；`"!bash"` 排除特定工具。`includedTools` 为空数组 `[]` 表示无工具。
+#### 工具匹配（glob 模式）
 
-兼容性：旧字段名 `tools` 仍然可读，但会自动映射到 `includedTools`，优先使用 `includedTools`。
+`includedTools` / `excludedTools` 使用 [minimatch](https://github.com/isaacs/minimatch) glob 模式匹配工具名（大小写不敏感）：
+
+- `"read"` — 精确匹配 `read` 工具
+- `"read*"` — 匹配 `read`、`readFile` 等所有以 read 开头的工具
+- `"!*"` — 匹配所有工具的否定模式
+- 未设置 `includedTools` 且未设置 `excludedTools` — 使用默认工具集 `read, bash, edit, write`
+- `includedTools: []`（空数组）— 无工具
+- 若同时设置 `includedTools` 和 `excludedTools`，`includedTools` 生效，`excludedTools` 被忽略（included 优先）
+
+内置工具名：`read`、`bash`、`edit`、`write`、`grep`、`find`、`ls`。此外 `subagent` 工具由 coding-agent 扩展注册，扩展也可注册自定义工具名。
+
+#### Skills 匹配（glob 模式）
+
+`skills` 字段允许 subagent 继承主 agent 已加载的 skills。同样使用 minimatch 匹配 skill 名称（大小写不敏感）：
+
+- 未设置或空数组 `[]` — subagent **不继承**任何 skill（默认行为）
+- `"test-*"` — 匹配名称以 `test-` 开头的 skills
+- `"*"` — 匹配所有 skills
+
+匹配的 skills 会注入到 subagent 的系统提示词中，效果与主 agent 加载 skill 一致。skill 内容仍按需加载（progressive disclosure）。
+
+#### 兼容性
+
+旧字段名 `tools` 仍然可读，但会自动映射到 `includedTools`，优先使用 `includedTools`。
 
 Frontmatter 中的 `model` 和 `thinking` 可被任务参数覆盖。
 
@@ -167,13 +191,17 @@ includedTools: [read, grep, find, ls, bash]
 | `bash` | 执行命令（git、构建工具等） |
 | `edit` | 编辑文件 |
 | `write` | 创建/覆盖文件 |
-| `grep` | 搜索文件内容 |
-| `find` | 查找文件 |
+| `grep` | 搜索文件内容（支持 glob 过滤文件） |
+| `find` | 按 glob 模式查找文件（respects .gitignore） |
 | `ls` | 列出目录 |
+
+此外，`subagent` 工具由 coding-agent 扩展注册，扩展也可注册自定义工具名。
 
 **只读 agent**：`read, grep, find, ls`
 **分析 + 执行 agent**：`read, bash, grep, find, ls`
 **完整能力 agent**：`read, bash, edit, write, grep, find, ls`
+
+如果 subagent 需要使用主 agent 已加载的 skills，在 frontmatter 中设置 `skills` 字段（glob 模式匹配 skill 名称，如 `skills: ["test-*"]` 或 `skills: ["*"]` 继承全部）。
 
 ### 4. 设计输出格式
 

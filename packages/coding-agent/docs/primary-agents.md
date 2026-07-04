@@ -20,10 +20,12 @@ Primary agent 通过以下方式影响 agent 行为：
 
 | Agent | 描述 | 工具 | 角色 Prompt |
 |-------|------|------|-------------|
-| `build` | 默认 agent，拥有全部工具，用于实现和执行 | 全部工具（read, bash, edit, write, grep, find, ls + 扩展工具） | 无（使用默认系统提示词） |
-| `plan` | 规划 agent，只读工具，用于分析和设计 | read, grep, find, ls（排除 bash 和 subagent） | "You are a planning agent..." |
+| `build` | 默认 agent，拥有全部工具，用于实现和执行 | 全部内置工具（read, bash, edit, write, grep, find, ls）+ `subagent` + 扩展注册的工具 | 无（使用默认系统提示词） |
+| `plan` | 规划 agent，只读工具，用于分析和设计 | 排除 `bash` 和 `subagent`；剩余工具（read, edit, write, grep, find, ls）均在列表中，但 prompt 约束为只读行为 | "You are a planning agent..." |
 
 `build` 是初始默认值，每次启动时如果未恢复其他 agent 则使用 `build`。`build` 的 `systemPrompt` 为空，意味着使用 Pi 的默认系统提示词（无额外角色 prompt）。
+
+`plan` 的实现是 `excludedTools: ["bash", "subagent"]`，未设置 `includedTools`，因此除 bash 和 subagent 外的所有工具都在可用列表中。plan 的 systemPrompt 要求不修改文件、不执行命令，实际效果为只读。
 
 ## 加载和优先级
 
@@ -82,13 +84,23 @@ excludedTools: [subagent]
 | `description` | string | Agent 描述，显示在 agent 选择器中 |
 | `model` | string | 默认模型 ID，如 `anthropic/claude-sonnet-4-5`。切换到此 agent 时自动切换模型 |
 | `thinking` | string | 默认思考级别：`off`、`minimal`、`low`、`medium`、`high`、`xhigh` |
-| `includedTools` | string[] | 允许的工具列表，支持 glob 模式（minimatch，大小写不敏感） |
-| `excludedTools` | string[] | 排除的工具列表，支持 glob 模式 |
+| `includedTools` | string[] | 允许的工具列表，支持 glob 模式（详见下文） |
+| `excludedTools` | string[] | 排除的工具列表，支持 glob 模式（详见下文） |
 
-`includedTools` 和 `excludedTools` 均支持 glob 模式匹配。例如：
-- `"read*"` 匹配 `read`、`readFile` 等所有以 read 开头的工具
-- `"!bash"` 精确排除 bash
-- `includedTools: []`（空数组）表示无工具
+#### 工具匹配（glob 模式）
+
+`includedTools` / `excludedTools` 使用 [minimatch](https://github.com/isaacs/minimatch) glob 模式匹配工具名（大小写不敏感）：
+
+- `"read"` — 精确匹配 `read` 工具
+- `"read*"` — 匹配 `read`、`readFile` 等所有以 read 开头的工具
+- `"!*"` — 匹配所有工具的否定模式
+- 未设置 `includedTools` 且未设置 `excludedTools` — 使用全部已注册工具
+- `includedTools: []`（空数组）— 无工具
+- 若同时设置 `includedTools` 和 `excludedTools`，`includedTools` 生效，`excludedTools` 被忽略（included 优先）
+
+内置工具名：`read`、`bash`、`edit`、`write`、`grep`、`find`、`ls`。此外 `subagent` 工具由 coding-agent 扩展注册，扩展也可注册自定义工具名。
+
+> **注意**：Primary agent 不支持 `skills` 字段。Skills 继承是 subagent 独有的能力，primary agent 始终使用主会话加载的全部 skills。
 
 兼容性：`tools`（旧字段名）仍然可读，自动映射到 `includedTools`，优先使用 `includedTools`。
 
@@ -212,6 +224,7 @@ const currentAgent = session.currentPrimaryAgent;  // "build" | "plan" | ...
 | 作用范围 | 整个会话 | 单次任务委托 |
 | 系统提示词 | 修改主 agent 的系统提示词 | 有自己的独立系统提示词 |
 | 工具控制 | `includedTools` / `excludedTools` | `includedTools` / `excludedTools` |
+| Skills 继承 | 不支持 `skills` 字段，始终使用主会话的全部 skills | 支持 `skills` 字段（glob 模式匹配，默认不继承） |
 | 持久化 | 自动保存到项目 settings | 不持久化 |
 | 数量 | 一个会话同时只有一个 | 可并行运行多个 |
 | 定义位置 | `primary-agents/*.md` | `subagents/*.md` |
