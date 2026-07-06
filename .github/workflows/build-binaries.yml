@@ -119,7 +119,7 @@ jobs:
         run: npm run build
 
       - name: Check (CI mode: verify only, no auto-fix)
-        run: biome check --error-on-warnings . && npm run check:pinned-deps && npm run check:ts-imports && npm run check:shrinkwrap && tsgo --noEmit && npm run check:browser-smoke
+        run: npx biome check --error-on-warnings . && npm run check:pinned-deps && npm run check:ts-imports && npm run check:shrinkwrap && npx tsgo --noEmit && npm run check:browser-smoke
 
       - name: Test
         run: npm test
