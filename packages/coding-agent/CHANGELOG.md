@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [0.7.2] - 2026-07-06
+
+### Changed
+
+- 统一二进制打包流程到 scripts/build-binaries.sh，移除 coding-agent/scripts/pack-tgz.mjs
+
 ## [0.7.1] - 2026-07-05
 
 ### Added
