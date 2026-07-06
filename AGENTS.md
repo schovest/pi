@@ -162,7 +162,7 @@ npm install --package-lock-only --ignore-scripts
 node scripts/generate-coding-agent-shrinkwrap.mjs
 
 # 6. 构建并打包 tgz
-cd packages/coding-agent && npm run build:tgz
+npm run build:tgz
 
 # 7. 更新 CHANGELOG [`packages/coding-agent/CHANGELOG.md`]（将 [Unreleased] 条目移入新版本段落）
 
@@ -189,7 +189,7 @@ git push origin vx.y.z
 
 - Node dist：`npm run build`
 - Bun 单文件二进制：从 `packages/coding-agent` 运行 `npm run build:binary`
-- 打包为可发行文件：从 `packages/coding-agent` 运行 `npm run build:tgz`
+- 打包为可发行文件：从项目根目录运行 `npm run build:tgz`（调用 `scripts/build-binaries.sh`）
 
 #### 测试
 

@@ -13,7 +13,7 @@
   "scripts": {
     "clean": "npm run clean --workspaces",
     "build": "cd packages/tui && npm run build && cd ../ai && npm run build && cd ../agent && npm run build && cd ../coding-agent && npm run build",
-    "build:tgz": "cd packages/coding-agent && npm run build:tgz",
+    "build:tgz": "./scripts/build-binaries.sh",
     "check": "biome check --write --error-on-warnings . && npm run check:pinned-deps && npm run check:ts-imports && npm run check:shrinkwrap && tsgo --noEmit && npm run check:browser-smoke",
     "check:browser-smoke": "node scripts/check-browser-smoke.mjs",
     "check:pinned-deps": "node scripts/check-pinned-deps.mjs",
@@ -52,7 +52,7 @@
   "engines": {
     "node": ">=22.19.0"
   },
-  "version": "0.7.1",
+  "version": "0.7.2",
   "overrides": {
     "rimraf": "6.1.2",
     "gaxios": {
