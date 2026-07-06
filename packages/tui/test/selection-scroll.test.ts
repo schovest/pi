@@ -397,9 +397,17 @@ describe("selection-scroll: highlight survives scroll", () => {
 			origWrite(data);
 		};
 
-		// mouseDown + mouseMove on screen row 5 (buffer row 9 "L9") to create a selection
-		tui.handleMouseEvent({ type: "mouseDown", button: 0, col: 1, row: 6, shift: false, alt: false, ctrl: false });
-		tui.handleMouseEvent({ type: "mouseMove", button: 0, col: 3, row: 6, shift: false, alt: false, ctrl: false });
+		// Set selection directly on buffer row 9 ("L9") to avoid mouseMove
+		// at the viewport edge triggering an autoScroll interval that never
+		// gets cleared (no mouseUp in this test).
+		(tui as unknown as { selection: import("../src/tui.ts").SelectionState | null }).selection = {
+			active: true,
+			anchorRow: 9,
+			anchorCol: 0,
+			focusRow: 9,
+			focusCol: 1,
+		};
+		tui.requestRender();
 		await settleRender();
 
 		// Verify highlight is written (screen row 5 = buffer row 9 "L9")
