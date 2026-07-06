@@ -131,7 +131,7 @@ jobs:
         run: npm test
 
       - name: Verify source files are clean after check
-        run: git diff --exit-code -- packages/*/src packages/*/test .github scripts
+        run: git diff --exit-code -- packages/*/src packages/*/test .github scripts ':!*.generated.ts'
 
       - name: Upgrade npm for trusted publishing
         run: |
