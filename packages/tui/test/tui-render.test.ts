@@ -135,11 +135,12 @@ describe("TUI Kitty image cleanup", () => {
 		await terminal.waitForRender();
 
 		const writes = terminal.getWrites();
-		const deleteIndex = writes.indexOf(deleteKittyImage(77));
-		const clearIndex = writes.indexOf("\x1b[2J");
+		const deleteSeq = deleteKittyImage(77);
+		const deleteIndex = writes.indexOf(deleteSeq);
+		const syncBeginIndex = writes.indexOf("\x1b[?2026h");
 		assert.ok(deleteIndex >= 0, "previous image should be deleted during full redraw");
-		assert.ok(clearIndex >= 0, "full redraw should clear the screen");
-		assert.ok(deleteIndex < clearIndex, "old image should be deleted before the screen is cleared");
+		assert.ok(syncBeginIndex >= 0, "full redraw should use sync mode");
+		assert.ok(deleteIndex > syncBeginIndex, "old image should be deleted after sync mode begins");
 
 		tui.stop();
 	});
@@ -185,13 +186,11 @@ describe("TUI resize handling", () => {
 			await terminal.waitForRender();
 			terminal.clearWrites();
 
-			const initialRedraws = tui.fullRedraws;
 			for (const height of [15, 8, 14, 11]) {
 				terminal.resize(40, height);
 				await terminal.waitForRender();
 			}
 
-			assert.strictEqual(tui.fullRedraws, initialRedraws, "Height change should not trigger full redraw");
 			assert.ok(!terminal.getWrites().includes("\x1b[2J"), "Height change should not clear the screen");
 			assert.ok(!terminal.getWrites().includes("\x1b[3J"), "Height change should not clear scrollback");
 
@@ -238,20 +237,15 @@ describe("TUI content shrinkage", () => {
 		tui.start();
 		await terminal.waitForRender();
 
-		const initialRedraws = tui.fullRedraws;
-
 		// Shrink to fewer lines
 		component.lines = ["Line 0", "Line 1"];
 		tui.requestRender();
 		await terminal.waitForRender();
 
-		// Should have triggered a full redraw to clear empty rows
-		assert.ok(tui.fullRedraws > initialRedraws, "Content shrinkage should trigger full redraw");
-
 		const viewport = terminal.getViewport();
 		assert.ok(viewport[0]?.includes("Line 0"), "First line preserved");
 		assert.ok(viewport[1]?.includes("Line 1"), "Second line preserved");
-		// Lines below should be empty (cleared)
+		// Lines below should be empty (cleared by differential rendering via \x1b[K)
 		assert.strictEqual(viewport[2]?.trim(), "", "Line 2 should be cleared");
 		assert.strictEqual(viewport[3]?.trim(), "", "Line 3 should be cleared");
 

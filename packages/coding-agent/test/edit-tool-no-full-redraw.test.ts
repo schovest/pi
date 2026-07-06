@@ -132,6 +132,12 @@ describe("edit tool TUI rendering", () => {
 		expect(callOnlyRender).toContain("edit");
 		expect(callOnlyRender).toContain("line 950 changed");
 
+		// Wait for any pending force-render (from waitForRenderedText retry) to settle
+		// so that previousWidth/previousHeight are restored and don't cause an
+		// unexpected full redraw on the next non-force render.
+		await waitForRender();
+		await waitForRender();
+
 		const redrawsBeforeResult = tui.fullRedraws;
 		const clearsBeforeResult = terminal.fullClearCount;
 		component.updateResult(

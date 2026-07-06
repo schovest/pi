@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import { createLoopGuards } from "../src/harness/loop-guards.ts";
 import type { MaxTokensContext, PrematureStopContext, RepeatedToolCallContext } from "../src/types.ts";
 
