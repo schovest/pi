@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.7.3] - 2026-07-06
 
 - When Amazon Bedrock rejects an unsupported data retention mode, the error now links the AWS data retention documentation ([#5561](https://github.com/schovest/pi/pull/5561) by [@unexge](https://github.com/unexge)).
 
