@@ -2738,7 +2738,7 @@ export class AgentSession {
 
 		this._retryAttempt++;
 
-		if (this._retryAttempt >= settings.maxRetries) {
+		if (this._retryAttempt > settings.maxRetries) {
 			// Preserve the completed attempt count so post-run handling can emit the final failure.
 			this._retryAttempt--;
 			return false;

@@ -167,13 +167,15 @@ describe("AgentSession auto-compaction queue resume", () => {
 
 		await checkCompaction(overflowMessage);
 		await checkCompaction({ ...overflowMessage, timestamp: Date.now() + 1 });
+		await checkCompaction({ ...overflowMessage, timestamp: Date.now() + 2 });
+		await checkCompaction({ ...overflowMessage, timestamp: Date.now() + 3 });
 
-		expect(runAutoCompactionSpy).toHaveBeenCalledTimes(1);
+		expect(runAutoCompactionSpy).toHaveBeenCalledTimes(3);
 		expect(events).toContainEqual({
 			type: "compaction_end",
 			reason: "overflow",
 			errorMessage:
-				"Context overflow recovery failed after one compact-and-retry attempt. Try reducing context or switching to a larger-context model.",
+				"Context overflow recovery failed after multiple compact-and-retry attempts. Try reducing context or switching to a larger-context model.",
 		});
 	});
 
@@ -236,6 +238,8 @@ describe("AgentSession auto-compaction queue resume", () => {
 
 	it("should trigger threshold compaction for error messages using last successful usage", async () => {
 		const model = session.model!;
+		// Ensure deterministic context window for threshold compaction check
+		Object.defineProperty(model, "contextWindow", { value: 200_000, writable: true, configurable: true });
 
 		// A successful assistant message with high token usage (near context limit)
 		const successfulAssistant: AssistantMessage = {

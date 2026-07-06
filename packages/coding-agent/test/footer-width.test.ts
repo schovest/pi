@@ -57,6 +57,9 @@ function createSession(options: {
 		modelRegistry: {
 			isUsingOAuth: () => false,
 		},
+		backgroundProcessManager: {
+			getRunningCount: () => 0,
+		},
 	};
 
 	return session as unknown as AgentSession;

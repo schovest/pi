@@ -164,10 +164,7 @@ Project skill`,
 			);
 
 			const baseTheme = JSON.parse(
-				readFileSync(
-					join(process.cwd(), "packages", "coding-agent", "src", "modes", "interactive", "theme", "dark.json"),
-					"utf-8",
-				),
+				readFileSync(join(import.meta.dirname, "..", "src", "modes", "interactive", "theme", "dark.json"), "utf-8"),
 			) as { name: string; vars?: Record<string, string> };
 			baseTheme.name = "collision-theme";
 			const userThemePath = join(agentDir, "themes", "collision.json");
@@ -446,10 +443,7 @@ Project skill content`,
 			);
 			writeFileSync(join(promptsDir, "project.md"), "Project prompt");
 			const themeData = JSON.parse(
-				readFileSync(
-					join(process.cwd(), "packages", "coding-agent", "src", "modes", "interactive", "theme", "dark.json"),
-					"utf-8",
-				),
+				readFileSync(join(import.meta.dirname, "..", "src", "modes", "interactive", "theme", "dark.json"), "utf-8"),
 			) as { name: string };
 			themeData.name = "project-theme";
 			writeFileSync(join(themesDir, "project.json"), JSON.stringify(themeData, null, 2));
