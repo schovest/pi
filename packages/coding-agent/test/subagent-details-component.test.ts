@@ -97,9 +97,10 @@ describe("SubagentDetailsComponent", () => {
 
 		component.handleInput("j");
 		component.handleInput("\n");
-		// resultItems sorts by timestamp descending (newest first), so index 1 (ts=2) is at position 0
-		// and index 0 (ts=1) is at position 1. "j" moves from position 0 → 1, which is index 0.
-		expect(selected).toEqual([0]);
+		// resultItems preserves insertion order (by index, not timestamp).
+		// position 0 = index 0, position 1 = index 1.
+		// "j" moves from position 0 → 1, which is index 1.
+		expect(selected).toEqual([1]);
 	});
 
 	it("renders the selected subagent as a focused run view", () => {
