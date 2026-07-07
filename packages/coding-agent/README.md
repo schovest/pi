@@ -79,6 +79,12 @@ Installer alternative:
 curl -fsSL https://pi.dev/install.sh | sh
 ```
 
+Or install the prebuilt binary from GitHub release (no Node.js required):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/schovest/pi/main/scripts/update.sh | bash
+```
+
 Authenticate with an API key:
 
 ```bash
