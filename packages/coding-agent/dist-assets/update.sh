@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
 # 从 GitHub 下载最新 release，验证 sha256，安装/更新 pi。
-# 安装前会 rm -rf 安装目录，避免 pi 正在运行时文件繁忙导致无法覆盖。
+# 已安装且为最新版本时自动跳过；更新前会 rm -rf 安装目录，
+# 避免 pi 正在运行时文件繁忙导致无法覆盖。
 #
 # 用法:
 #   ./scripts/update.sh
@@ -53,8 +54,27 @@ if [ -z "$RELEASE_TAG" ]; then
 	exit 1
 fi
 
+# 去掉 'v' 前缀，用于版本对比
+LATEST_VERSION="${RELEASE_TAG#v}"
+
 echo "    最新版本: $RELEASE_TAG"
 echo "    平台:     $PLATFORM"
+
+# ---------------------------------------------------------------------------
+# 版本检查：已安装且为最新则跳过
+# ---------------------------------------------------------------------------
+
+if [ -x "$PREFIX/pi" ]; then
+	LOCAL_VERSION=$("$PREFIX/pi" --version 2>/dev/null | head -1)
+	echo "    当前版本: v${LOCAL_VERSION}"
+	if [ "$LOCAL_VERSION" = "$LATEST_VERSION" ]; then
+		echo ""
+		echo "==> 已经是最新版本，无需更新。"
+		exit 0
+	fi
+else
+	echo "    当前版本: 未安装"
+fi
 
 # ---------------------------------------------------------------------------
 # 下载 archive + checksums
