@@ -59,6 +59,9 @@ jobs:
         run: |
           cd packages/coding-agent/binaries
 
+          # Generate sha256 checksums for all release assets
+          sha256sum pi-*.tar.gz pi-*.zip > sha256sums.txt
+
           if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
             gh release edit "${RELEASE_TAG}" \
               --title "${RELEASE_TAG}" \
@@ -70,6 +73,7 @@ jobs:
               pi-linux-arm64.tar.gz \
               pi-windows-x64.zip \
               pi-windows-arm64.zip \
+              sha256sums.txt \
               --clobber
           else
             gh release create "${RELEASE_TAG}" \
@@ -80,7 +84,8 @@ jobs:
               pi-linux-x64.tar.gz \
               pi-linux-arm64.tar.gz \
               pi-windows-x64.zip \
-              pi-windows-arm64.zip
+              pi-windows-arm64.zip \
+              sha256sums.txt
           fi
 
   publish-npm:
