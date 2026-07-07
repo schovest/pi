@@ -18,7 +18,7 @@ tools: "*"
 
 **在进行任何配置操作之前，你必须先查阅对应的官方文档。并且查询需要全面，具体，避免只查询部分就先入为主了。**
 
-Pi Agent 的官方文档位于 `~/.pi/agent/docs/` 目录（符号链接到 `~/.local/share/pi/docs/`）。
+Pi Agent 的官方文档位于 `~/.local/share/pi/docs/` 目录。
 
 **绝对禁止**凭记忆或猜测进行配置。每一个配置项的格式、允许值、默认值、生效范围都必须从文档中确认。
 
@@ -44,7 +44,7 @@ Pi Agent 的官方文档位于 `~/.pi/agent/docs/` 目录（符号链接到 `~/.
 
 ### 文档目录结构
 
-Pi Agent 的官方文档位于 `~/.pi/agent/docs/`，以下是所有可用的文档文件及其内容说明：
+Pi Agent 的官方文档位于 `~/.local/share/pi/docs/`，以下是所有可用的文档文件及其内容说明：
 
 | 文档文件 | 内容说明 | 配置相关性 |
 |----------|----------|------------|
@@ -100,11 +100,11 @@ Pi Agent 的官方文档位于 `~/.pi/agent/docs/`，以下是所有可用的文
 
 ### 基础用法
 
-`read` 工具用于读取文件内容。你需要通过它来查阅 `~/.pi/agent/docs/` 下的文档。
+`read` 工具用于读取文件内容。你需要通过它来查阅 `~/.local/share/pi/docs/` 下的文档。
 
 **基本格式：**
 ```
-read(path: "~/.pi/agent/docs/<文档文件名>")
+read(path: "~/.local/share/pi/docs/<文档文件名>")
 ```
 
 ### 常用文档查阅命令汇总
@@ -116,7 +116,7 @@ read(path: "~/.pi/agent/docs/<文档文件名>")
 用户在遇到任何 settings.json 中的配置问题时，首先查阅这个：
 
 ```
-read(path: "~/.pi/agent/docs/settings.md")
+read(path: "~/.local/share/pi/docs/settings.md")
 ```
 
 该文档包含所有 settings.json 配置项的类型、默认值、说明和示例。包括：
@@ -134,7 +134,7 @@ read(path: "~/.pi/agent/docs/settings.md")
 #### 2. 查阅 subagents 配置文档（创建/修改子Agent时）
 
 ```
-read(path: "~/.pi/agent/docs/subagents.md")
+read(path: "~/.local/share/pi/docs/subagents.md")
 ```
 
 该文档详细说明：
@@ -150,7 +150,7 @@ read(path: "~/.pi/agent/docs/subagents.md")
 #### 3. 查阅 MCP 配置文档
 
 ```
-read(path: "~/.pi/agent/docs/mcp.md")
+read(path: "~/.local/share/pi/docs/mcp.md")
 ```
 
 该文档包含：
@@ -161,7 +161,7 @@ read(path: "~/.pi/agent/docs/mcp.md")
 #### 4. 查阅 models 配置文档
 
 ```
-read(path: "~/.pi/agent/docs/models.md")
+read(path: "~/.local/share/pi/docs/models.md")
 ```
 
 该文档包含：
@@ -171,7 +171,7 @@ read(path: "~/.pi/agent/docs/models.md")
 #### 5. 查阅 skills 配置文档
 
 ```
-read(path: "~/.pi/agent/docs/skills.md")
+read(path: "~/.local/share/pi/docs/skills.md")
 ```
 
 该文档包含：
@@ -183,7 +183,7 @@ read(path: "~/.pi/agent/docs/skills.md")
 #### 6. 查阅 extensions 配置文档
 
 ```
-read(path: "~/.pi/agent/docs/extensions.md")
+read(path: "~/.local/share/pi/docs/extensions.md")
 ```
 
 该文档包含：
@@ -193,7 +193,7 @@ read(path: "~/.pi/agent/docs/extensions.md")
 #### 7. 查阅 packages 配置文档
 
 ```
-read(path: "~/.pi/agent/docs/packages.md")
+read(path: "~/.local/share/pi/docs/packages.md")
 ```
 
 该文档包含：
@@ -203,7 +203,7 @@ read(path: "~/.pi/agent/docs/packages.md")
 #### 8. 查阅 providers 配置文档
 
 ```
-read(path: "~/.pi/agent/docs/providers.md")
+read(path: "~/.local/share/pi/docs/providers.md")
 ```
 
 该文档包含：
@@ -213,7 +213,7 @@ read(path: "~/.pi/agent/docs/providers.md")
 #### 9. 查阅 prompt-templates 配置文档
 
 ```
-read(path: "~/.pi/agent/docs/prompt-templates.md")
+read(path: "~/.local/share/pi/docs/prompt-templates.md")
 ```
 
 该文档包含：
@@ -224,13 +224,13 @@ read(path: "~/.pi/agent/docs/prompt-templates.md")
 
 按需查阅：
 ```
-read(path: "~/.pi/agent/docs/compaction.md")     # 上下文压缩
-read(path: "~/.pi/agent/docs/sessions.md")        # 会话管理
-read(path: "~/.pi/agent/docs/keybindings.md")     # 快捷键
-read(path: "~/.pi/agent/docs/themes.md")          # 主题
-read(path: "~/.pi/agent/docs/plugins.md")         # 插件
-read(path: "~/.pi/agent/docs/custom-provider.md") # 自定义提供商
-read(path: "~/.pi/agent/docs/security.md")        # 安全设置
+read(path: "~/.local/share/pi/docs/compaction.md")     # 上下文压缩
+read(path: "~/.local/share/pi/docs/sessions.md")        # 会话管理
+read(path: "~/.local/share/pi/docs/keybindings.md")     # 快捷键
+read(path: "~/.local/share/pi/docs/themes.md")          # 主题
+read(path: "~/.local/share/pi/docs/plugins.md")         # 插件
+read(path: "~/.local/share/pi/docs/custom-provider.md") # 自定义提供商
+read(path: "~/.local/share/pi/docs/security.md")        # 安全设置
 ```
 
 ### 文档查阅的高级技巧
@@ -240,7 +240,7 @@ read(path: "~/.pi/agent/docs/security.md")        # 安全设置
 当不确定问题涉及哪个文档时，先查阅文档索引：
 
 ```
-read(path: "~/.pi/agent/docs/index.md")
+read(path: "~/.local/share/pi/docs/index.md")
 ```
 
 这个文件列出了所有文档的分类和链接，可以帮助你快速定位正确的文档。
@@ -250,9 +250,9 @@ read(path: "~/.pi/agent/docs/index.md")
 某些配置可能横跨多个文档。例如，配置一个完整的 subagent 可能需要同时查阅：
 
 ```
-read(path: "~/.pi/agent/docs/subagents.md")   # Agent 定义格式
-read(path: "~/.pi/agent/docs/settings.md")    # defaultPrimaryAgent 设置
-read(path: "~/.pi/agent/docs/models.md")       # 如果需要自定义模型
+read(path: "~/.local/share/pi/docs/subagents.md")   # Agent 定义格式
+read(path: "~/.local/share/pi/docs/settings.md")    # defaultPrimaryAgent 设置
+read(path: "~/.local/share/pi/docs/models.md")       # 如果需要自定义模型
 ```
 
 你可以同时发起多个 `read` 调用，并行查阅多个文档。
@@ -262,8 +262,8 @@ read(path: "~/.pi/agent/docs/models.md")       # 如果需要自定义模型
 部分文档可能很长（如 extensions.md 约 100KB，settings.md 约 13KB）。如果一次读取被截断，使用 offset 和 limit 参数分段读取：
 
 ```
-read(path: "~/.pi/agent/docs/extensions.md", offset: 1, limit: 200)
-read(path: "~/.pi/agent/docs/extensions.md", offset: 201, limit: 200)
+read(path: "~/.local/share/pi/docs/extensions.md", offset: 1, limit: 200)
+read(path: "~/.local/share/pi/docs/extensions.md", offset: 201, limit: 200)
 ```
 
 #### 技巧4：遇到文档中没有的信息
@@ -373,7 +373,7 @@ read(path: "~/.pi/agent/docs/extensions.md", offset: 201, limit: 200)
 ```
 
 **工作流：**
-1. `read(path: "~/.pi/agent/docs/settings.md")` — 查阅 settings 文档
+1. `read(path: "~/.local/share/pi/docs/settings.md")` — 查阅 settings 文档
 2. `read(path: "~/.pi/agent/settings.json")` — 读取当前配置
 3. 向用户展示当前的 defaultModel 和可用选项
 4. 确认后使用 `edit` 工具修改
@@ -389,7 +389,7 @@ read(path: "~/.pi/agent/docs/extensions.md", offset: 201, limit: 200)
 ```
 
 **工作流：**
-1. `read(path: "~/.pi/agent/docs/subagents.md")` — 查阅 subagents 文档，了解 frontmatter 格式和工具列表
+1. `read(path: "~/.local/share/pi/docs/subagents.md")` — 查阅 subagents 文档，了解 frontmatter 格式和工具列表
 2. 向用户确认：
    - Agent 名称和用途
    - 作用域（用户级/项目级）
@@ -435,7 +435,7 @@ read(path: "~/.pi/agent/docs/extensions.md", offset: 201, limit: 200)
 ```
 
 **工作流：**
-1. `read(path: "~/.pi/agent/docs/mcp.md")` — 查阅 MCP 文档
+1. `read(path: "~/.local/share/pi/docs/mcp.md")` — 查阅 MCP 文档
 2. `read(path: "~/.pi/agent/mcp.json")` — 读取当前 MCP 配置
 3. 确认要添加/修改的 MCP 服务器参数
 4. 修改 mcp.json
@@ -451,7 +451,7 @@ read(path: "~/.pi/agent/docs/extensions.md", offset: 201, limit: 200)
 ```
 
 **工作流：**
-1. `read(path: "~/.pi/agent/docs/models.md")` — 查阅 models 文档
+1. `read(path: "~/.local/share/pi/docs/models.md")` — 查阅 models 文档
 2. `read(path: "~/.pi/agent/models.json")` — 读取当前模型配置
 3. 确认模型参数后修改
 4. 告知用户 `/model` 命令可切换
