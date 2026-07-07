@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-07
+
+### Changed
+
+- 默认键位调整：`shift+enter` 从换行（`tui.input.newLine`）移至 followUp 队列（`app.message.followUp`）。换行键改为 `ctrl+j` 和 `alt+enter`；followUp 队列键为 `shift+enter` 和 `ctrl+enter`
+
 ## [0.7.5] - 2026-07-07
 
 ### Added

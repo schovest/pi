@@ -30,7 +30,7 @@ That mapping sends a raw linefeed byte. Inside pi, that is indistinguishable fro
 
 If Claude Code 2.x or newer is the only reason you added that mapping, you can remove it, unless you want to use Claude Code in tmux, where it still requires that Ghostty mapping.
 
-If you want `Shift+Enter` to keep working in tmux via that remap, add `ctrl+j` to your pi `newLine` keybinding in `~/.pi/agent/keybindings.json`:
+If you want `Shift+Enter` (follow-up queue) to keep working in tmux via that remap, add `ctrl+j` to your pi `newLine` keybinding and `shift+enter` to your `app.message.followUp` keybinding in `~/.pi/agent/keybindings.json`:
 
 ```json
 {
@@ -122,8 +122,9 @@ Add to `settings.json` (Ctrl+Shift+, or Settings → Open JSON file) to forward 
 }
 ```
 
-- `Shift+Enter` inserts a new line.
-- Windows Terminal binds `Alt+Enter` to fullscreen by default. That prevents pi from receiving `Alt+Enter` for follow-up queueing.
+- `Shift+Enter` and `Ctrl+Enter` queue a follow-up message.
+- `Ctrl+J` and `Alt+Enter` insert a new line.
+- Windows Terminal binds `Alt+Enter` to fullscreen by default. That prevents pi from receiving `Alt+Enter` for newline insertion.
 - Remapping `Alt+Enter` to `sendInput` forwards the real key chord to pi instead.
 
 If you already have an `actions` array, add the objects to it. If the old fullscreen behavior persists, fully close and reopen Windows Terminal.

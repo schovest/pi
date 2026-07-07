@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-07
+
+### Changed
+
+- Moved `shift+enter` from `tui.input.newLine` to `app.message.followUp` default keybindings. Newline is now `ctrl+j` and `alt+enter`; follow-up queue is `shift+enter` and `ctrl+enter`.
+
 ## [0.7.5] - 2026-07-07
 
 ## [0.7.4] - 2026-07-06
