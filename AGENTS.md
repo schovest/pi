@@ -144,7 +144,7 @@ npx vitest run --dir packages/agent/test agent-loop
 
 所有包使用 lockstep 版本号，统一升降。流程：
 
-以下步骤全部在 **dev 分支**上执行（步骤 1-8），然后 merge 到 main（步骤 9-11）：
+以下步骤全部在 **dev 分支**上执行（步骤 1-8），然后 merge 到 main（步骤 9-11），最后切回 dev（步骤 12）：
 
 ```bash
 # 1. 升级版本号（所有 workspace 包统一）
@@ -179,6 +179,9 @@ git tag vx.y.z
 # 11. push main + tag
 git push origin main
 git push origin vx.y.z
+
+# 12. 切回 dev 分支（避免后续开发误在 main 上操作）
+git checkout dev
 ```
 
 注意：`npm version -ws` 会因远程仓库无对应版本报 ETARGET 错误，不影响本地版本号更新，可忽略。
