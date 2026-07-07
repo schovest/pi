@@ -113,15 +113,19 @@ if [ ! -d "$TMPDIR/extracted/pi" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 安装：先清理旧目录，再调用 install.sh
+# 安装：已安装则清理旧目录（避免 pi 繁忙），未安装则直接安装
 # ---------------------------------------------------------------------------
 
-echo "==> 清理旧安装目录 ($PREFIX) ..."
-rm -rf "$PREFIX"
+if [ -x "$PREFIX/pi" ]; then
+	echo "==> 检测到已安装，清理旧目录 ($PREFIX) ..."
+	rm -rf "$PREFIX"
+else
+	echo "==> 未检测到 pi，执行全新安装 ..."
+fi
 
-echo "==> 安装 ..."
+echo "==> 执行 install.sh ..."
 cd "$TMPDIR/extracted/pi"
 bash ./install.sh
 
 echo ""
-echo "==> 更新完成: $RELEASE_TAG"
+echo "==> 安装完成: $RELEASE_TAG"
