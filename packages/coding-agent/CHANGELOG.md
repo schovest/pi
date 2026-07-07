@@ -4,6 +4,26 @@
 
 ## [Unreleased]
 
+## [0.7.5] - 2026-07-07
+
+### Added
+
+- 新增 update.sh 脚本：从 GitHub 下载最新 release、验证 sha256、自动安装/更新 pi，已安装且为最新版本时自动跳过
+- CI（build-binaries.yml）在发布时生成 sha256sums.txt 校验文件并上传到 release
+- README Quick Start 新增一键安装命令（release binary 方式，无需 Node.js）
+
+### Changed
+
+- release archive 打包时同步包含 update.sh 脚本
+
+### Fixed
+
+- config agent（primary-agent）文档查询路径从 `~/.pi/agent/docs/` 改为 `~/.local/share/pi/docs/`
+
+### Removed
+
+- 删除不再需要的 debug subagent
+
 ## [0.7.4] - 2026-07-06
 
 ## [0.7.3] - 2026-07-06
