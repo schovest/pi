@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-07-09
+
 ### Changed
 
 - update.sh 获取最新 release 版本号改为优先使用 GitHub 网页重定向（无速率限制），API 作为回退方案
