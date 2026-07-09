@@ -28,9 +28,26 @@ download_fd() {
     *)       echo "  warning: unsupported architecture $arch for fd download"; return 1 ;;
   esac
 
-  local version asset
-  version=$(curl -fsSL "https://api.github.com/repos/sharkdp/fd/releases/latest" 2>/dev/null \
-    | grep -o '"tag_name": *"v[^"]*"' | head -1 | sed 's/.*"v\([^"]*\)".*/\1/')
+  local version asset redirect_url
+
+  # 首选：网页重定向（无速率限制）
+  # https://github.com/sharkdp/fd/releases/latest → 302 → /releases/tag/vX.Y.Z
+  redirect_url=$(curl -fsSL -o /dev/null -w '%{url_effective}' \
+    "https://github.com/sharkdp/fd/releases/latest" 2>/dev/null) || redirect_url=""
+  if [ -n "$redirect_url" ]; then
+    version="${redirect_url##*/tag/}"
+    # 无 /tag/ 时原样返回，据此判断失败
+    [ "$version" = "$redirect_url" ] && version=""
+    # 去掉 'v' 前缀
+    version="${version#v}"
+  fi
+
+  # 回退：GitHub API（匿名限速 60 次/小时）
+  if [ -z "$version" ]; then
+    version=$(curl -fsSL "https://api.github.com/repos/sharkdp/fd/releases/latest" 2>/dev/null \
+      | grep -o '"tag_name": *"v[^"]*"' | head -1 | sed 's/.*"v\([^"]*\)".*/\1/')
+  fi
+
   if [ -z "$version" ]; then
     echo "  warning: failed to fetch fd latest version"
     return 1

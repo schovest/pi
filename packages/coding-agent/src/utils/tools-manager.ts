@@ -103,8 +103,27 @@ export function getToolPath(tool: "fd" | "rg"): string | null {
 	return null;
 }
 
-// Fetch latest release version from GitHub
+// Fetch latest release version from GitHub.
+// First tries the web frontend redirect (no rate limit), falls back to the
+// API (rate-limited at 60 req/hour for anonymous users).
 async function getLatestVersion(repo: string): Promise<string> {
+	// Strategy 1: web redirect — https://github.com/<repo>/releases/latest
+	//   returns 302 with Location: /releases/tag/<tag>. No API, no rate limit.
+	try {
+		const response = await fetch(`https://github.com/${repo}/releases/latest`, {
+			redirect: "manual",
+			signal: AbortSignal.timeout(NETWORK_TIMEOUT_MS),
+		});
+		const location = response.headers.get("location") ?? "";
+		const match = location.match(/\/releases\/tag\/(.+)$/);
+		if (match) {
+			return match[1].replace(/^v/, "");
+		}
+	} catch {
+		// fall through to API
+	}
+
+	// Strategy 2: GitHub API (rate-limited fallback)
 	const response = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
 		headers: { "User-Agent": `${APP_NAME}-coding-agent` },
 		signal: AbortSignal.timeout(NETWORK_TIMEOUT_MS),
