@@ -7,7 +7,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { AgentMessage } from "@schovest/pi-agent-core";
+import type { AgentMessage, ThinkingLevel } from "@schovest/pi-agent-core";
 import {
 	type AssistantMessage,
 	getProviders,
@@ -128,6 +128,7 @@ import { SkillInvocationMessageComponent } from "./components/skill-invocation-m
 import type { SubagentDetailsData } from "./components/subagent-details.ts";
 import { SubagentOverlayComponent } from "./components/subagent-overlay.ts";
 import { SubagentsPanelComponent } from "./components/subagents-panel.ts";
+import { ThinkingSelectorComponent } from "./components/thinking-selector.ts";
 import { ToolExecutionComponent } from "./components/tool-execution.ts";
 import { TreeSelectorComponent } from "./components/tree-selector.ts";
 import { TrustSelectorComponent } from "./components/trust-selector.ts";
@@ -2531,6 +2532,7 @@ export class InteractiveMode {
 		this.defaultEditor.onCtrlD = () => this.handleCtrlD();
 		this.defaultEditor.onAction("app.suspend", () => this.handleCtrlZ());
 		this.defaultEditor.onAction("app.thinking.cycle", () => this.cycleThinkingLevel());
+		this.defaultEditor.onAction("app.thinking.select", () => this.showThinkingSelector());
 		this.defaultEditor.onAction("app.model.cycleForward", () => this.cycleModel("forward"));
 		this.defaultEditor.onAction("app.model.cycleBackward", () => this.cycleModel("backward"));
 
@@ -2620,6 +2622,15 @@ export class InteractiveMode {
 			category: "settings",
 			keybinding: "shift+tab",
 			handler: () => this.cycleThinkingLevel(),
+		});
+
+		registry.register({
+			id: "app.thinking.select",
+			label: "选择思考级别",
+			description: "打开思考级别选择器",
+			category: "settings",
+			keybinding: "ctrl+shift+l",
+			handler: () => this.showThinkingSelector(),
 		});
 
 		registry.register({
@@ -2749,6 +2760,15 @@ export class InteractiveMode {
 			handler: () => {
 				void this.handleModelCommand(undefined);
 			},
+		});
+
+		registry.register({
+			id: "slash.thinking",
+			label: "/thinking",
+			description: "选择思考级别",
+			category: "slash",
+			keybinding: "ctrl+shift+l",
+			handler: () => this.showThinkingSelector(),
 		});
 
 		registry.register({
@@ -3008,6 +3028,11 @@ export class InteractiveMode {
 				const searchTerm = text.startsWith("/model ") ? text.slice(7).trim() : undefined;
 				this.editor.setText("");
 				await this.handleModelCommand(searchTerm);
+				return;
+			}
+			if (text === "/thinking") {
+				this.editor.setText("");
+				this.showThinkingSelector();
 				return;
 			}
 			if (text === "/export" || text.startsWith("/export ")) {
@@ -5048,6 +5073,33 @@ export class InteractiveMode {
 		});
 	}
 
+	private showThinkingSelector(): void {
+		if (!this.session.supportsThinking()) {
+			this.showStatus("Current model does not support thinking");
+			return;
+		}
+		const currentLevel = (this.session.thinkingLevel || "off") as ThinkingLevel;
+		const availableLevels = this.session.getAvailableThinkingLevels();
+		this.showSelector((done) => {
+			const selector = new ThinkingSelectorComponent(
+				currentLevel,
+				availableLevels,
+				(level) => {
+					this.session.setThinkingLevel(level);
+					this.footer.invalidate();
+					this.updateEditorBorderColor();
+					done();
+					this.showStatus(`Thinking level: ${level}`);
+				},
+				() => {
+					done();
+					this.ui.requestRender();
+				},
+			);
+			return { component: selector, focus: selector.getSelectList() };
+		});
+	}
+
 	private showBackgroundProcesses(): void {
 		this.showSelector((done) => {
 			const selector = new BackgroundProcessSelector({
@@ -6249,6 +6301,7 @@ export class InteractiveMode {
 		const exit = this.getAppKeyDisplay("app.exit");
 		const suspend = this.getAppKeyDisplay("app.suspend");
 		const cycleThinkingLevel = this.getAppKeyDisplay("app.thinking.cycle");
+		const selectThinkingLevel = this.getAppKeyDisplay("app.thinking.select");
 		const cycleModelForward = this.getAppKeyDisplay("app.model.cycleForward");
 		const selectModel = this.getAppKeyDisplay("app.model.select");
 		const expandTools = this.getAppKeyDisplay("app.tools.expand");
@@ -6293,6 +6346,7 @@ export class InteractiveMode {
 | \`${exit}\` | Exit (when editor is empty) |
 | \`${suspend}\` | Suspend to background |
 | \`${cycleThinkingLevel}\` | Cycle thinking level |
+| \`${selectThinkingLevel}\` | Open thinking level selector |
 | \`${cycleModelForward}\` / \`${cycleModelBackward}\` | Cycle models |
 | \`${selectModel}\` | Open model selector |
 | \`${expandTools}\` | Toggle tool output expansion |
