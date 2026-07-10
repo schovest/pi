@@ -16,6 +16,7 @@ export interface AppKeybindings {
 	"app.exit": true;
 	"app.suspend": true;
 	"app.thinking.cycle": true;
+	"app.thinking.select": true;
 	"app.model.cycleForward": true;
 	"app.model.cycleBackward": true;
 	"app.model.select": true;
@@ -74,6 +75,10 @@ export const KEYBINDINGS = {
 	"app.thinking.cycle": {
 		defaultKeys: "shift+tab",
 		description: "Cycle thinking level",
+	},
+	"app.thinking.select": {
+		defaultKeys: "ctrl+shift+l",
+		description: "Open thinking level selector",
 	},
 	"app.model.cycleForward": {
 		defaultKeys: [] as KeyId[],
@@ -248,6 +253,7 @@ const KEYBINDING_NAME_MIGRATIONS = {
 	exit: "app.exit",
 	suspend: "app.suspend",
 	cycleThinkingLevel: "app.thinking.cycle",
+	selectThinkingLevel: "app.thinking.select",
 	cycleModelForward: "app.model.cycleForward",
 	cycleModelBackward: "app.model.cycleBackward",
 	selectModel: "app.model.select",

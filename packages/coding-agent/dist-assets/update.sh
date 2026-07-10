@@ -42,12 +42,42 @@ ARCHIVE="pi-${PLATFORM}.tar.gz"
 
 # ---------------------------------------------------------------------------
 # 获取最新 release
+#
+# 首选方案：利用 https://github.com/<repo>/releases/latest 的 302 重定向
+#   到 /releases/tag/vX.Y.Z，只请求 github.com 网页前端，完全不走 API，
+#   不受匿名用户 60 次/小时的速率限制。
+# 回退方案：GitHub API releases/latest（受速率限制，仅在首选方案失败时使用）。
 # ---------------------------------------------------------------------------
+
+get_latest_tag() {
+	local url tag
+
+	# 首选：网页重定向（无速率限制）
+	url=$(curl -fsSL -o /dev/null -w '%{url_effective}' \
+		"https://github.com/${GITHUB_REPO}/releases/latest" 2>/dev/null) || url=""
+	if [ -n "$url" ]; then
+		# 从 .../releases/tag/vX.Y.Z 中提取 tag；无 /tag/ 时原样返回，据此判断失败
+		tag="${url##*/tag/}"
+		if [ -n "$tag" ] && [ "$tag" != "$url" ]; then
+			printf '%s' "$tag"
+			return 0
+		fi
+	fi
+
+	# 回退：GitHub API（匿名限速 60 次/小时）
+	tag=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" 2>/dev/null \
+		| sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1)
+	if [ -n "$tag" ]; then
+		printf '%s' "$tag"
+		return 0
+	fi
+
+	return 1
+}
 
 echo "==> 获取最新 release..."
 
-RELEASE_TAG=$(curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" 2>/dev/null \
-	| sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1)
+RELEASE_TAG=$(get_latest_tag)
 
 if [ -z "$RELEASE_TAG" ]; then
 	echo "错误: 无法获取最新 release 版本号" >&2

@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-07-09
+
+### Changed
+
+- update.sh 获取最新 release 版本号改为优先使用 GitHub 网页重定向（无速率限制），API 作为回退方案
+- install.sh 的 fd 下载同样改为网页重定向优先 + API 回退
+- tools-manager.ts 的 fd/ripgrep 版本获取改为网页重定向优先 + API 回退，避免匿名用户触发 GitHub API 60 次/小时速率限制
+
 ## [0.8.0] - 2026-07-07
 
 ### Changed
