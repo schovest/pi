@@ -201,6 +201,34 @@ git checkout dev
 - TUI 测试用受控 tmux 会话
 - `packages/coding-agent/test/suite/` 用 `harness.ts` + faux provider，不调真实 provider
 
+### CI/CD 流程
+
+项目有两个核心 GitHub Actions workflow，位于 `.github/workflows/`：
+
+#### CI（ci.yml）— 持续集成
+
+- **触发**：push 到 `main`、或 PR 到 `main`
+- **内容**：安装依赖 → `npm run build` → `npm run check`（biome + pinned-deps + ts-imports + shrinkwrap + tsgo + browser-smoke）→ `npm test`
+- **作用**：保护 `main` 分支，确保所有合并的代码通过构建、检查和测试
+- **并发控制**：同一分支的新 push 会取消旧的运行（`cancel-in-progress`）
+
+#### Build Binaries（build-binaries.yml）— 发布构建
+
+- **触发**：push `v*` tag（版本升级流程 step 11 自动触发），或手动 `workflow_dispatch`
+- **build job**：checkout tag → `scripts/build-binaries.sh` 构建 6 平台二进制 → 生成 `sha256sums.txt` → 从 CHANGELOG 提取 release notes → 创建 GitHub Release 并上传所有资产
+- **publish-npm job**：依赖 build job 完成 → checkout tag → 构建 → check → test → 验证源文件无变更 → 发布 npm 包（trusted publishing）
+- **环境**：npm 发布使用 `npm-publish` environment（需审批）
+
+#### 版本发布与 CI 的关系
+
+版本升级流程（步骤 9-12）与 CI 的衔接：
+
+1. **步骤 11 push tag** 触发 `build-binaries.yml`
+2. CI 自动构建二进制 → 创建 GitHub Release（含 sha256sums + release notes）→ 发布 npm
+3. **不需要手动创建 release**，push tag 后等待 CI 完成即可
+4. 如需重新触发（如 CI 失败），可用 `workflow_dispatch` 手动指定 tag 重新运行
+5. 手动构建可在本地运行 `npm run build:tgz`，但发布必须通过 CI
+
 ### Changelog
 
 - **每个功能/修复 commit 都必须同步写 CHANGELOG 条目**，放入 `## [Unreleased]` 下对应分类（`### Added` / `### Changed` / `### Fixed` / `### Removed`），与代码改动在同一个 commit 中提交。禁止先提交代码再补写 CHANGELOG。
