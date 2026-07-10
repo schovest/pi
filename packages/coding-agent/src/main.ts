@@ -45,7 +45,12 @@ import { hasProjectTrustInputs, ProjectTrustStore } from "./core/trust-manager.t
 import { runMigrations, showDeprecationWarnings } from "./migrations.ts";
 import { InteractiveMode, runPrintMode, runRpcMode } from "./modes/index.ts";
 import { initTheme, stopThemeWatcher } from "./modes/interactive/theme/theme.ts";
-import { handleConfigCommand, handlePackageCommand, handlePluginCommand } from "./package-manager-cli.ts";
+import {
+	handleConfigCommand,
+	handlePackageCommand,
+	handlePluginCommand,
+	handleSelfUpdateCommand,
+} from "./package-manager-cli.ts";
 import { isLocalPath, normalizePath, resolvePath } from "./utils/paths.ts";
 
 /**
@@ -458,6 +463,10 @@ export async function main(args: string[], options?: MainOptions) {
 	const offlineMode = args.includes("--offline") || isTruthyEnvFlag(process.env.PI_OFFLINE);
 	if (offlineMode) {
 		process.env.PI_OFFLINE = "1";
+	}
+
+	if (await handleSelfUpdateCommand(args)) {
+		return;
 	}
 
 	if (await handlePackageCommand(args, { extensionFactories: options?.extensionFactories })) {

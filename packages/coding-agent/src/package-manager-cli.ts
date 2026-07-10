@@ -4,10 +4,12 @@ import { selectConfig } from "./cli/config-selector.ts";
 import { createProjectTrustContext } from "./cli/project-trust.ts";
 import {
 	APP_NAME,
+	detectInstallMethod,
 	getAgentDir,
 	getPackageDir,
 	getSelfUpdateCommand,
 	getSelfUpdateUnavailableInstruction,
+	isBunBinary,
 	PACKAGE_NAME,
 	type SelfUpdateCommand,
 	VERSION,
@@ -20,6 +22,7 @@ import { DefaultResourceLoader } from "./core/resource-loader.ts";
 import { SettingsManager } from "./core/settings-manager.ts";
 import { hasProjectTrustInputs, ProjectTrustStore } from "./core/trust-manager.ts";
 import { spawnProcess } from "./utils/child-process.ts";
+import { checkScriptSelfUpdateSupported, runScriptSelfUpdate } from "./utils/self-update.ts";
 import { getLatestPiRelease, isNewerPackageVersion } from "./utils/version-check.ts";
 import {
 	cleanupWindowsSelfUpdateQuarantine,
@@ -35,8 +38,6 @@ interface PackageCommandOptions {
 	source?: string;
 	updateTarget?: UpdateTarget;
 	local: boolean;
-	force: boolean;
-	selfUpdate: boolean;
 	projectTrustOverride?: boolean;
 	help: boolean;
 	invalidOption?: string;
@@ -62,7 +63,7 @@ function getPackageCommandUsage(command: PackageCommand): string {
 		case "remove":
 			return `${APP_NAME} remove <source> [-l] [--approve|--no-approve]`;
 		case "update":
-			return `${APP_NAME} update [source|self|pi] [--self] [--extensions] [--extension <source>] [--approve|--no-approve] [--force]`;
+			return `${APP_NAME} update [source] [--extensions] [--extension <source>] [--approve|--no-approve] [--force]`;
 		case "list":
 			return `${APP_NAME} list [--approve|--no-approve]`;
 	}
@@ -120,11 +121,12 @@ Options:
   --extension <source>    Update one package only
   -a, --approve           Trust project-local files for this command
   -na, --no-approve       Ignore project-local files for this command
-  --force                 Reinstall pi even if the current version is latest
 
 Short forms:
   ${APP_NAME} update                Update all extensions
   ${APP_NAME} update <source>       Update one package
+
+To update ${APP_NAME} itself, use: ${APP_NAME} self-update
 `);
 			return;
 
@@ -155,8 +157,6 @@ function parsePackageCommand(args: string[]): PackageCommandOptions | undefined 
 	}
 
 	let local = false;
-	let force = false;
-	let selfUpdate = false;
 	let projectTrustOverride: boolean | undefined;
 	let help = false;
 	let invalidOption: string | undefined;
@@ -199,24 +199,6 @@ function parsePackageCommand(args: string[]): PackageCommandOptions | undefined 
 
 		if (arg === "--no-approve" || arg === "-na") {
 			projectTrustOverride = false;
-			continue;
-		}
-
-		if (arg === "--force") {
-			if (command === "update") {
-				force = true;
-			} else {
-				invalidOption = invalidOption ?? arg;
-			}
-			continue;
-		}
-
-		if (arg === "--self") {
-			if (command === "update") {
-				selfUpdate = true;
-			} else {
-				invalidOption = invalidOption ?? arg;
-			}
 			continue;
 		}
 
@@ -278,8 +260,6 @@ function parsePackageCommand(args: string[]): PackageCommandOptions | undefined 
 		source,
 		updateTarget,
 		local,
-		force,
-		selfUpdate,
 		projectTrustOverride,
 		help,
 		invalidOption,
@@ -302,10 +282,6 @@ function _printSelfUpdateUnavailable(npmCommand?: string[], updatePackageName = 
 		console.error("");
 		console.error(`Location of pi executable: ${entrypoint}`);
 	}
-}
-
-function _printSelfUpdateFallback(command: SelfUpdateCommand): void {
-	console.error(chalk.dim(`If this keeps failing, run this command yourself: ${command.display}`));
 }
 
 const SELF_UPDATE_NOTE_MARKDOWN_THEME: MarkdownTheme = {
@@ -833,26 +809,6 @@ export async function handlePackageCommand(
 			}
 
 			case "update": {
-				if (options.selfUpdate) {
-					const plan = await _getSelfUpdatePlan(options.force);
-					if (!plan.shouldRun) {
-						return true;
-					}
-					const npmCommand = settingsManager.getNpmCommand();
-					const command = getSelfUpdateCommand(PACKAGE_NAME, npmCommand, plan.packageName);
-					if (!command) {
-						_printSelfUpdateUnavailable(npmCommand, PACKAGE_NAME);
-						process.exitCode = 1;
-						return true;
-					}
-					if (plan.note) {
-						_printSelfUpdateNote(plan.note);
-					}
-					_prepareWindowsNpmSelfUpdate();
-					await _runSelfUpdate(command);
-					console.log(chalk.green(`Updated ${APP_NAME}`));
-					return true;
-				}
 				const target = options.updateTarget ?? { type: "all" };
 				if (updateTargetIncludesExtensions(target)) {
 					const updateSource = target.type === "extensions" ? target.source : undefined;
@@ -868,6 +824,153 @@ export async function handlePackageCommand(
 		}
 	} catch (error: unknown) {
 		const message = error instanceof Error ? error.message : "Unknown package command error";
+		console.error(chalk.red(`Error: ${message}`));
+		process.exitCode = 1;
+		return true;
+	}
+}
+
+// ---------------------------------------------------------------------------
+// pi self-update —— 升级 pi 本身
+//
+// 对 Bun 编译二进制安装（install.sh / update.sh 方式），运行 update.sh
+//   （从 GitHub 下载最新 release、验证 sha256、安装/更新）。
+// 对 npm/pnpm/yarn/bun 全局安装，沿用已有的包管理器 self-update 路径。
+// ---------------------------------------------------------------------------
+
+function printSelfUpdateHelp(): void {
+	console.log(`${chalk.bold("Usage:")}
+  ${APP_NAME} self-update [--force]
+
+Upgrade ${APP_NAME} itself to the latest version.
+
+For Bun binary installs (install.sh / update.sh), this downloads and runs
+update.sh from GitHub. For npm/pnpm/yarn/bun global installs, this uses
+the package manager to update.
+
+Options:
+  --force    Skip version check and always update
+  -h, --help Show this help
+
+Examples:
+  ${APP_NAME} self-update           Update to the latest version
+  ${APP_NAME} self-update --force   Force update even if already latest
+`);
+}
+
+/**
+ * 处理 `pi self-update` CLI 命令。
+ *
+ * 返回 true 表示已处理（即使出错），返回 false 表示 args 不是 self-update 命令。
+ */
+export async function handleSelfUpdateCommand(args: string[]): Promise<boolean> {
+	if (args[0] !== "self-update") {
+		return false;
+	}
+
+	let force = false;
+	let help = false;
+	let invalidOption: string | undefined;
+
+	for (let i = 1; i < args.length; i++) {
+		const arg = args[i];
+		if (arg === "-h" || arg === "--help") {
+			help = true;
+		} else if (arg === "--force") {
+			force = true;
+		} else {
+			invalidOption = arg;
+		}
+	}
+
+	if (help) {
+		printSelfUpdateHelp();
+		return true;
+	}
+
+	if (invalidOption) {
+		console.error(chalk.red(`Unknown option ${invalidOption} for "self-update".`));
+		console.error(chalk.dim(`Usage: ${APP_NAME} self-update [--force]`));
+		process.exitCode = 1;
+		return true;
+	}
+
+	const method = detectInstallMethod();
+
+	// Bun 编译二进制安装 → 运行 update.sh
+	if (method === "bun-binary" || isBunBinary) {
+		const unsupportedReason = checkScriptSelfUpdateSupported();
+		if (unsupportedReason) {
+			console.error(chalk.red(`Error: ${unsupportedReason}.`));
+			console.error(chalk.dim(`Download manually from: https://github.com/schovest/pi/releases/latest`));
+			process.exitCode = 1;
+			return true;
+		}
+
+		if (!force) {
+			// 版本检查：已安装且为最新则跳过
+			try {
+				const latestRelease = await getLatestPiRelease(VERSION);
+				if (latestRelease && !isNewerPackageVersion(latestRelease.version, VERSION)) {
+					console.log(chalk.green(`${APP_NAME} is already up to date (v${VERSION})`));
+					return true;
+				}
+				if (latestRelease) {
+					console.log(chalk.dim(`Updating to v${latestRelease.version}...`));
+				} else {
+					console.log(chalk.dim("Checking for updates..."));
+				}
+			} catch {
+				// 版本检查失败时继续执行更新（update.sh 内部也有版本检查）
+			}
+		}
+
+		const result = await runScriptSelfUpdate();
+		if (result.unsupported) {
+			console.error(chalk.red(`Error: ${result.reason}`));
+			process.exitCode = 1;
+			return true;
+		}
+		if (result.exitCode === 0) {
+			console.log(chalk.green(`Updated ${APP_NAME}`));
+		} else if (result.exitCode !== null) {
+			console.error(chalk.red(`update.sh exited with code ${result.exitCode}`));
+			process.exitCode = 1;
+		} else {
+			console.error(chalk.red(`update.sh failed: ${result.reason ?? "unknown error"}`));
+			process.exitCode = 1;
+		}
+		return true;
+	}
+
+	// npm/pnpm/yarn/bun 全局安装 → 沿用包管理器 self-update 路径
+	// self-update 只需要用户设置的 npmCommand，不修改项目配置，因此忽略项目设置
+	const cwd = process.cwd();
+	const agentDir = getAgentDir();
+	const settingsManager = SettingsManager.create(cwd, agentDir, { projectTrusted: false });
+	reportSettingsErrors(settingsManager, "self-update command");
+
+	try {
+		const plan = await _getSelfUpdatePlan(force);
+		if (!plan.shouldRun) {
+			return true;
+		}
+		const npmCommand = settingsManager.getNpmCommand();
+		const command = getSelfUpdateCommand(PACKAGE_NAME, npmCommand, plan.packageName);
+		if (!command) {
+			_printSelfUpdateUnavailable(npmCommand, PACKAGE_NAME);
+			process.exitCode = 1;
+			return true;
+		}
+		if (plan.note) {
+			_printSelfUpdateNote(plan.note);
+		}
+		_prepareWindowsNpmSelfUpdate();
+		await _runSelfUpdate(command);
+		console.log(chalk.green(`Updated ${APP_NAME}`));
+		return true;
+	} catch (error: unknown) {
+		const message = error instanceof Error ? error.message : "Unknown self-update error";
 		console.error(chalk.red(`Error: ${message}`));
 		process.exitCode = 1;
 		return true;

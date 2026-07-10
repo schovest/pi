@@ -158,10 +158,10 @@ pi [options] [@files...] [messages...]
 pi install <source> [-l]     # Install package, -l for project-local
 pi remove <source> [-l]      # Remove package
 pi uninstall <source> [-l]   # Alias for remove
-pi update [source|self|pi]   # Update pi and packages; reconcile pinned git refs
-pi update --extensions       # Update packages only; reconcile pinned git refs
-pi update --self             # Update pi only
-pi update --extension <src>  # Update one package
+pi update [source]            # Update packages; reconcile pinned git refs
+pi update --extensions        # Update packages only; reconcile pinned git refs
+pi self-update                # Upgrade pi itself to the latest version
+pi update --extension <src>   # Update one package
 pi list                      # List installed packages
 pi config                    # Enable/disable package resources
 ```
@@ -314,7 +314,7 @@ pi --exclude-tools ask_question
 | `PI_CODING_AGENT_SESSION_DIR` | Override session storage directory; overridden by `--session-dir` |
 | `PI_PACKAGE_DIR` | Override package directory, useful for Nix/Guix store paths |
 | `PI_OFFLINE` | Disable startup network operations, including update checks, package update checks, and install/update telemetry |
-| `PI_SKIP_VERSION_CHECK` | Skip the Pi version update check at startup. This prevents the `pi.dev` latest-version request |
+| `PI_SKIP_VERSION_CHECK` | Skip the Pi version update check at startup. This prevents the GitHub releases latest-version request |
 | `PI_TELEMETRY` | Override install/update telemetry and provider attribution headers: `1`/`true`/`yes` or `0`/`false`/`no`. This does not disable update checks |
 | `PI_CACHE_RETENTION` | Set to `long` for extended prompt cache where supported |
 | `VISUAL`, `EDITOR` | External editor for Ctrl+G |

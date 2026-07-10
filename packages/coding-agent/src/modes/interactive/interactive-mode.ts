@@ -7,6 +7,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import * as readline from "node:readline";
 import type { AgentMessage, ThinkingLevel } from "@schovest/pi-agent-core";
 import {
 	type AssistantMessage,
@@ -55,6 +56,7 @@ import {
 	getDebugLogPath,
 	getDocsPath,
 	getShareViewerUrl,
+	isBunBinary,
 	VERSION,
 } from "../../config.ts";
 import { type AgentSession, type AgentSessionEvent, parseSkillBlock } from "../../core/agent-session.ts";
@@ -95,8 +97,10 @@ import { extensionForImageMimeType, readClipboardImage } from "../../utils/clipb
 import { parseGitUrl } from "../../utils/git.ts";
 import { getCwdRelativePath } from "../../utils/paths.ts";
 import { getPiUserAgent } from "../../utils/pi-user-agent.ts";
+import { checkScriptSelfUpdateSupported, runScriptSelfUpdate } from "../../utils/self-update.ts";
 import { killTrackedDetachedChildren } from "../../utils/shell.ts";
 import { ensureTool } from "../../utils/tools-manager.ts";
+import { getLatestPiRelease, isNewerPackageVersion } from "../../utils/version-check.ts";
 
 import { AgentSelectorComponent } from "./components/agent-selector.ts";
 import { ArminComponent } from "./components/armin.ts";
@@ -2942,6 +2946,16 @@ export class InteractiveMode {
 		});
 
 		registry.register({
+			id: "slash.self-update",
+			label: "/self-update",
+			description: "升级 pi 本身",
+			category: "slash",
+			handler: () => {
+				void this.handleSelfUpdateCommand("/self-update");
+			},
+		});
+
+		registry.register({
 			id: "slash.resume",
 			label: "/resume",
 			description: "恢复其他会话",
@@ -3134,6 +3148,11 @@ export class InteractiveMode {
 			if (text === "/reload") {
 				this.editor.setText("");
 				await this.handleReloadCommand();
+				return;
+			}
+			if (text === "/self-update" || text.startsWith("/self-update ")) {
+				this.editor.setText("");
+				await this.handleSelfUpdateCommand(text);
 				return;
 			}
 			if (text === "/debug") {
@@ -5969,6 +5988,90 @@ export class InteractiveMode {
 		} catch (error) {
 			dismissReloadBox(previousEditor as Component);
 			this.showError(`Reload failed: ${error instanceof Error ? error.message : String(error)}`);
+		}
+	}
+
+	/**
+	 * /self-update —— 升级 pi 本身。
+	 *
+	 * 对 Bun 编译二进制安装：停止 TUI → 运行 update.sh → 提示用户重启。
+	 * 对包管理器安装：提示用户在终端执行 `pi self-update`。
+	 */
+	private async handleSelfUpdateCommand(text: string): Promise<void> {
+		if (this.session.isStreaming) {
+			this.showWarning("Wait for the current response to finish before self-updating.");
+			return;
+		}
+
+		const force = text.includes("--force");
+
+		// 非 Bun 二进制安装：建议使用 CLI 命令
+		if (!isBunBinary) {
+			this.showStatus(
+				`self-update via TUI is for Bun binary installs. Run \`${APP_NAME} self-update\` from the terminal.`,
+			);
+			return;
+		}
+
+		// 平台检查
+		const unsupportedReason = checkScriptSelfUpdateSupported();
+		if (unsupportedReason) {
+			this.showError(unsupportedReason);
+			return;
+		}
+
+		// 版本检查
+		if (!force) {
+			this.showStatus("Checking for updates...");
+			try {
+				const latestRelease = await getLatestPiRelease(VERSION);
+				if (latestRelease && !isNewerPackageVersion(latestRelease.version, VERSION)) {
+					this.showStatus(`${APP_NAME} is already up to date (v${VERSION})`);
+					return;
+				}
+			} catch {
+				// 版本检查失败时继续执行更新
+			}
+		}
+
+		// 停止 TUI，运行 update.sh
+		this.ui.stop();
+		let exitCode: number | null = null;
+		let errorMessage: string | undefined;
+		try {
+			const result = await runScriptSelfUpdate();
+			exitCode = result.exitCode;
+			if (result.unsupported) {
+				errorMessage = result.reason;
+			}
+		} catch (error) {
+			errorMessage = error instanceof Error ? error.message : String(error);
+		}
+
+		if (errorMessage) {
+			console.error(`\nError: ${errorMessage}\n`);
+		} else if (exitCode === 0) {
+			console.log(`\n${APP_NAME} has been updated. Press Enter to exit, then restart ${APP_NAME}.`);
+		} else {
+			console.error(`\nUpdate failed (exit code ${exitCode}). Press Enter to continue.`);
+		}
+
+		// 等待用户按 Enter
+		await new Promise<void>((resolve) => {
+			const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+			rl.on("close", () => resolve());
+			rl.on("line", () => {
+				rl.close();
+			});
+		});
+
+		if (exitCode === 0 && !errorMessage) {
+			// 更新成功：退出进程，用户需要重启 pi
+			void this.shutdown();
+		} else {
+			// 更新失败：恢复 TUI
+			this.ui.start();
+			this.ui.requestRender(true);
 		}
 	}
 
