@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-10
+
 ### Added
 
 - 新增 `pi self-update` CLI 命令和 `/self-update` TUI 斜杠命令，用于升级 pi 本身（Bun 二进制安装运行 update.sh，包管理器安装沿用 npm 路径）
