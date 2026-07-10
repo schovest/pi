@@ -129,6 +129,7 @@ npx vitest run --dir packages/agent/test agent-loop
 - 禁止 `git add -A`、`git add .`、`git reset --hard`、`git checkout .`、`git clean -fd`、`git stash`、`git commit --no-verify`
 - 提交前 `git status` 确认只 stage 自己的文件
 - 提交前必须检查 `docs/superpowers/` 下是否有未跟踪的文件，有则一并提交，避免遗漏设计文档
+- **功能/修复 commit 必须同步更新 `packages/coding-agent/CHANGELOG.md`**：在 `## [Unreleased]` 下新增对应条目，与代码改动同 commit 提交，不要等到版本升级时才补写
 - 只解决自己修改过的文件里的冲突；冲突在他人文件时停止并询问
 - 不 force push
 - **升级版本必须打 tag**
@@ -202,10 +203,11 @@ git checkout dev
 
 ### Changelog
 
-- **打 tag 必须同步更新 `packages/coding-agent/CHANGELOG.md`**，将 `[Unreleased]` 下的条目移入对应版本段落
-- 新条目放入 `## [Unreleased]`，不修改已发布版本段落
+- **每个功能/修复 commit 都必须同步写 CHANGELOG 条目**，放入 `## [Unreleased]` 下对应分类（`### Added` / `### Changed` / `### Fixed` / `### Removed`），与代码改动在同一个 commit 中提交。禁止先提交代码再补写 CHANGELOG。
+- 不修改已发布版本段落的内容
+- **版本升级时**：将 `[Unreleased]` 下的条目移入新版本段落（如 `## [0.8.1] - 2026-07-09`），然后清空 `[Unreleased]`。这是版本升级流程 step 7 的工作。
 - CHANGELOG 条目按 `### Added` / `### Changed` / `### Fixed` / `### Removed` 分类，每条一行简述
-- 版本升级流程中 step 7（提交打 tag）之前必须完成 CHANGELOG 更新
+- 纯文档、重构、CI 等不影响用户行为的改动可不写 CHANGELOG
 
 ## 更新覆盖
 
