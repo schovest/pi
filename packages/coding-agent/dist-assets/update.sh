@@ -186,8 +186,11 @@ if [ "$FRESH_INSTALL" -eq 1 ]; then
 	# 全新安装：连接控制终端，确保 curl|bash 下也能交互选择组件
 	bash ./install.sh < /dev/tty
 else
-	# 更新模式：跳过组件选择菜单
-	bash ./install.sh < /dev/null
+	# 更新模式：跳过扩展选择与安装，保留用户已有的扩展配置
+	# 扩展持久化在 ~/.pi/agent/ 目录，update 的 rm -rf $PREFIX 不会删除
+	# 通过 PI_INSTALL_MODE=update 通知 install.sh 跳过扩展安装，
+	# 避免用默认配置集覆盖用户首次安装时的自定义选择
+	PI_INSTALL_MODE=update bash ./install.sh < /dev/null
 fi
 
 echo ""

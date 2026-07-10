@@ -1,8 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
 本仓库基于上游 Pi（schovest/pi）fork 开发，版本号从 0.6.0 起独立维护。上游变更通过合并引入，本地变更单独记录。
 
-## [Unreleased]
+## [0.9.2] - 2026-07-10
+
+### Fixed
+
+- update.sh 更新模式不再用默认扩展集覆盖用户配置：通过 `PI_INSTALL_MODE=update` 环境变量显式通知 install.sh 跳过扩展安装，保留用户首次安装时的自定义选择
+- install.sh 现在将 install.sh 和 update.sh 复制到安装目录（`~/.local/share/pi/`），用户可随时重新运行 install.sh 调整扩展选择
+- install.sh 复制列表增加 `primary-agents` 目录，确保从安装目录重新运行时 agent 类型扩展（config、coding）能找到源文件
 
 ## [0.9.1] - 2026-07-10
 
