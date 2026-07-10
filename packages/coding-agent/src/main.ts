@@ -466,14 +466,17 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 
 	if (await handleSelfUpdateCommand(args)) {
+		process.exit(0);
 		return;
 	}
 
 	if (await handlePackageCommand(args, { extensionFactories: options?.extensionFactories })) {
+		process.exit(0);
 		return;
 	}
 
 	if (await handlePluginCommand(args)) {
+		process.exit(0);
 		return;
 	}
 
