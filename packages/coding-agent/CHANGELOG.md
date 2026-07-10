@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-07-10
+
+### Fixed
+
+- `pi update`、`pi install`、`pi remove`、`pi list`、`pi plugins`、`pi self-update` 等子命令完成后进程不退出（缺少 `process.exit(0)` 导致 event loop 残留 handle 挂起）
+
 ## [0.9.0] - 2026-07-10
 
 ### Added

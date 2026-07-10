@@ -16,6 +16,8 @@ describe("package commands", () => {
 	let originalPiPackageDir: string | undefined;
 	let originalExitCode: typeof process.exitCode;
 	let originalExecPath: string;
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	let exitSpy: any;
 
 	function getNewerPatchVersion(): string {
 		const [major = "0", minor = "0", patch = "0"] = VERSION.split(".");
@@ -39,10 +41,15 @@ describe("package commands", () => {
 		process.exitCode = undefined;
 		process.env[ENV_AGENT_DIR] = agentDir;
 		process.chdir(projectDir);
+		// main() calls process.exit(0) after package/plugin/self-update commands;
+		// mock it so the test process stays alive.
+		exitSpy?.mockRestore();
+		exitSpy = vi.spyOn(process, "exit").mockImplementation((() => {}) as typeof process.exit);
 	});
 
 	afterEach(() => {
 		vi.unstubAllGlobals();
+		exitSpy.mockRestore();
 		process.chdir(originalCwd);
 		process.exitCode = originalExitCode;
 		if (originalAgentDir === undefined) {
