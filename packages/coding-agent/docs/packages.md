@@ -30,10 +30,10 @@ pi install ./relative/path/to/package
 
 pi remove npm:@foo/bar
 pi list                     # show installed packages from settings
-pi update                   # update pi, update packages, and reconcile pinned git refs
+pi update                   # update packages and reconcile pinned git refs
 pi update --extensions      # update packages and reconcile pinned git refs only
-pi update --self            # update pi only
-pi update --self --force    # reinstall pi even if current
+pi self-update              # upgrade pi itself to the latest version
+pi self-update --force      # force update even if already latest
 pi update npm:@foo/bar      # update one package
 pi update --extension npm:@foo/bar
 ```

@@ -4,6 +4,22 @@
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-07-10
+
+### Added
+
+- 新增 `pi self-update` CLI 命令和 `/self-update` TUI 斜杠命令，用于升级 pi 本身（Bun 二进制安装运行 update.sh，包管理器安装沿用 npm 路径）
+
+### Changed
+
+- 上游版本自动检测目标从 `pi.dev/api/latest-version` 改为 GitHub `schovest/pi` releases（网页重定向优先 + API 回退）
+- 移除 `pi update --self`，升级 pi 只使用 `pi self-update`
+
+### Fixed
+
+- update.sh 全新安装时通过 `/dev/tty` 连接控制终端，确保 `curl|bash` 管道下也能弹出组件选择菜单
+- update.sh 更新模式跳过组件选择菜单，避免每次更新重选扩展
+
 ## [0.8.1] - 2026-07-09
 
 ### Changed
