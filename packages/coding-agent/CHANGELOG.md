@@ -4,6 +4,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- update.sh 全新安装时通过 `/dev/tty` 连接控制终端，确保 `curl|bash` 管道下也能弹出组件选择菜单
+- update.sh 更新模式跳过组件选择菜单，避免每次更新重选扩展
+
 ## [0.8.1] - 2026-07-09
 
 ### Changed

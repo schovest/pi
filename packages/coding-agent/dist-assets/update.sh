@@ -164,18 +164,31 @@ fi
 
 # ---------------------------------------------------------------------------
 # 安装：已安装则清理旧目录（避免 pi 繁忙），未安装则直接安装
+#
+# 全新安装：通过 /dev/tty 连接控制终端，确保 curl|bash 管道下也能弹出
+#   组件选择菜单（install.sh 用 [ -t 0 ] 检测交互模式，管道 stdin 不是
+#   终端，需要重定向到 /dev/tty 才能正确交互）。
+# 更新模式：跳过组件选择菜单（用户首次安装时已选过，无需每次更新重选）。
 # ---------------------------------------------------------------------------
 
 if [ -x "$PREFIX/pi" ]; then
 	echo "==> 检测到已安装，清理旧目录 ($PREFIX) ..."
 	rm -rf "$PREFIX"
+	FRESH_INSTALL=0
 else
 	echo "==> 未检测到 pi，执行全新安装 ..."
+	FRESH_INSTALL=1
 fi
 
 echo "==> 执行 install.sh ..."
 cd "$TMPDIR/extracted/pi"
-bash ./install.sh
+if [ "$FRESH_INSTALL" -eq 1 ]; then
+	# 全新安装：连接控制终端，确保 curl|bash 下也能交互选择组件
+	bash ./install.sh < /dev/tty
+else
+	# 更新模式：跳过组件选择菜单
+	bash ./install.sh < /dev/null
+fi
 
 echo ""
 echo "==> 安装完成: $RELEASE_TAG"
