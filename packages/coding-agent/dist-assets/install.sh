@@ -109,7 +109,7 @@ cp -r "$SCRIPT_DIR/README.md" "$PREFIX/README.md"
 cp -r "$SCRIPT_DIR/CHANGELOG.md" "$PREFIX/CHANGELOG.md"
 cp -r "$SCRIPT_DIR/photon_rs_bg.wasm" "$PREFIX/photon_rs_bg.wasm"
 
-for dir in theme assets export-html docs examples extensions; do
+for dir in theme assets export-html docs examples extensions primary-agents; do
 	if [ -d "$SCRIPT_DIR/$dir" ]; then
 		cp -r "$SCRIPT_DIR/$dir" "$PREFIX/$dir"
 	fi
@@ -117,6 +117,14 @@ done
 
 if [ -d "$SCRIPT_DIR/bin" ]; then
 	cp -r "$SCRIPT_DIR/bin" "$PREFIX/bin"
+fi
+
+# 安装脚本本身 — 允许用户随时重新运行 install.sh 调整扩展选择
+if [ -f "$SCRIPT_DIR/install.sh" ]; then
+	cp "$SCRIPT_DIR/install.sh" "$PREFIX/install.sh"
+fi
+if [ -f "$SCRIPT_DIR/update.sh" ]; then
+	cp "$SCRIPT_DIR/update.sh" "$PREFIX/update.sh"
 fi
 
 ln -sf "$PREFIX/pi" "$BINDIR/pi"
@@ -259,7 +267,13 @@ read_key() {
 
 # -- Interactive loop -------------------------------------------------------
 
-if [ ! -t 0 ]; then
+if [ "${PI_INSTALL_MODE:-install}" = "update" ]; then
+	echo ""
+	echo "Update mode: preserving existing extensions (skipping selection)."
+	echo ""
+	# 取消所有选择 — 后续安装循环自动跳过全部扩展
+	for i in $(seq 0 $((NUM - 1))); do SELECTED[$i]=0; done
+elif [ ! -t 0 ]; then
 	echo ""
 	echo "Non-interactive terminal detected. Installing standard extensions only."
 	echo ""
