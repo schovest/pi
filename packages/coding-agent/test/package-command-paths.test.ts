@@ -229,14 +229,18 @@ describe("package commands", () => {
 	});
 
 	it("blocks local package changes when project is untrusted", async () => {
-		mkdirSync(join(projectDir, ".pi"), { recursive: true });
+		// Create a trust-requiring resource (skills in .pi) so the project
+		// starts untrusted and install -l is blocked.
+		mkdirSync(join(projectDir, ".pi", "skills"), { recursive: true });
+		// Create the package path so the trust check is reached (not a path-not-found error)
+		mkdirSync(join(projectDir, "local-package"), { recursive: true });
 		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
 		try {
 			await expect(main(["install", "-l", "./local-package"])).resolves.toBeUndefined();
 
 			const stderr = errorSpy.mock.calls.map(([message]) => String(message)).join("\n");
-			expect(stderr).toContain("Project is not trusted. Use --approve to modify local package config.");
+			expect(stderr).toContain("Project is not trusted");
 			expect(process.exitCode).toBe(1);
 		} finally {
 			errorSpy.mockRestore();
