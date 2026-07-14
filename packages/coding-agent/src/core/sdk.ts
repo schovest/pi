@@ -325,7 +325,7 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 					settingsManager,
 					options?.sessionId,
 					auth.headers,
-					options?.headers,
+					options?.headers as Record<string, string> | undefined,
 				),
 			});
 		},

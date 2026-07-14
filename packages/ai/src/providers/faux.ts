@@ -1,4 +1,4 @@
-import { registerApiProvider, unregisterApiProviders } from "../api-registry.ts";
+import { registerApiProvider, unregisterApiProviders } from "../compat.ts";
 import type {
 	AssistantMessage,
 	AssistantMessageEventStream,

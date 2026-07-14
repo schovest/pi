@@ -15,7 +15,7 @@ import type {
 	ImagesOptions,
 	TextContent,
 } from "../../types.ts";
-import { headersToRecord } from "../../utils/headers.ts";
+import { headersToRecord, providerHeadersToRecord } from "../../utils/headers.ts";
 import { sanitizeSurrogates } from "../../utils/sanitize-unicode.ts";
 
 interface OpenRouterGeneratedImage {
@@ -53,7 +53,7 @@ export const generateImagesOpenRouter: ImagesFunction<"openrouter-images", Image
 		if (!apiKey) {
 			throw new Error(`No API key for provider: ${model.provider}`);
 		}
-		const client = createClient(model, apiKey, options?.headers);
+		const client = createClient(model, apiKey, providerHeadersToRecord(options?.headers));
 		let params = buildParams(model, context);
 		const nextParams = await options?.onPayload?.(params, model);
 		if (nextParams !== undefined) {
@@ -113,7 +113,7 @@ function createClient(
 		baseURL: model.baseUrl,
 		dangerouslyAllowBrowser: true,
 		defaultHeaders: {
-			...model.headers,
+			...providerHeadersToRecord(model.headers),
 			...optionsHeaders,
 		},
 	});

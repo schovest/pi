@@ -23,7 +23,8 @@ if (typeof process !== "undefined" && (process.versions?.node || process.version
 	});
 }
 
-import type { KnownProvider } from "./types.ts";
+import type { KnownProvider, ProviderEnv } from "./types.ts";
+import { getProviderEnvValue } from "./utils/provider-env.ts";
 
 let _procEnvCache: Map<string, string> | null = null;
 
@@ -158,12 +159,12 @@ export function findEnvKeys(provider: string): string[] | undefined {
  *
  * Will not return API keys for providers that require OAuth tokens.
  */
-export function getEnvApiKey(provider: KnownProvider): string | undefined;
-export function getEnvApiKey(provider: string): string | undefined;
-export function getEnvApiKey(provider: string): string | undefined {
+export function getEnvApiKey(provider: KnownProvider, env?: ProviderEnv): string | undefined;
+export function getEnvApiKey(provider: string, env?: ProviderEnv): string | undefined;
+export function getEnvApiKey(provider: string, env?: ProviderEnv): string | undefined {
 	const envKeys = findEnvKeys(provider);
 	if (envKeys?.[0]) {
-		return process.env[envKeys[0]] || getProcEnv(envKeys[0]);
+		return getProviderEnvValue(envKeys[0], env);
 	}
 
 	// Vertex AI supports either an explicit API key or Application Default Credentials.
