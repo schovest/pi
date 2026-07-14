@@ -134,10 +134,10 @@ describe("createAgentSession provider attribution headers", () => {
 				{ messages: [] },
 				{
 					sessionId: session.sessionId,
-					...(options.requestHeaders ? { headers: options.requestHeaders } : {}),
+					...(options.requestHeaders ? { headers: options.requestHeaders as Record<string, string | null> } : {}),
 				},
 			);
-			return capturedOptions?.headers;
+			return capturedOptions?.headers as Record<string, string> | undefined;
 		} finally {
 			session.dispose();
 			for (const provider of registeredProviders.reverse()) {
