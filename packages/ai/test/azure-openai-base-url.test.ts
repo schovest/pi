@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getModel } from "../src/compat.ts";
-import { stream } from "../src/compat.ts";
+import { getModel, stream } from "../src/compat.ts";
 import type { Context } from "../src/types.ts";
 
 interface CapturedAzureClientOptions {

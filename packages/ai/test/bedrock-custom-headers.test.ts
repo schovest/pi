@@ -51,9 +51,8 @@ vi.mock("@aws-sdk/client-bedrock-runtime", () => {
 	};
 });
 
-import { getModel } from "../src/compat.ts";
 import type { BedrockOptions } from "../src/api/bedrock-converse-stream.ts";
-import { stream } from "../src/compat.ts";
+import { getModel, stream } from "../src/compat.ts";
 import type { Context, Model } from "../src/types.ts";
 
 const context: Context = {
