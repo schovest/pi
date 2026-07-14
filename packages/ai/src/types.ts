@@ -267,6 +267,17 @@ export interface Usage {
 	output: number;
 	cacheRead: number;
 	cacheWrite: number;
+	/**
+	 * Anthropic 1-hour cache writes (subset of cacheWrite).
+	 * Separately tracked so cost calculation can apply 2x input pricing.
+	 */
+	cacheWrite1h?: number;
+	/**
+	 * Reasoning/thinking tokens, when the provider reports them. This is a subset of
+	 * \`output\`: \`output\` already includes these tokens. Set to a number (possibly 0) by
+	 * providers that expose a reasoning breakdown; left undefined by providers that don't.
+	 */
+	reasoning?: number;
 	totalTokens: number;
 	cost: {
 		input: number;

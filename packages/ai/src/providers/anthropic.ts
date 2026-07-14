@@ -660,7 +660,14 @@ export const streamAnthropic: StreamFunction<"anthropic-messages", AnthropicOpti
 					}
 				} else if (event.type === "message_delta") {
 					if (event.delta.stop_reason) {
-						output.stopReason = mapStopReason(event.delta.stop_reason);
+						const stopReasonResult = mapStopReason(
+							event.delta.stop_reason,
+							event.delta.stop_details ?? undefined,
+						);
+						output.stopReason = stopReasonResult.stopReason;
+						if (stopReasonResult.errorMessage) {
+							output.errorMessage = stopReasonResult.errorMessage;
+						}
 					}
 					// Only update usage fields if present (not null).
 					// Preserves input_tokens from message_start when proxies omit it in message_delta.
@@ -1202,22 +1209,28 @@ function convertTools(
 	});
 }
 
-function mapStopReason(reason: Anthropic.Messages.StopReason | string): StopReason {
+function mapStopReason(
+	reason: Anthropic.Messages.StopReason | string,
+	stopDetails?: { explanation?: string | null },
+): { stopReason: StopReason; errorMessage?: string } {
 	switch (reason) {
 		case "end_turn":
-			return "stop";
+			return { stopReason: "stop" };
 		case "max_tokens":
-			return "length";
+			return { stopReason: "length" };
 		case "tool_use":
-			return "toolUse";
+			return { stopReason: "toolUse" };
 		case "refusal":
-			return "error";
+			return {
+				stopReason: "error",
+				errorMessage: stopDetails?.explanation || `The model refused to complete the request`,
+			};
 		case "pause_turn": // Stop is good enough -> resubmit
-			return "stop";
+			return { stopReason: "stop" };
 		case "stop_sequence":
-			return "stop"; // We don't supply stop sequences, so this should never happen
+			return { stopReason: "stop" }; // We don't supply stop sequences, so this should never happen
 		case "sensitive": // Content flagged by safety filters (not yet in SDK types)
-			return "error";
+			return { stopReason: "error" };
 		default:
 			// Handle unknown stop reasons gracefully (API may add new values)
 			throw new Error(`Unhandled stop reason: ${reason}`);

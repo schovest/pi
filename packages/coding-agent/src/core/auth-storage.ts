@@ -24,6 +24,8 @@ import { resolveConfigValue } from "./resolve-config-value.ts";
 export type ApiKeyCredential = {
 	type: "api_key";
 	key: string;
+	/** Provider-scoped environment overrides that take precedence over process.env. */
+	env?: Record<string, string>;
 };
 
 export type OAuthCredential = {
@@ -471,7 +473,7 @@ export class AuthStorage {
 		const cred = this.data[providerId];
 
 		if (cred?.type === "api_key") {
-			return resolveConfigValue(cred.key);
+			return resolveConfigValue(cred.key, cred.env);
 		}
 
 		if (cred?.type === "oauth") {
