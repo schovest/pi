@@ -313,8 +313,7 @@ export class AgentSession {
 	// Compaction state
 	private _compactionAbortController: AbortController | undefined = undefined;
 	private _autoCompactionAbortController: AbortController | undefined = undefined;
-	private _overflowRecoveryAttempts = 0;
-	private readonly MAX_OVERFLOW_RECOVERY = 3;
+	private _overflowRecoveryAttempted = false;
 
 	// Branch summarization state
 	private _branchSummaryAbortController: AbortController | undefined = undefined;
@@ -542,7 +541,7 @@ export class AgentSession {
 		// When a user message starts, check if it's from either queue and remove it BEFORE emitting
 		// This ensures the UI sees the updated queue state
 		if (event.type === "message_start" && event.message.role === "user") {
-			this._overflowRecoveryAttempts = 0;
+			this._overflowRecoveryAttempted = false;
 			const messageText = this._getUserMessageText(event.message);
 			if (messageText) {
 				// Check steering queue first
@@ -594,7 +593,7 @@ export class AgentSession {
 
 				const assistantMsg = event.message as AssistantMessage;
 				if (assistantMsg.stopReason !== "error") {
-					this._overflowRecoveryAttempts = 0;
+					this._overflowRecoveryAttempted = false;
 				}
 
 				// Reset retry counter immediately on successful assistant response
@@ -2071,7 +2070,7 @@ export class AgentSession {
 				return await this._runAutoCompaction("overflow", false);
 			}
 
-			if (this._overflowRecoveryAttempts >= this.MAX_OVERFLOW_RECOVERY) {
+			if (this._overflowRecoveryAttempted) {
 				this._emit({
 					type: "compaction_end",
 					reason: "overflow",
@@ -2079,12 +2078,12 @@ export class AgentSession {
 					aborted: false,
 					willRetry: false,
 					errorMessage:
-						"Context overflow recovery failed after multiple compact-and-retry attempts. Try reducing context or switching to a larger-context model.",
+						"Context overflow recovery failed after one compact-and-retry attempt. Try reducing context or switching to a larger-context model.",
 				});
 				return false;
 			}
 
-			this._overflowRecoveryAttempts++;
+			this._overflowRecoveryAttempted = true;
 			// Remove the error message from agent state (it IS saved to session for history,
 			// but we don't want it in context for the retry)
 			const messages = this.agent.state.messages;
