@@ -60,3 +60,6 @@ export * from "./utils/overflow.ts";
 export * from "./utils/retry.ts";
 export * from "./utils/typebox-helpers.ts";
 export * from "./utils/validation.ts";
+
+// Re-export env API key utilities (used by coding-agent auth-storage)
+export { findEnvKeys, getEnvApiKey } from "./env-api-keys.ts";
