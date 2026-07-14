@@ -1,8 +1,19 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import lockfile from "proper-lockfile";
 import { CONFIG_DIR_NAME } from "../config.ts";
 import { canonicalizePath, resolvePath } from "../utils/paths.ts";
+
+const TRUST_REQUIRING_PROJECT_CONFIG_RESOURCES = [
+	"settings.json",
+	"extensions",
+	"skills",
+	"prompts",
+	"themes",
+	"SYSTEM.md",
+	"APPEND_SYSTEM.md",
+] as const;
 
 export type ProjectTrustDecision = boolean | null;
 
@@ -172,13 +183,18 @@ export function hasProjectConfigDir(cwd: string): boolean {
 }
 
 export function hasProjectTrustInputs(cwd: string): boolean {
+	const homeDir = canonicalizePath(resolvePath(process.env.HOME || homedir()));
+	const userAgentsSkillsDir = join(homeDir, ".agents", "skills");
 	let currentDir = canonicalizePath(resolvePath(cwd));
-	if (hasProjectConfigDir(currentDir)) {
+
+	const configDir = join(currentDir, CONFIG_DIR_NAME);
+	if (TRUST_REQUIRING_PROJECT_CONFIG_RESOURCES.some((entry) => existsSync(join(configDir, entry)))) {
 		return true;
 	}
 
 	while (true) {
-		if (existsSync(join(currentDir, ".agents", "skills"))) {
+		const agentsSkillsDir = join(currentDir, ".agents", "skills");
+		if (agentsSkillsDir !== userAgentsSkillsDir && existsSync(agentsSkillsDir)) {
 			return true;
 		}
 

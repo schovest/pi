@@ -1,6 +1,4 @@
-import "./providers/register-builtins.ts";
-
-import { getApiProvider } from "./api-registry.ts";
+import { getApiProvider } from "./compat.ts";
 import { getEnvApiKey } from "./env-api-keys.ts";
 import type {
 	Api,

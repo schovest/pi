@@ -51,9 +51,9 @@ vi.mock("@aws-sdk/client-bedrock-runtime", () => {
 	};
 });
 
-import { getModel } from "../src/models.ts";
-import type { BedrockOptions } from "../src/providers/amazon-bedrock.ts";
-import { streamBedrock, streamSimpleBedrock } from "../src/providers/amazon-bedrock.ts";
+import { getModel } from "../src/compat.ts";
+import type { BedrockOptions } from "../src/api/bedrock-converse-stream.ts";
+import { stream } from "../src/compat.ts";
 import type { Context, Model } from "../src/types.ts";
 
 const context: Context = {
@@ -72,7 +72,7 @@ function getModelFixture(): Model<"bedrock-converse-stream"> {
  * the rejecting mock is expected — we only care about the recorded registrations.
  */
 async function driveBedrock(options: BedrockOptions): Promise<void> {
-	await streamBedrock(getModelFixture(), context, options)
+	await stream(getModelFixture(), context, options)
 		.result()
 		.catch(() => undefined);
 }
@@ -182,8 +182,8 @@ describe("bedrock custom headers middleware", () => {
 		expect(nextSpy).toHaveBeenCalledTimes(2);
 	});
 
-	it("VC4: streamSimpleBedrock forwards headers end-to-end (regression guard)", async () => {
-		await streamSimpleBedrock(getModelFixture(), context, { headers: { "x-custom": "v" } })
+	it("VC4: stream forwards headers end-to-end (regression guard)", async () => {
+		await stream(getModelFixture(), context, { headers: { "x-custom": "v" } })
 			.result()
 			.catch(() => undefined);
 

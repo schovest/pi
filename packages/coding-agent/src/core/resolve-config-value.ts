@@ -86,8 +86,8 @@ function parseConfigValueReference(config: string): ConfigValueReference {
 	return { type: "template", parts: parseConfigValueTemplate(config) };
 }
 
-function resolveEnvConfigValue(name: string): string | undefined {
-	return process.env[name] || undefined;
+function resolveEnvConfigValue(name: string, env?: Record<string, string>): string | undefined {
+	return env?.[name] || process.env[name] || undefined;
 }
 
 function getTemplateEnvVarNames(parts: TemplatePart[]): string[] {
@@ -99,14 +99,14 @@ function getTemplateEnvVarNames(parts: TemplatePart[]): string[] {
 	return names;
 }
 
-function resolveTemplate(parts: TemplatePart[]): string | undefined {
+function resolveTemplate(parts: TemplatePart[], env?: Record<string, string>): string | undefined {
 	let resolved = "";
 	for (const part of parts) {
 		if (part.type === "literal") {
 			resolved += part.value;
 			continue;
 		}
-		const envValue = resolveEnvConfigValue(part.name);
+		const envValue = resolveEnvConfigValue(part.name, env);
 		if (envValue === undefined) return undefined;
 		resolved += envValue;
 	}
@@ -147,12 +147,12 @@ export function isLegacyEnvVarNameConfigValue(config: string): boolean {
  * - In non-command values, "$$" escapes a literal "$" and "$!" escapes a literal "!"
  * - Otherwise treats the value as a literal
  */
-export function resolveConfigValue(config: string): string | undefined {
+export function resolveConfigValue(config: string, env?: Record<string, string>): string | undefined {
 	const reference = parseConfigValueReference(config);
 	if (reference.type === "command") {
 		return executeCommand(reference.config);
 	}
-	return resolveTemplate(reference.parts);
+	return resolveTemplate(reference.parts, env);
 }
 
 function executeWithConfiguredShell(command: string): { executed: boolean; value: string | undefined } {
@@ -221,16 +221,16 @@ function executeCommand(commandConfig: string): string | undefined {
 /**
  * Resolve all header values using the same resolution logic as API keys.
  */
-export function resolveConfigValueUncached(config: string): string | undefined {
+export function resolveConfigValueUncached(config: string, env?: Record<string, string>): string | undefined {
 	const reference = parseConfigValueReference(config);
 	if (reference.type === "command") {
 		return executeCommandUncached(reference.config);
 	}
-	return resolveTemplate(reference.parts);
+	return resolveTemplate(reference.parts, env);
 }
 
-export function resolveConfigValueOrThrow(config: string, description: string): string {
-	const resolvedValue = resolveConfigValueUncached(config);
+export function resolveConfigValueOrThrow(config: string, description: string, env?: Record<string, string>): string {
+	const resolvedValue = resolveConfigValueUncached(config, env);
 	if (resolvedValue !== undefined) {
 		return resolvedValue;
 	}

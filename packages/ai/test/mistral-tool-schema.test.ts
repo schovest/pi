@@ -1,6 +1,6 @@
 import { Type } from "typebox";
 import { describe, expect, it } from "vitest";
-import { getModel } from "../src/models.ts";
+import { getModel } from "../src/compat.ts";
 import { complete } from "../src/stream.ts";
 import type { Context, Model } from "../src/types.ts";
 

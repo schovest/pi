@@ -6,13 +6,8 @@
  * try to refresh tokens simultaneously.
  */
 
-import {
-	findEnvKeys,
-	getEnvApiKey,
-	type OAuthCredentials,
-	type OAuthLoginCallbacks,
-	type OAuthProviderId,
-} from "@schovest/pi-ai";
+import type { OAuthCredentials, OAuthLoginCallbacks, OAuthProviderId } from "@schovest/pi-ai";
+import { findEnvKeys, getEnvApiKey } from "@schovest/pi-ai";
 import { getOAuthApiKey, getOAuthProvider, getOAuthProviders } from "@schovest/pi-ai/oauth";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
@@ -24,6 +19,8 @@ import { resolveConfigValue } from "./resolve-config-value.ts";
 export type ApiKeyCredential = {
 	type: "api_key";
 	key: string;
+	/** Provider-scoped environment overrides that take precedence over process.env. */
+	env?: Record<string, string>;
 };
 
 export type OAuthCredential = {
@@ -471,7 +468,7 @@ export class AuthStorage {
 		const cred = this.data[providerId];
 
 		if (cred?.type === "api_key") {
-			return resolveConfigValue(cred.key);
+			return resolveConfigValue(cred.key, cred.env);
 		}
 
 		if (cred?.type === "oauth") {

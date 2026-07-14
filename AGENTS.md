@@ -143,6 +143,8 @@ npx vitest run --dir packages/agent/test agent-loop
 
 #### 版本升级流程
 
+> **⚠️ 禁止使用 `scripts/release.mjs`**：该脚本绕过 dev→main 合并流程，在当前分支直接提交并推送 tag，会导致 main 分支与 dev 分支脱节。版本发布必须严格按以下手动步骤执行。
+
 所有包使用 lockstep 版本号，统一升降。流程：
 
 以下步骤全部在 **dev 分支**上执行（步骤 1-8），然后 merge 到 main（步骤 9-11），最后切回 dev（步骤 12）：
@@ -178,6 +180,9 @@ git merge dev --no-ff -m "release vx.y.z: <变更摘要>"
 git tag vx.y.z
 
 # 11. push main + tag
+#    ★ 这是触发发布的关键动作 ★
+#    push tag 后 CI/CD 自动构建二进制、创建 GitHub Release、发布 npm
+#    不需要手动创建 release 或运行任何发布脚本
 git push origin main
 git push origin vx.y.z
 
@@ -186,6 +191,8 @@ git checkout dev
 ```
 
 注意：`npm version -ws` 会因远程仓库无对应版本报 ETARGET 错误，不影响本地版本号更新，可忽略。
+
+**关键认知**：版本发布的全部自动化都在 CI/CD 中完成（`.github/workflows/build-binaries.yml`）。`git push origin vx.y.z` 是唯一触发发布的动作；步骤 1-10 只是准备工作。push tag 后等待 CI 完成即可，不要手动创建 GitHub Release 或运行 `scripts/release.mjs`。
 
 ### 构建与测试
 
@@ -221,13 +228,14 @@ git checkout dev
 
 #### 版本发布与 CI 的关系
 
-版本升级流程（步骤 9-12）与 CI 的衔接：
+版本升级流程步骤 11 的 `git push origin vx.y.z` 触发 `build-binaries.yml`，CI 自动完成全部发布工作：
 
-1. **步骤 11 push tag** 触发 `build-binaries.yml`
-2. CI 自动构建二进制 → 创建 GitHub Release（含 sha256sums + release notes）→ 发布 npm
-3. **不需要手动创建 release**，push tag 后等待 CI 完成即可
-4. 如需重新触发（如 CI 失败），可用 `workflow_dispatch` 手动指定 tag 重新运行
-5. 手动构建可在本地运行 `npm run build:tgz`，但发布必须通过 CI
+1. **构建二进制**：checkout tag → `scripts/build-binaries.sh` 构建 6 平台二进制 → 生成 `sha256sums.txt`
+2. **创建 GitHub Release**：从 CHANGELOG 提取 release notes → 创建 Release 并上传所有资产
+3. **发布 npm**：构建 → check → test → 验证源文件无变更 → 发布 npm 包（trusted publishing，需审批）
+4. **不需要手动创建 release**，push tag 后等待 CI 完成即可
+5. 如需重新触发（如 CI 失败），可用 `workflow_dispatch` 手动指定 tag 重新运行
+6. 手动构建可在本地运行 `npm run build:tgz`，但发布必须通过 CI
 
 ### Changelog
 

@@ -1,9 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { getModel } from "../src/models.ts";
-import { streamAnthropic } from "../src/providers/anthropic.ts";
+import { getModel } from "../src/compat.ts";
 import { streamOpenAICompletions } from "../src/providers/openai-completions.ts";
 import { streamOpenAIResponses } from "../src/providers/openai-responses.ts";
-import { stream } from "../src/stream.ts";
 import type { Context, Model } from "../src/types.ts";
 
 class PayloadCaptured extends Error {
@@ -107,7 +105,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 			// and just verify the helper logic works correctly
 
 			try {
-				const s = streamAnthropic(proxyModel, context, {
+				const s = stream(proxyModel, context, {
 					apiKey: "fake-key",
 					onPayload: stopAfterPayload((payload) => {
 						capturedPayload = payload;
@@ -136,7 +134,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 			let capturedPayload: any = null;
 
 			try {
-				const s = streamAnthropic(proxyModel, context, {
+				const s = stream(proxyModel, context, {
 					apiKey: "fake-key",
 					cacheRetention: "long",
 					onPayload: stopAfterPayload((payload) => {
@@ -160,7 +158,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 			let capturedPayload: any = null;
 
 			try {
-				const s = streamAnthropic(baseModel, context, {
+				const s = stream(baseModel, context, {
 					apiKey: "fake-key",
 					cacheRetention: "none",
 					onPayload: stopAfterPayload((payload) => {
@@ -184,7 +182,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 			let capturedPayload: any = null;
 
 			try {
-				const s = streamAnthropic(baseModel, context, {
+				const s = stream(baseModel, context, {
 					apiKey: "fake-key",
 					onPayload: stopAfterPayload((payload) => {
 						capturedPayload = payload;
@@ -210,7 +208,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 			let capturedPayload: any = null;
 
 			try {
-				const s = streamAnthropic(baseModel, context, {
+				const s = stream(baseModel, context, {
 					apiKey: "fake-key",
 					cacheRetention: "long",
 					onPayload: stopAfterPayload((payload) => {

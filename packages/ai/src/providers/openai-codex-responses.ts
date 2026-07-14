@@ -20,6 +20,13 @@ if (typeof process !== "undefined" && (process.versions?.node || process.version
 	});
 }
 
+import { clampOpenAIPromptCacheKey } from "../api/openai-prompt-cache.ts";
+import {
+	convertResponsesMessages,
+	convertResponsesTools,
+	processResponsesStream,
+} from "../api/openai-responses-shared.ts";
+import { buildBaseOptions } from "../api/simple-options.ts";
 import { clampThinkingLevel } from "../models.ts";
 import { registerSessionResourceCleanup } from "../session-resources.ts";
 import type {
@@ -39,10 +46,7 @@ import {
 	formatThrownValue,
 } from "../utils/diagnostics.ts";
 import { AssistantMessageEventStream } from "../utils/event-stream.ts";
-import { headersToRecord } from "../utils/headers.ts";
-import { clampOpenAIPromptCacheKey } from "./openai-prompt-cache.ts";
-import { convertResponsesMessages, convertResponsesTools, processResponsesStream } from "./openai-responses-shared.ts";
-import { buildBaseOptions } from "./simple-options.ts";
+import { headersToRecord, providerHeadersToRecord } from "../utils/headers.ts";
 
 // ============================================================================
 // Configuration
@@ -230,10 +234,16 @@ export const streamOpenAICodexResponses: StreamFunction<"openai-codex-responses"
 				body = nextBody as RequestBody;
 			}
 			const websocketRequestId = options?.sessionId || createCodexRequestId();
-			const sseHeaders = buildSSEHeaders(model.headers, options?.headers, accountId, apiKey, options?.sessionId);
+			const sseHeaders = buildSSEHeaders(
+				providerHeadersToRecord(model.headers),
+				providerHeadersToRecord(options?.headers),
+				accountId,
+				apiKey,
+				options?.sessionId,
+			);
 			const websocketHeaders = buildWebSocketHeaders(
-				model.headers,
-				options?.headers,
+				providerHeadersToRecord(model.headers),
+				providerHeadersToRecord(options?.headers),
 				accountId,
 				apiKey,
 				websocketRequestId,
@@ -414,9 +424,10 @@ export const streamSimpleOpenAICodexResponses: StreamFunction<"openai-codex-resp
 		throw new Error(`No API key for provider: ${model.provider}`);
 	}
 
-	const base = buildBaseOptions(model, options, apiKey);
+	const base = buildBaseOptions(model, context, options, apiKey);
 	const clampedReasoning = options?.reasoning ? clampThinkingLevel(model, options.reasoning) : undefined;
-	const reasoningEffort = clampedReasoning === "off" ? undefined : clampedReasoning;
+	const reasoningEffort: OpenAICodexResponsesOptions["reasoningEffort"] =
+		clampedReasoning === "off" || clampedReasoning === "max" ? undefined : clampedReasoning;
 
 	return streamOpenAICodexResponses(model, context, {
 		...base,

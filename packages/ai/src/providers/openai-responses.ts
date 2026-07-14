@@ -1,5 +1,13 @@
 import OpenAI from "openai";
 import type { ResponseCreateParamsStreaming } from "openai/resources/responses/responses.js";
+import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "../api/github-copilot-headers.ts";
+import { clampOpenAIPromptCacheKey } from "../api/openai-prompt-cache.ts";
+import {
+	convertResponsesMessages,
+	convertResponsesTools,
+	processResponsesStream,
+} from "../api/openai-responses-shared.ts";
+import { buildBaseOptions } from "../api/simple-options.ts";
 import { clampThinkingLevel } from "../models.ts";
 import type {
 	Api,
@@ -14,12 +22,8 @@ import type {
 	Usage,
 } from "../types.ts";
 import { AssistantMessageEventStream } from "../utils/event-stream.ts";
-import { headersToRecord } from "../utils/headers.ts";
+import { headersToRecord, providerHeadersToRecord } from "../utils/headers.ts";
 import { isCloudflareProvider, resolveCloudflareBaseUrl } from "./cloudflare.ts";
-import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers.ts";
-import { clampOpenAIPromptCacheKey } from "./openai-prompt-cache.ts";
-import { convertResponsesMessages, convertResponsesTools, processResponsesStream } from "./openai-responses-shared.ts";
-import { buildBaseOptions } from "./simple-options.ts";
 
 const OPENAI_TOOL_CALL_PROVIDERS = new Set(["openai", "openai-codex", "opencode"]);
 
@@ -42,6 +46,7 @@ function getCompat(model: Model<"openai-responses">): Required<OpenAIResponsesCo
 		supportsDeveloperRole: model.compat?.supportsDeveloperRole ?? true,
 		sendSessionIdHeader: model.compat?.sendSessionIdHeader ?? true,
 		supportsLongCacheRetention: model.compat?.supportsLongCacheRetention ?? true,
+		supportsToolSearch: model.compat?.supportsToolSearch ?? false,
 	};
 }
 
@@ -113,7 +118,7 @@ export const streamOpenAIResponses: StreamFunction<"openai-responses", OpenAIRes
 			}
 			const cacheRetention = resolveCacheRetention(options?.cacheRetention);
 			const cacheSessionId = cacheRetention === "none" ? undefined : options?.sessionId;
-			const client = createClient(model, context, apiKey, options?.headers, cacheSessionId);
+			const client = createClient(model, context, apiKey, providerHeadersToRecord(options?.headers), cacheSessionId);
 			let params = buildParams(model, context, options);
 			const nextParams = await options?.onPayload?.(params, model);
 			if (nextParams !== undefined) {
@@ -169,9 +174,10 @@ export const streamSimpleOpenAIResponses: StreamFunction<"openai-responses", Sim
 		throw new Error(`No API key for provider: ${model.provider}`);
 	}
 
-	const base = buildBaseOptions(model, options, apiKey);
+	const base = buildBaseOptions(model, context, options, apiKey);
 	const clampedReasoning = options?.reasoning ? clampThinkingLevel(model, options.reasoning) : undefined;
-	const reasoningEffort = clampedReasoning === "off" ? undefined : clampedReasoning;
+	const reasoningEffort: OpenAIResponsesOptions["reasoningEffort"] =
+		clampedReasoning === "off" || clampedReasoning === "max" ? undefined : clampedReasoning;
 
 	return streamOpenAIResponses(model, context, {
 		...base,
@@ -187,7 +193,7 @@ function createClient(
 	sessionId?: string,
 ) {
 	const compat = getCompat(model);
-	const headers = { ...model.headers };
+	const headers = { ...providerHeadersToRecord(model.headers) };
 	if (model.provider === "github-copilot") {
 		const hasImages = hasCopilotVisionInput(context.messages);
 		const copilotHeaders = buildCopilotDynamicHeaders({

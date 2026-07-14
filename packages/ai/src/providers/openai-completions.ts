@@ -10,6 +10,10 @@ import type {
 	ChatCompletionSystemMessageParam,
 	ChatCompletionToolMessageParam,
 } from "openai/resources/chat/completions.js";
+import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "../api/github-copilot-headers.ts";
+import { clampOpenAIPromptCacheKey } from "../api/openai-prompt-cache.ts";
+import { buildBaseOptions } from "../api/simple-options.ts";
+import { transformMessages } from "../api/transform-messages.ts";
 import { calculateCost, clampThinkingLevel } from "../models.ts";
 import type {
 	AssistantMessage,
@@ -30,14 +34,10 @@ import type {
 	ToolResultMessage,
 } from "../types.ts";
 import { AssistantMessageEventStream } from "../utils/event-stream.ts";
-import { headersToRecord } from "../utils/headers.ts";
+import { headersToRecord, providerHeadersToRecord } from "../utils/headers.ts";
 import { parseStreamingJson } from "../utils/json-parse.ts";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.ts";
 import { isCloudflareProvider, resolveCloudflareBaseUrl } from "./cloudflare.ts";
-import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers.ts";
-import { clampOpenAIPromptCacheKey } from "./openai-prompt-cache.ts";
-import { buildBaseOptions } from "./simple-options.ts";
-import { transformMessages } from "./transform-messages.ts";
 
 /**
  * Check if conversation messages contain tool calls or tool results.
@@ -142,7 +142,14 @@ export const streamOpenAICompletions: StreamFunction<"openai-completions", OpenA
 			const compat = getCompat(model);
 			const cacheRetention = resolveCacheRetention(options?.cacheRetention);
 			const cacheSessionId = cacheRetention === "none" ? undefined : options?.sessionId;
-			const client = createClient(model, context, apiKey, options?.headers, cacheSessionId, compat);
+			const client = createClient(
+				model,
+				context,
+				apiKey,
+				providerHeadersToRecord(options?.headers),
+				cacheSessionId,
+				compat,
+			);
 			let params = buildParams(model, context, options, compat, cacheRetention);
 			const nextParams = await options?.onPayload?.(params, model);
 			if (nextParams !== undefined) {
@@ -435,9 +442,10 @@ export const streamSimpleOpenAICompletions: StreamFunction<"openai-completions",
 		throw new Error(`No API key for provider: ${model.provider}`);
 	}
 
-	const base = buildBaseOptions(model, options, apiKey);
+	const base = buildBaseOptions(model, context, options, apiKey);
 	const clampedReasoning = options?.reasoning ? clampThinkingLevel(model, options.reasoning) : undefined;
-	const reasoningEffort = clampedReasoning === "off" ? undefined : clampedReasoning;
+	const reasoningEffort: OpenAICompletionsOptions["reasoningEffort"] =
+		clampedReasoning === "off" || clampedReasoning === "max" ? undefined : clampedReasoning;
 	const toolChoice = (options as OpenAICompletionsOptions | undefined)?.toolChoice;
 
 	return streamOpenAICompletions(model, context, {
@@ -455,7 +463,7 @@ function createClient(
 	sessionId?: string,
 	compat: ResolvedOpenAICompletionsCompat = getCompat(model),
 ) {
-	const headers = { ...model.headers };
+	const headers = { ...providerHeadersToRecord(model.headers) };
 	if (model.provider === "github-copilot") {
 		const hasImages = hasCopilotVisionInput(context.messages);
 		const copilotHeaders = buildCopilotDynamicHeaders({
@@ -1139,6 +1147,7 @@ function detectCompat(model: Model<"openai-completions">): ResolvedOpenAIComplet
 						: isOpenRouter
 							? "openrouter"
 							: "openai",
+		chatTemplateKwargs: {},
 		openRouterRouting: {},
 		vercelGatewayRouting: {},
 		zaiToolStream: false,
@@ -1177,7 +1186,8 @@ function getCompat(model: Model<"openai-completions">): ResolvedOpenAICompletion
 			model.compat.requiresReasoningContentOnAssistantMessages ??
 			detected.requiresReasoningContentOnAssistantMessages,
 		thinkingFormat: model.compat.thinkingFormat ?? detected.thinkingFormat,
-		openRouterRouting: model.compat.openRouterRouting ?? {},
+		chatTemplateKwargs: model.compat.chatTemplateKwargs ?? detected.chatTemplateKwargs,
+		openRouterRouting: model.compat.openRouterRouting ?? detected.openRouterRouting,
 		vercelGatewayRouting: model.compat.vercelGatewayRouting ?? detected.vercelGatewayRouting,
 		zaiToolStream: model.compat.zaiToolStream ?? detected.zaiToolStream,
 		supportsStrictMode: model.compat.supportsStrictMode ?? detected.supportsStrictMode,

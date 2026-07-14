@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getModel } from "../src/models.ts";
+import { getModel } from "../src/compat.ts";
 import { convertMessages } from "../src/providers/openai-completions.ts";
 import type {
 	AssistantMessage,

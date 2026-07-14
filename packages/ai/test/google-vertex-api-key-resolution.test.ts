@@ -45,8 +45,8 @@ vi.mock("@google/genai", () => {
 	};
 });
 
-import { getModel } from "../src/models.ts";
-import { streamGoogleVertex } from "../src/providers/google-vertex.ts";
+import { getModel } from "../src/compat.ts";
+import { stream } from "../src/compat.ts";
 import type { Context, Model } from "../src/types.ts";
 
 const model = getModel("google-vertex", "gemini-3-flash-preview");
@@ -71,7 +71,7 @@ afterEach(() => {
 
 describe("google-vertex api key resolution", () => {
 	it("falls back to ADC when options.apiKey is a placeholder marker", async () => {
-		const stream = streamGoogleVertex(model, context, {
+		const stream = stream(model, context, {
 			apiKey: "<authenticated>",
 			project: "test-project",
 			location: "us-central1",
@@ -90,7 +90,7 @@ describe("google-vertex api key resolution", () => {
 	});
 
 	it("falls back to ADC when options.apiKey is the gcp-vertex-credentials marker", async () => {
-		const stream = streamGoogleVertex(model, context, {
+		const stream = stream(model, context, {
 			apiKey: "gcp-vertex-credentials",
 			project: "test-project",
 			location: "us-central1",
@@ -111,7 +111,7 @@ describe("google-vertex api key resolution", () => {
 	it("falls back to ADC when GOOGLE_CLOUD_API_KEY is a placeholder marker", async () => {
 		process.env.GOOGLE_CLOUD_API_KEY = "<authenticated>";
 
-		const stream = streamGoogleVertex(model, context, {
+		const stream = stream(model, context, {
 			project: "test-project",
 			location: "us-central1",
 		});
@@ -129,7 +129,7 @@ describe("google-vertex api key resolution", () => {
 	});
 
 	it("still uses the API key client for real API keys", async () => {
-		const stream = streamGoogleVertex(model, context, {
+		const stream = stream(model, context, {
 			apiKey: "AIzaSyExampleRealisticLookingApiKey123456",
 		});
 
@@ -146,7 +146,7 @@ describe("google-vertex api key resolution", () => {
 	});
 
 	it("does not forward generated Vertex base URL placeholders", async () => {
-		const stream = streamGoogleVertex(model, context, {
+		const stream = stream(model, context, {
 			project: "test-project",
 			location: "us-central1",
 		});
@@ -159,7 +159,7 @@ describe("google-vertex api key resolution", () => {
 
 	it("forwards custom baseUrl to the ADC client", async () => {
 		const customModel: Model<"google-vertex"> = { ...model, baseUrl: "https://proxy.example.com" };
-		const stream = streamGoogleVertex(customModel, context, {
+		const stream = stream(customModel, context, {
 			project: "test-project",
 			location: "us-central1",
 		});
@@ -181,7 +181,7 @@ describe("google-vertex api key resolution", () => {
 
 	it("forwards custom baseUrl to the API key client", async () => {
 		const customModel: Model<"google-vertex"> = { ...model, baseUrl: "https://proxy.example.com" };
-		const stream = streamGoogleVertex(customModel, context, {
+		const stream = stream(customModel, context, {
 			apiKey: "AIzaSyExampleRealisticLookingApiKey123456",
 		});
 
@@ -204,7 +204,7 @@ describe("google-vertex api key resolution", () => {
 			...model,
 			baseUrl: "https://proxy.example.com/v1/projects/test-project/locations/global",
 		};
-		const stream = streamGoogleVertex(customModel, context, {
+		const stream = stream(customModel, context, {
 			project: "test-project",
 			location: "us-central1",
 		});

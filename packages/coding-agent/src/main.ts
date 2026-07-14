@@ -26,7 +26,7 @@ import { formatNoModelsAvailableMessage } from "./core/auth-guidance.ts";
 import { AuthStorage } from "./core/auth-storage.ts";
 import { exportFromFile } from "./core/export-html/index.ts";
 import type { ExtensionFactory } from "./core/extensions/types.ts";
-import { configureHttpDispatcher } from "./core/http-dispatcher.ts";
+import { applyHttpProxySettings, configureHttpDispatcher } from "./core/http-dispatcher.ts";
 import type { ModelRegistry } from "./core/model-registry.ts";
 import { resolveCliModel, resolveModelScope, type ScopedModel } from "./core/model-resolver.ts";
 import { restoreStdout, takeOverStdout } from "./core/output-guard.ts";
@@ -227,7 +227,6 @@ function validateSessionIdFlags(parsed: Args): void {
 		parsed.session ? "--session" : undefined,
 		parsed.continue ? "--continue" : undefined,
 		parsed.resume ? "--resume" : undefined,
-		parsed.noSession ? "--no-session" : undefined,
 	].filter((flag): flag is string => flag !== undefined);
 
 	if (conflictingFlags.length > 0) {
@@ -237,6 +236,16 @@ function validateSessionIdFlags(parsed: Args): void {
 
 	try {
 		assertValidSessionId(parsed.sessionId);
+	} catch (error: unknown) {
+		const message = error instanceof Error ? error.message : String(error);
+		console.error(chalk.red(`Error: ${message}`));
+		process.exit(1);
+	}
+}
+
+function openSessionOrExit(path: string, sessionDir?: string): SessionManager {
+	try {
+		return SessionManager.open(path, sessionDir);
 	} catch (error: unknown) {
 		const message = error instanceof Error ? error.message : String(error);
 		console.error(chalk.red(`Error: ${message}`));
@@ -261,7 +270,7 @@ async function createSessionManager(
 	settingsManager: SettingsManager,
 ): Promise<SessionManager> {
 	if (parsed.noSession || parsed.help || parsed.listModels !== undefined) {
-		return SessionManager.inMemory(cwd);
+		return SessionManager.inMemory(cwd, parsed.sessionId !== undefined ? { id: parsed.sessionId } : undefined);
 	}
 
 	if (parsed.fork) {
@@ -293,7 +302,7 @@ async function createSessionManager(
 		switch (resolved.type) {
 			case "path":
 			case "local":
-				return SessionManager.open(resolved.path, sessionDir);
+				return openSessionOrExit(resolved.path, sessionDir);
 
 			case "global": {
 				console.log(chalk.yellow(`Session found in different project: ${resolved.cwd}`));
@@ -337,6 +346,11 @@ async function createSessionManager(
 		if (existingSession) {
 			return SessionManager.open(existingSession.path, sessionDir);
 		}
+		console.error(
+			chalk.yellow(
+				`Warning: No project session found with id '${parsed.sessionId}'; creating a new session with that id.`,
+			),
+		);
 	}
 
 	return SessionManager.create(cwd, sessionDir, { id: parsed.sessionId });
@@ -725,6 +739,7 @@ export async function main(args: string[], options?: MainOptions) {
 	const { services, session, modelFallbackMessage } = runtime;
 	const { settingsManager, modelRegistry, resourceLoader } = services;
 	configureHttpDispatcher(settingsManager.getHttpIdleTimeoutMs());
+	applyHttpProxySettings(settingsManager.getGlobalSettings().httpProxy);
 
 	if (parsed.help) {
 		const extensionFlags = resourceLoader

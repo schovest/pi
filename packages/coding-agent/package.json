@@ -1,6 +1,6 @@
 {
 	"name": "@schovest/pi-coding-agent",
-	"version": "0.9.2",
+	"version": "0.10.0",
 	"description": "Coding agent CLI with read, bash, edit, write tools and session management",
 	"type": "module",
 	"piConfig": {
@@ -37,9 +37,9 @@
 		"prepublishOnly": "npm run clean && npm run build && npm run shrinkwrap"
 	},
 	"dependencies": {
-		"@schovest/pi-agent-core": "^0.9.2",
-		"@schovest/pi-ai": "^0.9.2",
-		"@schovest/pi-tui": "^0.9.2",
+		"@schovest/pi-agent-core": "^0.10.0",
+		"@schovest/pi-ai": "^0.10.0",
+		"@schovest/pi-tui": "^0.10.0",
 		"@silvia-odwyer/photon-node": "0.3.4",
 		"chalk": "5.6.2",
 		"cross-spawn": "7.0.6",

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { getModel } from "../src/models.ts";
-import { type BedrockOptions, streamBedrock } from "../src/providers/amazon-bedrock.ts";
+import { getModel } from "../src/compat.ts";
+import { type BedrockOptions, stream } from "../src/api/bedrock-converse-stream.ts";
 import type { Context, Model } from "../src/types.ts";
 import { hasBedrockCredentials } from "./bedrock-utils.ts";
 
@@ -30,7 +30,7 @@ async function capturePayload(
 	options?: BedrockOptions,
 ): Promise<BedrockThinkingPayload> {
 	let capturedPayload: BedrockThinkingPayload | undefined;
-	const s = streamBedrock(model, makeContext(), {
+	const s = stream(model, makeContext(), {
 		...options,
 		reasoning: options?.reasoning ?? "high",
 		onPayload: (payload) => {
@@ -143,7 +143,7 @@ describe.skipIf(!hasBedrockCredentials())("Bedrock Claude max tokens E2E", () =>
 				maxTokens: 6000,
 			};
 
-			const response = await streamBedrock(
+			const response = await stream(
 				model,
 				{
 					systemPrompt: "You are a deterministic text generator. Follow the requested output format exactly.",
@@ -189,7 +189,7 @@ describe("Application inference profile support", () => {
 		};
 
 		let capturedPayload: any;
-		const s = streamBedrock(
+		const s = stream(
 			model,
 			{
 				systemPrompt: "You are helpful.",

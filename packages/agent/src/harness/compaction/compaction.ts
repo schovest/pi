@@ -122,14 +122,19 @@ export function calculateContextTokens(usage: Usage): number {
 function getAssistantUsage(msg: AgentMessage): Usage | undefined {
 	if (msg.role === "assistant" && "usage" in msg) {
 		const assistantMsg = msg as AssistantMessage;
-		if (assistantMsg.stopReason !== "aborted" && assistantMsg.stopReason !== "error" && assistantMsg.usage) {
+		if (
+			assistantMsg.stopReason !== "aborted" &&
+			assistantMsg.stopReason !== "error" &&
+			assistantMsg.usage &&
+			calculateContextTokens(assistantMsg.usage) > 0
+		) {
 			return assistantMsg.usage;
 		}
 	}
 	return undefined;
 }
 
-/** Return usage from the last successful assistant message in session entries. */
+/** Return usage from the last valid assistant message in session entries. */
 export function getLastAssistantUsage(entries: SessionTreeEntry[]): Usage | undefined {
 	for (let i = entries.length - 1; i >= 0; i--) {
 		const entry = entries[i];
