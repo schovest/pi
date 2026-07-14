@@ -61,11 +61,11 @@ version,category,summary,type,merge,reason,status
 0.79.7,UX,tree navigator 水平平移深层 entries 保持可读,fix,0,交互细节,
 0.79.8,Provider,选择性 provider base entry points (pi-ai/base pi-agent-core/base),feature,0,0.80.0 已移除,
 0.79.8,Provider,Mistral prompt caching (prompt_cache_key + cached token 计费),feature,1,缓存性能,
-0.79.8,Compaction,post-compaction token 估算加入 compact 结果和事件,feature,1,上下文可见性,
+0.79.8,Compaction,post-compaction token 估算加入 compact 结果和事件,feature,1,上下文可见性,已合并-C
 0.79.8,Provider,OpenRouter Fusion 别名 openrouter/fusion,feature,0,不使用 OpenRouter,
 0.79.8,Security,更新漏洞依赖 undici + protobufjs,fix,1,安全修复,
-0.79.8,Compaction,compaction 拒绝无可压缩消息的 session,fix,1,不再产生空摘要,
-0.79.8,Compaction,overflow auto-compaction 完成后不重试已完成 assistant 响应,fix,1,稳定性,
+0.79.8,Compaction,compaction 拒绝无可压缩消息的 session,fix,1,不再产生空摘要,已合并-C
+0.79.8,Compaction,overflow auto-compaction 完成后不重试已完成 assistant 响应,fix,1,稳定性,已合并-C
 0.79.9,Provider,chat-template thinking (chat_template_kwargs) 用于 vLLM/DeepSeek,feature,1,自定义 provider 兼容,已合并-B
 0.79.9,Provider,Fireworks GLM-5.2 OpenAI-compat Chat Completions 端点 + reasoning_effort,fix,1,模型路由修复,已合并-B
 0.79.9,Stability,same-directory session switch 复用扩展模块保持新鲜实例,fix,1,扩展生命周期,
@@ -175,7 +175,7 @@ version,category,summary,type,merge,reason,status
 0.80.4,Extension,question extension 示例顺序执行多问题,fix,0,示例扩展,
 0.80.4,Auth,/login 报告 auth 存储持久化失败,fix,1,认证错误透明,已合并
 0.80.4,Compaction,split-turn compaction 序列化 summary 请求,fix,1,本地 provider 不再 429,已合并
-0.80.4,Compaction,compaction retained-token budgeting 计入 context-visible 自定义消息,fix,1,token 计数正确性,
+0.80.4,Compaction,compaction retained-token budgeting 计入 context-visible 自定义消息,fix,1,token 计数正确性,已合并-C
 0.80.4,Extension,自定义 session entries 在 assistant streaming 期间渲染顺序,fix,0,渲染细节,
 0.80.4,Tools,bash tool timeout 非正/超大值报清晰验证错误,fix,1,工具输入校验,已合并
 0.80.4,Tools,edit tool schema 允许模型发明的额外替换字段,fix,1,减少无效工具调用,
@@ -189,7 +189,7 @@ version,category,summary,type,merge,reason,status
 0.80.6,Thinking,max thinking level (xhigh 之上) CLI/SDK/RPC/主题全链路,feature,1,核心 thinking 功能,已合并
 0.80.6,Provider,输入 token 分级定价 (GPT-5.4/5.5/5.6 长上下文精确计费),feature,1,计费准确性,已合并-B
 0.80.6,Config,shellPath 支持 ~ (home 目录) 展开,feature,1,配置便利,已合并
-0.80.6,Compaction,post-compaction output-token budgeting 忽略陈旧 assistant usage,fix,1,budget 正确性,
+0.80.6,Compaction,post-compaction output-token budgeting 忽略陈旧 assistant usage,fix,1,budget 正确性,已合并-C
 0.80.6,Provider,GPT-5.4/5.5 long-context cost accounting 保留 272K 默认限制,fix,1,计费准确性,已合并-B
 0.80.6,Provider,GPT-5.6 metadata 272K 短上下文 tier / Codex 372K 长上下文定价,fix,1,计费准确性,已合并-B
 0.80.6,Provider,Anthropic message conversion 保留空文本有效签名的 thinking blocks,fix,1,新 Claude 模型兼容,已合并

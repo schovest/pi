@@ -319,6 +319,36 @@ export function getLatestCompactionEntry(entries: SessionEntry[]): CompactionEnt
 }
 
 /**
+ * Convert a single session entry to its context messages.
+ * Returns an array that may be empty for entries that don't contribute
+ * to LLM context directly (e.g., thinking_level_change, subagent_run).
+ */
+export function sessionEntryToContextMessages(entry: SessionEntry): AgentMessage[] {
+	if (entry.type === "message") {
+		const message = entry.message;
+		if (
+			(message.role === "user" || message.role === "assistant" || message.role === "toolResult") &&
+			message.content == null
+		) {
+			return [{ ...message, content: [] }];
+		}
+		return [message];
+	}
+	if (entry.type === "custom_message") {
+		return [
+			createCustomMessage(entry.customType, entry.content ?? [], entry.display, entry.details, entry.timestamp),
+		];
+	}
+	if (entry.type === "branch_summary" && entry.summary) {
+		return [createBranchSummaryMessage(entry.summary, entry.fromId, entry.timestamp)];
+	}
+	if (entry.type === "compaction") {
+		return [createCompactionSummaryMessage(entry.summary, entry.tokensBefore, entry.timestamp)];
+	}
+	return [];
+}
+
+/**
  * Build the session context from entries using tree traversal.
  * If leafId is provided, walks from that entry to root.
  * Handles compaction and branch summaries along the path.

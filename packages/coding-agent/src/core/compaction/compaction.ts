@@ -8,13 +8,13 @@
 import type { AgentMessage, StreamFn, ThinkingLevel } from "@schovest/pi-agent-core";
 import type { AssistantMessage, Context, Model, SimpleStreamOptions, Usage } from "@schovest/pi-ai";
 import { completeSimple } from "@schovest/pi-ai";
+import { convertToLlm } from "../messages.ts";
 import {
-	convertToLlm,
-	createBranchSummaryMessage,
-	createCompactionSummaryMessage,
-	createCustomMessage,
-} from "../messages.ts";
-import { buildSessionContext, type CompactionEntry, type SessionEntry } from "../session-manager.ts";
+	buildSessionContext,
+	type CompactionEntry,
+	type SessionEntry,
+	sessionEntryToContextMessages,
+} from "../session-manager.ts";
 import {
 	computeFileLists,
 	createFileOps,
@@ -72,34 +72,11 @@ function extractFileOperations(
 // Message Extraction
 // ============================================================================
 
-/**
- * Extract AgentMessage from an entry if it produces one.
- * Returns undefined for entries that don't contribute to LLM context.
- */
-function getMessageFromEntry(entry: SessionEntry): AgentMessage | undefined {
-	if (entry.type === "subagent_run") {
-		return undefined;
-	}
-	if (entry.type === "message") {
-		return entry.message;
-	}
-	if (entry.type === "custom_message") {
-		return createCustomMessage(entry.customType, entry.content, entry.display, entry.details, entry.timestamp);
-	}
-	if (entry.type === "branch_summary") {
-		return createBranchSummaryMessage(entry.summary, entry.fromId, entry.timestamp);
-	}
-	if (entry.type === "compaction") {
-		return createCompactionSummaryMessage(entry.summary, entry.tokensBefore, entry.timestamp);
-	}
-	return undefined;
-}
-
 function getMessageFromEntryForCompaction(entry: SessionEntry): AgentMessage | undefined {
 	if (entry.type === "compaction") {
 		return undefined;
 	}
-	return getMessageFromEntry(entry);
+	return sessionEntryToContextMessages(entry)[0];
 }
 
 /** Result from compact() - SessionManager adds uuid/parentUuid when saving */
@@ -107,6 +84,7 @@ export interface CompactionResult<T = unknown> {
 	summary: string;
 	firstKeptEntryId: string;
 	tokensBefore: number;
+	estimatedTokensAfter?: number;
 	/** Extension-specific data (e.g., ArtifactIndex, version markers for structured compaction) */
 	details?: T;
 }
@@ -299,40 +277,57 @@ export function estimateTokens(message: AgentMessage): number {
  * and will be kept.
  * BashExecutionMessage is treated like a user message (user-initiated context).
  */
+function isCutPointMessage(message: AgentMessage): boolean {
+	switch (message.role) {
+		case "user":
+		case "assistant":
+		case "bashExecution":
+		case "custom":
+		case "branchSummary":
+		case "compactionSummary":
+			return true;
+		case "toolResult":
+			return false;
+	}
+	return false;
+}
+
+function isTurnStartMessage(message: AgentMessage): boolean {
+	switch (message.role) {
+		case "user":
+		case "bashExecution":
+		case "custom":
+		case "branchSummary":
+		case "compactionSummary":
+			return true;
+		case "assistant":
+		case "toolResult":
+			return false;
+	}
+	return false;
+}
+
+function isTurnStartEntry(entry: SessionEntry): boolean {
+	if (entry.type === "compaction") {
+		return false;
+	}
+	return sessionEntryToContextMessages(entry).some(isTurnStartMessage);
+}
+
+/**
+ * Find valid cut points: indices of context-visible user-like or assistant messages.
+ * Never cut at tool results (they must follow their tool call).
+ * When we cut at an assistant message with tool calls, its tool results follow it
+ * and will be kept.
+ */
 function findValidCutPoints(entries: SessionEntry[], startIndex: number, endIndex: number): number[] {
 	const cutPoints: number[] = [];
 	for (let i = startIndex; i < endIndex; i++) {
 		const entry = entries[i];
-		switch (entry.type) {
-			case "message": {
-				const role = entry.message.role;
-				switch (role) {
-					case "bashExecution":
-					case "custom":
-					case "branchSummary":
-					case "compactionSummary":
-					case "user":
-					case "assistant":
-						cutPoints.push(i);
-						break;
-					case "toolResult":
-						break;
-				}
-				break;
-			}
-			case "thinking_level_change":
-			case "model_change":
-			case "compaction":
-			case "branch_summary":
-			case "custom":
-			case "custom_message":
-			case "label":
-			case "session_info":
-				break;
+		if (entry.type === "compaction") {
+			continue;
 		}
-
-		// branch_summary and custom_message are user-role messages, valid cut points
-		if (entry.type === "branch_summary" || entry.type === "custom_message") {
+		if (sessionEntryToContextMessages(entry).some(isCutPointMessage)) {
 			cutPoints.push(i);
 		}
 	}
@@ -340,22 +335,13 @@ function findValidCutPoints(entries: SessionEntry[], startIndex: number, endInde
 }
 
 /**
- * Find the user message (or bashExecution) that starts the turn containing the given entry index.
+ * Find the context-visible user-role message that starts the turn containing the given entry index.
  * Returns -1 if no turn start found before the index.
- * BashExecutionMessage is treated like a user message for turn boundaries.
  */
 export function findTurnStartIndex(entries: SessionEntry[], entryIndex: number, startIndex: number): number {
 	for (let i = entryIndex; i >= startIndex; i--) {
-		const entry = entries[i];
-		// branch_summary and custom_message are user-role messages, can start a turn
-		if (entry.type === "branch_summary" || entry.type === "custom_message") {
+		if (isTurnStartEntry(entries[i])) {
 			return i;
-		}
-		if (entry.type === "message") {
-			const role = entry.message.role;
-			if (role === "user" || role === "bashExecution") {
-				return i;
-			}
 		}
 	}
 	return -1;
@@ -404,10 +390,11 @@ export function findCutPoint(
 
 	for (let i = endIndex - 1; i >= startIndex; i--) {
 		const entry = entries[i];
-		if (entry.type !== "message") continue;
-
-		// Estimate this message's size
-		const messageTokens = estimateTokens(entry.message);
+		const messageTokens = sessionEntryToContextMessages(entry).reduce(
+			(sum, message) => sum + estimateTokens(message),
+			0,
+		);
+		if (messageTokens === 0) continue;
 		accumulatedTokens += messageTokens;
 
 		// Check if we've exceeded the budget
@@ -423,30 +410,25 @@ export function findCutPoint(
 		}
 	}
 
-	// Scan backwards from cutIndex to include any non-message entries (bash, settings, etc.)
+	// Scan backwards from cutIndex to include adjacent metadata entries that do not affect context.
 	while (cutIndex > startIndex) {
 		const prevEntry = entries[cutIndex - 1];
-		// Stop at session header or compaction boundaries
-		if (prevEntry.type === "compaction") {
+		// Stop at compaction boundaries or context-visible entries.
+		if (prevEntry.type === "compaction" || sessionEntryToContextMessages(prevEntry).length > 0) {
 			break;
 		}
-		if (prevEntry.type === "message") {
-			// Stop if we hit any message
-			break;
-		}
-		// Include this non-message entry (bash, settings change, etc.)
 		cutIndex--;
 	}
 
 	// Determine if this is a split turn
 	const cutEntry = entries[cutIndex];
-	const isUserMessage = cutEntry.type === "message" && cutEntry.message.role === "user";
-	const turnStartIndex = isUserMessage ? -1 : findTurnStartIndex(entries, cutIndex, startIndex);
+	const startsTurn = isTurnStartEntry(cutEntry);
+	const turnStartIndex = startsTurn ? -1 : findTurnStartIndex(entries, cutIndex, startIndex);
 
 	return {
 		firstKeptEntryIndex: cutIndex,
 		turnStartIndex,
-		isSplitTurn: !isUserMessage && turnStartIndex !== -1,
+		isSplitTurn: !startsTurn && turnStartIndex !== -1,
 	};
 }
 
@@ -697,6 +679,10 @@ export function prepareCompaction(
 			const msg = getMessageFromEntryForCompaction(pathEntries[i]);
 			if (msg) turnPrefixMessages.push(msg);
 		}
+	}
+
+	if (messagesToSummarize.length === 0 && turnPrefixMessages.length === 0) {
+		return undefined;
 	}
 
 	// Extract file operations from messages and previous compaction
