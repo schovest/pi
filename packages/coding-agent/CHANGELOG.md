@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+### Added
+- 上游合并 0.79.2~Unreleased: 108 项修复/功能 (架构迁移至 api/+providers/ 分离模式)
+  - 新模型: Claude Sonnet 5/Fable 5, GPT-5.5/5.6, GLM-5.2 等
+  - Provider 架构: api/ + providers/ factory 模式
+  - 新增 RPC 命令: get_entries, get_tree
+  - Compaction: post-compaction token 估算, 空守卫, custom messages budget
+  - Session: 子树排序, 无效文件拒绝, --no-session --session-id
+  - Tools: fuzzy edit, WSL bash stdin, find/fd 层级 gitignore
+  - Stability: Windows context 文件发现, 多 provider retry 修复
+
+### Changed
+- pi-ai 根入口精简 (~50行), compat.ts 提供旧 API 兼容
+- models.generated.ts: 18k行单体 → 聚合 re-export
+
+### Fixed
+- 0.79.2~0.79.7: 24 项修复 (已有本地等价实现确认)
+- compilation: 源码零错误 (tsgo --noEmit)
+
 本仓库基于上游 Pi（schovest/pi）fork 开发，版本号从 0.6.0 起独立维护。上游变更通过合并引入，本地变更单独记录。
 
 ### Fixed
