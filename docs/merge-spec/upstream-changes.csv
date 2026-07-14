@@ -63,7 +63,7 @@ version,category,summary,type,merge,reason,status
 0.79.8,Provider,Mistral prompt caching (prompt_cache_key + cached token 计费),feature,1,缓存性能,
 0.79.8,Compaction,post-compaction token 估算加入 compact 结果和事件,feature,1,上下文可见性,已合并-C
 0.79.8,Provider,OpenRouter Fusion 别名 openrouter/fusion,feature,0,不使用 OpenRouter,
-0.79.8,Security,更新漏洞依赖 undici + protobufjs,fix,1,安全修复,
+0.79.8,Security,更新漏洞依赖 undici + protobufjs,fix,1,安全修复,已合并-H
 0.79.8,Compaction,compaction 拒绝无可压缩消息的 session,fix,1,不再产生空摘要,已合并-C
 0.79.8,Compaction,overflow auto-compaction 完成后不重试已完成 assistant 响应,fix,1,稳定性,已合并-C
 0.79.9,Provider,chat-template thinking (chat_template_kwargs) 用于 vLLM/DeepSeek,feature,1,自定义 provider 兼容,已合并-B
@@ -112,7 +112,7 @@ version,category,summary,type,merge,reason,status
 0.80.3,Provider,Anthropic Claude Sonnet 5 支持 (Anthropic + Bedrock adaptive thinking),feature,1,新模型,已合并-B
 0.80.3,Config,outputPad 控制用户/assistant/thinking 水平 padding,feature,0,显示细节,
 0.80.3,Config,externalEditor Ctrl+G 使用配置编辑器,feature,0,编辑器配置,
-0.80.3,RPC,get_entries 和 get_tree RPC 命令读取 session entries 和 tree,feature,1,RPC 增强,
+0.80.3,RPC,get_entries 和 get_tree RPC 命令读取 session entries 和 tree,feature,1,RPC 增强,已合并-H
 0.80.3,Extension,session_info_changed 事件观察 session 名称变更,feature,1,扩展事件,
 0.80.3,Provider,Azure OpenAI Responses 现代 Foundry endpoint URL 支持,feature,0,不使用 Azure,
 0.80.3,Provider,Usage.reasoning token 计数 (报告 reasoning/thinking token),feature,1,计费准确性,已合并
@@ -150,7 +150,7 @@ version,category,summary,type,merge,reason,status
 0.80.4,Extension,extension entry renderers 持久化 display-only entries,feature,1,扩展渲染,
 0.80.4,Config,项目级 resource override 管理 (pi config -l + Tab global/project),feature,0,本地有自己的配置系统,
 0.80.4,SDK,InMemorySessionStorage 和 JsonlSessionStorage 从 agent harness 导出,feature,1,SDK 增强,已合并
-0.80.4,SDK,JSONL session headers 自定义 metadata,feature,1,SDK 增强,
+0.80.4,SDK,JSONL session headers 自定义 metadata,feature,1,SDK 增强,已合并-H
 0.80.4,Config,showCacheMissNotices 设置和 /settings 开关 (重复),feature,0,显示偏好,
 0.80.4,Stability,gRPC ResourceExhausted (NVIDIA NIM) 重试分类,fix,1,重试覆盖,
 0.80.4,Stability,Cloudflare 524 超时重试分类,fix,1,重试覆盖,

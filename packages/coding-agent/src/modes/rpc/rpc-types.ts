@@ -60,6 +60,8 @@ export type RpcCommand =
 	| { id?: string; type: "clone" }
 	| { id?: string; type: "get_fork_messages" }
 	| { id?: string; type: "get_last_assistant_text" }
+	| { id?: string; type: "get_entries"; since?: string }
+	| { id?: string; type: "get_tree" }
 	| { id?: string; type: "set_session_name"; name: string }
 
 	// Messages
