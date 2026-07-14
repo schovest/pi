@@ -66,11 +66,11 @@ version,category,summary,type,merge,reason,status
 0.79.8,Security,更新漏洞依赖 undici + protobufjs,fix,1,安全修复,
 0.79.8,Compaction,compaction 拒绝无可压缩消息的 session,fix,1,不再产生空摘要,
 0.79.8,Compaction,overflow auto-compaction 完成后不重试已完成 assistant 响应,fix,1,稳定性,
-0.79.9,Provider,chat-template thinking (chat_template_kwargs) 用于 vLLM/DeepSeek,feature,1,自定义 provider 兼容,
-0.79.9,Provider,Fireworks GLM-5.2 OpenAI-compat Chat Completions 端点 + reasoning_effort,fix,1,模型路由修复,
+0.79.9,Provider,chat-template thinking (chat_template_kwargs) 用于 vLLM/DeepSeek,feature,1,自定义 provider 兼容,已合并-B
+0.79.9,Provider,Fireworks GLM-5.2 OpenAI-compat Chat Completions 端点 + reasoning_effort,fix,1,模型路由修复,已合并-B
 0.79.9,Stability,same-directory session switch 复用扩展模块保持新鲜实例,fix,1,扩展生命周期,
 0.79.9,Session,deep session branches 不再二次方时间构建 context,fix,1,性能修复,
-0.79.9,Provider,OpenRouter GLM-5.2 xhigh reasoning,fix,1,thinking 正确传递,
+0.79.9,Provider,OpenRouter GLM-5.2 xhigh reasoning,fix,1,thinking 正确传递,已合并-B
 0.79.9,UX,Markdown streaming code fence 部分闭合围栏不再闪烁,fix,1,渲染稳定性,
 0.79.9,Tools,fuzzy edit matches 保留未触碰行块,fix,1,编辑工具正确性,
 0.79.9,Tools,bash WSL bash.exe 通过 stdin 传脚本,fix,1,WSL 兼容,
@@ -80,7 +80,7 @@ version,category,summary,type,merge,reason,status
 0.79.10,Distribution,pi update 安装精确检查版本 / --force 重装 / 失败不 fallback,feature,0,本地有自己更新流程,
 0.79.10,Tools,find 尊重嵌套 git 仓库边界,fix,1,工具正确性,
 0.79.10,Docs,usage docs 加入 /trust 和 /import,fix,0,文档,
-0.79.10,Provider,OpenAI-compat streaming 保留加密 reasoning_details (tool call deltas 前),fix,1,reasoning 连续性,
+0.79.10,Provider,OpenAI-compat streaming 保留加密 reasoning_details (tool call deltas 前),fix,1,reasoning 连续性,已合并-B
 0.79.10,Docs,TUI 文档链接 plan-mode 扩展示例,fix,0,文档,
 0.79.10,Extension,transient extension UI/session-start 消息在 replacement/reload 后保持可见,fix,1,扩展 UI 稳定性,
 0.79.10,Extension,plan-mode 示例保留自定义工具/跳过无 plan 时 action prompt,fix,0,示例扩展,
@@ -91,14 +91,14 @@ version,category,summary,type,merge,reason,status
 0.80.0,Session,session names 换行符标准化,fix,1,显示正确性,已合并
 0.80.0,Session,session selector 按子树最新活动排序,fix,1,session 列表正确性,
 0.80.0,Extension,扩展相关崩溃和启动失败建议 pi -ne,fix,1,错误提示,
-0.80.0,Provider,OpenAI Responses streams 在 terminal events 前失败 + 忽略 all-zero usage,fix,1,稳定性,
+0.80.0,Provider,OpenAI Responses streams 在 terminal events 前失败 + 忽略 all-zero usage,fix,1,稳定性,已合并-B
 0.80.0,Provider,OpenAI Codex WebSocket 连接限制时重连一次,fix,1,长 session 稳定性,
 0.80.0,Provider,Amazon Bedrock endpoint resolution 尊重 scoped AWS_PROFILE,fix,0,不使用 Bedrock,
 0.80.0,Provider,Cloudflare providers 需要 account/gateway 配置,fix,0,不使用 Cloudflare,
-0.80.0,Provider,provider-scoped auth env 值到达 Models/ImagesModels API 和 compat API-key,fix,1,认证正确性,
+0.80.0,Provider,provider-scoped auth env 值到达 Models/ImagesModels API 和 compat API-key,fix,1,认证正确性,已合并-B
 0.80.0,Provider,OpenCode Go GLM-5.2 xhigh reasoning,fix,0,不使用 OpenCode,
 0.80.0,UX,pi --resume 加载用户 package themes 和 light/dark,fix,0,主题细节,
-0.80.0,Provider,models.json 自定义 providers 存储凭证满足 auth 无需冗余 apiKey,fix,1,配置正确性,
+0.80.0,Provider,models.json 自定义 providers 存储凭证满足 auth 无需冗余 apiKey,fix,1,配置正确性,已合并-B
 0.80.0,Provider,移除选择性 base entry points 改用 root + Models 工厂,removed,0,0.79.8 引入已移除,
 0.80.1,Provider,Amazon Bedrock scoped AWS_PROFILE endpoint resolution,fix,0,不使用 Bedrock,
 0.80.1,Provider,Fireworks Anthropic-compat 请求 session-affinity 和 tool-field 默认值,fix,0,不使用 Fireworks,
@@ -109,7 +109,7 @@ version,category,summary,type,merge,reason,status
 0.80.2,Provider,request-scoped apiKey 和 env 参与认证解析,fix,1,认证正确性,
 0.80.2,Provider,临时 legacy stream aliases 恢复 (streamSimpleOpenAICompletions 等),fix,1,兼容性,已合并
 0.80.2,Provider,detectCompat fallback 恢复用于无显式 compat 元数据的模型,fix,1,兼容性,已合并
-0.80.3,Provider,Anthropic Claude Sonnet 5 支持 (Anthropic + Bedrock adaptive thinking),feature,1,新模型,
+0.80.3,Provider,Anthropic Claude Sonnet 5 支持 (Anthropic + Bedrock adaptive thinking),feature,1,新模型,已合并-B
 0.80.3,Config,outputPad 控制用户/assistant/thinking 水平 padding,feature,0,显示细节,
 0.80.3,Config,externalEditor Ctrl+G 使用配置编辑器,feature,0,编辑器配置,
 0.80.3,RPC,get_entries 和 get_tree RPC 命令读取 session entries 和 tree,feature,1,RPC 增强,
@@ -118,12 +118,12 @@ version,category,summary,type,merge,reason,status
 0.80.3,Provider,Usage.reasoning token 计数 (报告 reasoning/thinking token),feature,1,计费准确性,已合并
 0.80.3,Provider,默认 OpenAI 模型改为 gpt-5.5,changed,1,模型更新,已合并
 0.80.3,Provider,OpenAI Codex SSE response-header 等待使用配置 HTTP timeout,changed,0,特定 provider,
-0.80.3,Provider,Claude Sonnet 5 adaptive thinking payloads,fix,1,新模型修复,
+0.80.3,Provider,Claude Sonnet 5 adaptive thinking payloads,fix,1,新模型修复,已合并-B
 0.80.3,Provider,Xiaomi MiMo 定价匹配 models.dev,fix,0,不使用 Xiaomi,
 0.80.3,Provider,provider HTTP errors 包含 response body,fix,1,错误信息完整性,
-0.80.3,Provider,streamSimple max-token caps 避免长请求被拒,fix,1,长上下文请求,
+0.80.3,Provider,streamSimple max-token caps 避免长请求被拒,fix,1,长上下文请求,已合并-B
 0.80.3,Provider,OpenAI Responses streams 保留 reasoning replay 状态 (乱序完成),fix,1,reasoning 连续性,已合并
-0.80.3,Provider,Z.AI preserved thinking 发送 thinking.clear_thinking: false,fix,1,缓存参与,
+0.80.3,Provider,Z.AI preserved thinking 发送 thinking.clear_thinking: false,fix,1,缓存参与,已合并-B
 0.80.3,Compaction,pre-prompt compaction 后停止而非继续,fix,1,compaction 正确性,已合并
 0.80.3,Session,resume sessions 时 resource notifications 在 messages 前,fix,1,上下文顺序,
 0.80.3,UX,startup benchmark timing 输出在 TUI 关闭后打印,fix,0,调试工具,
@@ -139,7 +139,7 @@ version,category,summary,type,merge,reason,status
 0.80.4,Config,showCacheMissNotices 设置和 /settings 开关,feature,0,显示偏好,
 0.80.4,Config,项目级 resource 配置管理 (pi config -l + Tab 切换),feature,0,本地有自己的配置系统,
 0.80.4,Extension,agent_settled / before_provider_headers / entry renderers / InlineExtension,feature,1,扩展 API 增强,
-0.80.4,Provider,GPT-5.6 元数据 (gpt-5.6/-sol/-terra/-luna + openai-codex 支持),feature,1,新模型,
+0.80.4,Provider,GPT-5.6 元数据 (gpt-5.6/-sol/-terra/-luna + openai-codex 支持),feature,1,新模型,已合并-B
 0.80.4,Provider,GitHub Copilot Claude Sonnet 5,feature,0,不使用 Copilot,
 0.80.4,Provider,OpenAI Codex zstd 请求体压缩 SSE transport,feature,0,特定 provider 传输,
 0.80.4,Auth,/login <provider> 支持 provider 自动补全,feature,0,登录交互,
@@ -171,7 +171,7 @@ version,category,summary,type,merge,reason,status
 0.80.4,Provider,OpenAI Codex user-agent 同步加载 OS metadata,fix,0,特定 provider,
 0.80.4,Distribution,pi update pnpm self-update cache 清理建议,fix,0,发行细节,
 0.80.4,Provider,Xiaomi Token Plan 模型元数据匹配 models.dev,fix,0,不使用 Xiaomi,
-0.80.4,Provider,startup model selection 跳过未认证 saved defaults,fix,1,模型选择正确性,
+0.80.4,Provider,startup model selection 跳过未认证 saved defaults,fix,1,模型选择正确性,已合并-B
 0.80.4,Extension,question extension 示例顺序执行多问题,fix,0,示例扩展,
 0.80.4,Auth,/login 报告 auth 存储持久化失败,fix,1,认证错误透明,已合并
 0.80.4,Compaction,split-turn compaction 序列化 summary 请求,fix,1,本地 provider 不再 429,已合并
@@ -181,22 +181,22 @@ version,category,summary,type,merge,reason,status
 0.80.4,Tools,edit tool schema 允许模型发明的额外替换字段,fix,1,减少无效工具调用,
 0.80.4,Session,new session reset 清除缓存 label 时间戳,fix,0,session 细节,
 0.80.4,Stability,Bun fetch socket-drop (socket connection was closed) 自动重试,fix,1,headless 稳定性,
-0.80.4,Provider,models.json modelOverrides 应用于 extension-registered provider models,fix,1,配置正确性,
+0.80.4,Provider,models.json modelOverrides 应用于 extension-registered provider models,fix,1,配置正确性,已合并-B
 0.80.4,Stability,Windows 项目 context 文件发现使用稳定父目录遍历,fix,1,Windows 启动不挂起,
 0.80.4,Session,--session-id 启动时警告不存在,fix,0,交互细节,
 0.80.4,UX,/reload help text 一致提及 themes 和 context files,fix,0,文档,
 0.80.4,Provider,移除 Vercel AI Gateway 默认 attribution headers,removed,0,不使用 Vercel Gateway,
 0.80.6,Thinking,max thinking level (xhigh 之上) CLI/SDK/RPC/主题全链路,feature,1,核心 thinking 功能,已合并
-0.80.6,Provider,输入 token 分级定价 (GPT-5.4/5.5/5.6 长上下文精确计费),feature,1,计费准确性,
+0.80.6,Provider,输入 token 分级定价 (GPT-5.4/5.5/5.6 长上下文精确计费),feature,1,计费准确性,已合并-B
 0.80.6,Config,shellPath 支持 ~ (home 目录) 展开,feature,1,配置便利,已合并
 0.80.6,Compaction,post-compaction output-token budgeting 忽略陈旧 assistant usage,fix,1,budget 正确性,
-0.80.6,Provider,GPT-5.4/5.5 long-context cost accounting 保留 272K 默认限制,fix,1,计费准确性,
-0.80.6,Provider,GPT-5.6 metadata 272K 短上下文 tier / Codex 372K 长上下文定价,fix,1,计费准确性,
+0.80.6,Provider,GPT-5.4/5.5 long-context cost accounting 保留 272K 默认限制,fix,1,计费准确性,已合并-B
+0.80.6,Provider,GPT-5.6 metadata 272K 短上下文 tier / Codex 372K 长上下文定价,fix,1,计费准确性,已合并-B
 0.80.6,Provider,Anthropic message conversion 保留空文本有效签名的 thinking blocks,fix,1,新 Claude 模型兼容,已合并
 0.80.6,Distribution,pi update pnpm 安装清理 self-update cache 建议,fix,0,发行细节,
 Unreleased,Extension,cache-friendly dynamic tool loading (Anthropic/OpenAI Responses 保留 cache 前缀),feature,1,扩展工具性能,
 Unreleased,UX,Ctrl+X 复制最后 assistant 消息或 /tree 选中消息,feature,0,快捷键可能冲突,
 Unreleased,Provider,Claude Fable 5 原生 xhigh 和 max thinking 全 catalogs,feature,1,新模型支持,已合并
-Unreleased,Provider,OpenRouter 继承模型上下文窗口使用 top provider 实际长度,fix,1,上下文正确性,
+Unreleased,Provider,OpenRouter 继承模型上下文窗口使用 top provider 实际长度,fix,1,上下文正确性,已合并-B
 Unreleased,UX,Ctrl+V 剪贴板无图片时粘贴文本,fix,0,快捷键细节,
 Unreleased,Auth,/login amazon-bedrock 提示保存 Bedrock API key,fix,0,不使用 Bedrock,
