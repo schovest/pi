@@ -72,13 +72,13 @@ version,category,summary,type,merge,reason,status
 0.79.9,Session,deep session branches 不再二次方时间构建 context,fix,1,性能修复,已合并-D
 0.79.9,Provider,OpenRouter GLM-5.2 xhigh reasoning,fix,1,thinking 正确传递,已合并-B
 0.79.9,UX,Markdown streaming code fence 部分闭合围栏不再闪烁,fix,1,渲染稳定性,
-0.79.9,Tools,fuzzy edit matches 保留未触碰行块,fix,1,编辑工具正确性,
-0.79.9,Tools,bash WSL bash.exe 通过 stdin 传脚本,fix,1,WSL 兼容,
+0.79.9,Tools,fuzzy edit matches 保留未触碰行块,fix,1,编辑工具正确性,已合并-F
+0.79.9,Tools,bash WSL bash.exe 通过 stdin 传脚本,fix,1,WSL 兼容,已合并-F
 0.79.9,UX,/model 隐藏不可用 Copilot 模型,fix,0,不使用 Copilot,
 0.79.9,UX,/model selector search 精确 provider-prefixed 优先,fix,0,交互细节,
 0.79.10,Extension,session_before_compact/session_compact 增加 reason 和 willRetry,feature,1,扩展事件增强,
 0.79.10,Distribution,pi update 安装精确检查版本 / --force 重装 / 失败不 fallback,feature,0,本地有自己更新流程,
-0.79.10,Tools,find 尊重嵌套 git 仓库边界,fix,1,工具正确性,
+0.79.10,Tools,find 尊重嵌套 git 仓库边界,fix,1,工具正确性,已合并-F
 0.79.10,Docs,usage docs 加入 /trust 和 /import,fix,0,文档,
 0.79.10,Provider,OpenAI-compat streaming 保留加密 reasoning_details (tool call deltas 前),fix,1,reasoning 连续性,已合并-B
 0.79.10,Docs,TUI 文档链接 plan-mode 扩展示例,fix,0,文档,
@@ -178,7 +178,7 @@ version,category,summary,type,merge,reason,status
 0.80.4,Compaction,compaction retained-token budgeting 计入 context-visible 自定义消息,fix,1,token 计数正确性,已合并-C
 0.80.4,Extension,自定义 session entries 在 assistant streaming 期间渲染顺序,fix,0,渲染细节,
 0.80.4,Tools,bash tool timeout 非正/超大值报清晰验证错误,fix,1,工具输入校验,已合并
-0.80.4,Tools,edit tool schema 允许模型发明的额外替换字段,fix,1,减少无效工具调用,
+0.80.4,Tools,edit tool schema 允许模型发明的额外替换字段,fix,1,减少无效工具调用,已合并-F
 0.80.4,Session,new session reset 清除缓存 label 时间戳,fix,0,session 细节,
 0.80.4,Stability,Bun fetch socket-drop (socket connection was closed) 自动重试,fix,1,headless 稳定性,
 0.80.4,Provider,models.json modelOverrides 应用于 extension-registered provider models,fix,1,配置正确性,已合并-B
