@@ -2060,8 +2060,17 @@ export class AgentSession {
 			return false;
 		}
 
-		// Case 1: Overflow - LLM returned context overflow error
+		// Case 1: Overflow - LLM returned context overflow error, or reported usage exceeded
+		// the configured window. A successful response over the configured window should compact
+		// but must not retry: the assistant answer already completed and agent.continue() cannot
+		// continue from an assistant message.
 		if (sameModel && isContextOverflow(assistantMessage, contextWindow)) {
+			const willRetry = assistantMessage.stopReason !== "stop";
+
+			if (!willRetry) {
+				return await this._runAutoCompaction("overflow", false);
+			}
+
 			if (this._overflowRecoveryAttempts >= this.MAX_OVERFLOW_RECOVERY) {
 				this._emit({
 					type: "compaction_end",
