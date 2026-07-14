@@ -133,6 +133,8 @@ npx vitest run --dir packages/agent/test agent-loop
 - 只解决自己修改过的文件里的冲突；冲突在他人文件时停止并询问
 - 不 force push
 - **升级版本必须打 tag**
+- **严禁添加 upstream 类远程仓库**（如 upstream-temp），严禁 fetch 上游仓库的 tag。只在 origin (schovest/pi) 上管理版本标签
+- **严禁批量删除/重建标签**，标签操作限定为版本升级流程中在 main 上打新版本 tag
 
 #### 分支策略
 
