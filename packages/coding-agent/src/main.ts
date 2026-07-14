@@ -227,7 +227,6 @@ function validateSessionIdFlags(parsed: Args): void {
 		parsed.session ? "--session" : undefined,
 		parsed.continue ? "--continue" : undefined,
 		parsed.resume ? "--resume" : undefined,
-		parsed.noSession ? "--no-session" : undefined,
 	].filter((flag): flag is string => flag !== undefined);
 
 	if (conflictingFlags.length > 0) {
