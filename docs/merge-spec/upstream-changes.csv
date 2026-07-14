@@ -69,7 +69,7 @@ version,category,summary,type,merge,reason,status
 0.79.9,Provider,chat-template thinking (chat_template_kwargs) 用于 vLLM/DeepSeek,feature,1,自定义 provider 兼容,已合并-B
 0.79.9,Provider,Fireworks GLM-5.2 OpenAI-compat Chat Completions 端点 + reasoning_effort,fix,1,模型路由修复,已合并-B
 0.79.9,Stability,same-directory session switch 复用扩展模块保持新鲜实例,fix,1,扩展生命周期,
-0.79.9,Session,deep session branches 不再二次方时间构建 context,fix,1,性能修复,
+0.79.9,Session,deep session branches 不再二次方时间构建 context,fix,1,性能修复,已合并-D
 0.79.9,Provider,OpenRouter GLM-5.2 xhigh reasoning,fix,1,thinking 正确传递,已合并-B
 0.79.9,UX,Markdown streaming code fence 部分闭合围栏不再闪烁,fix,1,渲染稳定性,
 0.79.9,Tools,fuzzy edit matches 保留未触碰行块,fix,1,编辑工具正确性,
@@ -89,7 +89,7 @@ version,category,summary,type,merge,reason,status
 0.80.0,Provider,zai provider label 改为 ZAI Coding Plan (Global),changed,0,标签细节,
 0.80.0,Provider,pi-ai 全局 API 从根入口移到 /compat (扩展运行时不受影响),breaking,1,必须跟的 Breaking Change,
 0.80.0,Session,session names 换行符标准化,fix,1,显示正确性,已合并
-0.80.0,Session,session selector 按子树最新活动排序,fix,1,session 列表正确性,
+0.80.0,Session,session selector 按子树最新活动排序,fix,1,session 列表正确性,已合并-D
 0.80.0,Extension,扩展相关崩溃和启动失败建议 pi -ne,fix,1,错误提示,
 0.80.0,Provider,OpenAI Responses streams 在 terminal events 前失败 + 忽略 all-zero usage,fix,1,稳定性,已合并-B
 0.80.0,Provider,OpenAI Codex WebSocket 连接限制时重连一次,fix,1,长 session 稳定性,
@@ -125,15 +125,15 @@ version,category,summary,type,merge,reason,status
 0.80.3,Provider,OpenAI Responses streams 保留 reasoning replay 状态 (乱序完成),fix,1,reasoning 连续性,已合并
 0.80.3,Provider,Z.AI preserved thinking 发送 thinking.clear_thinking: false,fix,1,缓存参与,已合并-B
 0.80.3,Compaction,pre-prompt compaction 后停止而非继续,fix,1,compaction 正确性,已合并
-0.80.3,Session,resume sessions 时 resource notifications 在 messages 前,fix,1,上下文顺序,
+0.80.3,Session,resume sessions 时 resource notifications 在 messages 前,fix,1,上下文顺序,已合并-D
 0.80.3,UX,startup benchmark timing 输出在 TUI 关闭后打印,fix,0,调试工具,
 0.80.3,Extension,extension tool changes 在下一次 provider request 前应用,fix,1,扩展工具一致性,
 0.80.3,Stability,undici 内部 client error 终止 mid-stream HTTP 时不崩溃,fix,1,稳定性,已合并
 0.80.3,UX,interactive status indicators 不在 clear-on-shrink 时缩小 TUI,fix,0,交互细节,
-0.80.3,Session,--session 和 SessionManager.open() 拒绝非空无效 session 文件,fix,1,数据安全,
+0.80.3,Session,--session 和 SessionManager.open() 拒绝非空无效 session 文件,fix,1,数据安全,已合并-D
 0.80.3,UX,user-message transcript 渲染保留 backslashes (Markdown 转义),fix,0,纯显示,
 0.80.3,Stability,assistant messages stopped by output length 显示可见错误,fix,1,用户可见性,
-0.80.3,Session,--no-session --session-id 确定性 session ID 用于 cache affinity,fix,1,缓存性能,
+0.80.3,Session,--no-session --session-id 确定性 session ID 用于 cache affinity,fix,1,缓存性能,已合并-D
 0.80.3,Tools,disk BMP 图片检测/转 PNG/通过 read 和 @file 附加,fix,1,图片兼容,已合并
 0.80.3,Stability,auto-retry provider stream errors 明确告知 retry,fix,1,重试覆盖,
 0.80.4,Config,showCacheMissNotices 设置和 /settings 开关,feature,0,显示偏好,
