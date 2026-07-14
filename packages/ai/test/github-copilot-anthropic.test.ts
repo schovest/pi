@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { getModel } from "../src/models.ts";
-import { streamAnthropic } from "../src/providers/anthropic.ts";
+import { getModel } from "../src/compat.ts";
+import { stream } from "../src/api/anthropic-messages.ts";
 import type { Context } from "../src/types.ts";
 
 const mockState = vi.hoisted(() => ({
@@ -58,7 +58,7 @@ describe("Copilot Claude via Anthropic Messages", () => {
 		const model = getModel("github-copilot", "claude-sonnet-4.6");
 		expect(model.api).toBe("anthropic-messages");
 
-		const s = streamAnthropic(model, context, { apiKey: "tid_copilot_session_test_token" });
+		const s = stream(model, context, { apiKey: "tid_copilot_session_test_token" });
 		for await (const event of s) {
 			if (event.type === "error") break;
 		}
@@ -93,7 +93,7 @@ describe("Copilot Claude via Anthropic Messages", () => {
 
 	it("omits interleaved-thinking beta for adaptive-thinking models", async () => {
 		const model = getModel("github-copilot", "claude-sonnet-4.6");
-		const s = streamAnthropic(model, context, {
+		const s = stream(model, context, {
 			apiKey: "tid_copilot_session_test_token",
 			interleavedThinking: true,
 		});
