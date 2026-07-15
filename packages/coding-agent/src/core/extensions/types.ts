@@ -228,12 +228,12 @@ export interface ExtensionUIContext {
 	 * - `keybindings`: KeybindingsManager for app-level keybindings
 	 *
 	 * For full app keybinding support (escape, ctrl+d, model switching, etc.),
-	 * extend `CustomEditor` from `@schovest/pi-coding-agent` and call
+	 * extend `CustomEditor` from `@earendil-works/pi-coding-agent` and call
 	 * `super.handleInput(data)` for keys you don't handle.
 	 *
 	 * @example
 	 * ```ts
-	 * import { CustomEditor } from "@schovest/pi-coding-agent";
+	 * import { CustomEditor } from "@earendil-works/pi-coding-agent";
 	 *
 	 * class VimEditor extends CustomEditor {
 	 *   private mode: "normal" | "insert" = "insert";
@@ -370,7 +370,7 @@ export interface ExtensionCommandContext extends ExtensionContext {
 		options?: { withSession?: (ctx: ReplacedSessionContext) => Promise<void> },
 	): Promise<{ cancelled: boolean }>;
 
-	/** Reload extensions, skills, prompts, and themes. */
+	/** Reload extensions, skills, prompts, themes, and context files. */
 	reload(): Promise<void>;
 }
 
@@ -1112,10 +1112,14 @@ export interface SessionBeforeTreeResult {
 }
 
 // ============================================================================
-// Message Rendering
+// Message and Entry Rendering
 // ============================================================================
 
 export interface MessageRenderOptions {
+	expanded: boolean;
+}
+
+export interface EntryRenderOptions {
 	expanded: boolean;
 }
 
@@ -1124,10 +1128,6 @@ export type MessageRenderer<T = unknown> = (
 	options: MessageRenderOptions,
 	theme: Theme,
 ) => Component | undefined;
-
-export interface EntryRenderOptions {
-	expanded: boolean;
-}
 
 export type EntryRenderer<T = unknown> = (
 	entry: CustomEntry<T>,
@@ -1451,8 +1451,8 @@ export interface ProviderModelConfig {
 	thinkingLevelMap?: Model<Api>["thinkingLevelMap"];
 	/** Supported input types. */
 	input: ("text" | "image")[];
-	/** Cost per token (for tracking, can be 0). */
-	cost: { input: number; output: number; cacheRead: number; cacheWrite: number };
+	/** Per-million-token cost rates and optional request-wide input pricing tiers. */
+	cost: Model<Api>["cost"];
 	/** Maximum context window size in tokens. */
 	contextWindow: number;
 	/** Maximum output tokens. */
@@ -1465,6 +1465,14 @@ export interface ProviderModelConfig {
 
 /** Extension factory function type. Supports both sync and async initialization. */
 export type ExtensionFactory = (pi: ExtensionAPI) => void | Promise<void>;
+
+export type InlineExtension =
+	| ExtensionFactory
+	| {
+			/** Display name shown as `<inline:name>` in the startup Extensions list. */
+			name: string;
+			factory: ExtensionFactory;
+	  };
 
 // ============================================================================
 // Loaded Extension Types
