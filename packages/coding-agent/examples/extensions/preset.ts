@@ -40,7 +40,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Api, Model } from "@schovest/pi-ai";
+import type { Api, Model } from "@earendil-works/pi-ai/compat";
 import type { ExtensionAPI, ExtensionContext } from "@schovest/pi-coding-agent";
 import { DynamicBorder, getAgentDir } from "@schovest/pi-coding-agent";
 import { Container, Key, type SelectItem, SelectList, Text } from "@schovest/pi-tui";

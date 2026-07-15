@@ -1,6 +1,6 @@
 import { type AgentMessage, uuidv7 } from "@earendil-works/pi-agent-core";
 import type { SubagentRunEntry } from "./types/subagent-entry.ts";
-import type { ImageContent, Message, TextContent } from "@schovest/pi-ai";
+import type { ImageContent, Message, TextContent } from "@earendil-works/pi-ai/compat";
 import { randomUUID } from "crypto";
 import {
 	appendFileSync,

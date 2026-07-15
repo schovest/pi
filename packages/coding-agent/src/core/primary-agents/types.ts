@@ -1,4 +1,4 @@
-import type { ThinkingLevel } from "@schovest/pi-agent-core";
+import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 
 export type PrimaryAgentDefinitionScope = "builtin" | "user" | "project";
 

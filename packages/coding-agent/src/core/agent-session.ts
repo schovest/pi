@@ -25,8 +25,8 @@ import {
 	PlanEngine,
 	// type PlanJSON,
 	type ThinkingLevel,
-} from "@schovest/pi-agent-core";
-import type { AssistantMessage, ImageContent, Message, Model, TextContent } from "@schovest/pi-ai";
+} from "@earendil-works/pi-agent-core";
+import type { AssistantMessage, ImageContent, Message, Model, TextContent } from "@earendil-works/pi-ai/compat";
 import {
 	clampThinkingLevel,
 	cleanupSessionResources,
@@ -35,7 +35,7 @@ import {
 	modelsAreEqual,
 	resetApiProviders,
 	streamSimple,
-} from "@schovest/pi-ai";
+} from "@earendil-works/pi-ai/compat";
 import { theme } from "../modes/interactive/theme/theme.ts";
 import { stripFrontmatter } from "../utils/frontmatter.ts";
 import { resolvePath } from "../utils/paths.ts";

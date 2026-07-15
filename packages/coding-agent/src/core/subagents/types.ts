@@ -1,5 +1,5 @@
-import type { AgentMessage, ThinkingLevel } from "@schovest/pi-agent-core";
-import type { Usage } from "@schovest/pi-ai";
+import type { AgentMessage, ThinkingLevel } from "@earendil-works/pi-agent-core";
+import type { Usage } from "@earendil-works/pi-ai/compat";
 import type { AgentSession } from "../agent-session.ts";
 
 export type SubagentScope = "user" | "project" | "both";

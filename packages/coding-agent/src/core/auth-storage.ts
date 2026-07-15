@@ -6,9 +6,9 @@
  * try to refresh tokens simultaneously.
  */
 
-import type { OAuthCredentials, OAuthLoginCallbacks, OAuthProviderId } from "@schovest/pi-ai";
-import { findEnvKeys, getEnvApiKey } from "@schovest/pi-ai";
-import { getOAuthApiKey, getOAuthProvider, getOAuthProviders } from "@schovest/pi-ai/oauth";
+import type { OAuthCredentials, OAuthLoginCallbacks, OAuthProviderId } from "@earendil-works/pi-ai/compat";
+import { findEnvKeys, getEnvApiKey } from "@earendil-works/pi-ai/compat";
+import { getOAuthApiKey, getOAuthProvider, getOAuthProviders } from "@earendil-works/pi-ai/oauth";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import lockfile from "proper-lockfile";

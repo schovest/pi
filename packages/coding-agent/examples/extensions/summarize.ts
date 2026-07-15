@@ -1,4 +1,4 @@
-import { complete, getModel } from "@schovest/pi-ai";
+import { complete, getModel } from "@earendil-works/pi-ai/compat";
 import type { ExtensionAPI, ExtensionCommandContext } from "@schovest/pi-coding-agent";
 import { DynamicBorder, getMarkdownTheme } from "@schovest/pi-coding-agent";
 import { Container, Markdown, matchesKey, Text } from "@schovest/pi-tui";

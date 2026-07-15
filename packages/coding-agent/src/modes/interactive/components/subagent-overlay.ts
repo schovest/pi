@@ -1,4 +1,4 @@
-import type { AgentMessage } from "@schovest/pi-agent-core";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import { Container, getKeybindings, matchesKey, Spacer, Text, visibleWidth } from "@schovest/pi-tui";
 import type { AgentSession, AgentSessionEvent } from "../../../core/agent-session.ts";
 import type { SubagentTaskResult } from "../../../core/subagents/types.ts";

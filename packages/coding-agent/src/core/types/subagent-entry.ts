@@ -1,7 +1,7 @@
 /**
  * Session tree entry for subagent runs.
  *
- * This type was previously defined in @schovest/pi-agent-core (fork-only addition).
+ * This type was previously defined in @earendil-works/pi-agent-core (fork-only addition).
  * Moved to coding-agent so we can use upstream @earendil-works/pi-agent-core directly.
  */
 export interface SubagentRunEntry {

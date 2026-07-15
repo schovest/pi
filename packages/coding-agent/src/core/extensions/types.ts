@@ -14,7 +14,7 @@ import type {
 	AgentToolUpdateCallback,
 	ThinkingLevel,
 	ToolExecutionMode,
-} from "@schovest/pi-agent-core";
+} from "@earendil-works/pi-agent-core";
 import type {
 	Api,
 	AssistantMessageEvent,
@@ -27,7 +27,7 @@ import type {
 	SimpleStreamOptions,
 	TextContent,
 	ToolResultMessage,
-} from "@schovest/pi-ai";
+} from "@earendil-works/pi-ai/compat";
 import type {
 	AutocompleteItem,
 	AutocompleteProvider,
@@ -1353,7 +1353,7 @@ export interface ExtensionAPI {
 	 * pipeline used by the main agent loop (bash execution formatting,
 	 * custom message handling, etc.).
 	 */
-	convertToLlm(entries: SessionEntry[]): import("@schovest/pi-ai").Message[];
+	convertToLlm(entries: SessionEntry[]): import("@earendil-works/pi-ai/compat").Message[];
 }
 
 // ============================================================================

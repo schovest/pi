@@ -1,4 +1,4 @@
-import type { AgentTool } from "@schovest/pi-agent-core";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Container, Text } from "@schovest/pi-tui";
 import { mkdir as fsMkdir, writeFile as fsWriteFile } from "fs/promises";
 import { dirname } from "path";

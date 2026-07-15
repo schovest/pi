@@ -1,5 +1,5 @@
-import type { ThinkingLevel } from "@schovest/pi-agent-core";
-import type { Transport } from "@schovest/pi-ai";
+import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
+import type { Transport } from "@earendil-works/pi-ai/compat";
 import {
 	Container,
 	getCapabilities,
