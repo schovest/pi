@@ -39,18 +39,23 @@ export function checkScriptSelfUpdateSupported(): string | undefined {
  * update.sh 内部已包含版本检查：已安装且为最新版本时自动跳过，
  * 因此调用方无需预先做版本比较。
  *
+ * @param force 设为 true 时传递 PI_FORCE_UPDATE=1，强制跳过版本检查
+ *
  * 子进程以 stdio:"inherit" 运行，直接接管终端输入输出。
  */
-export async function runScriptSelfUpdate(): Promise<ScriptSelfUpdateResult> {
+export async function runScriptSelfUpdate(force?: boolean): Promise<ScriptSelfUpdateResult> {
 	const unsupportedReason = checkScriptSelfUpdateSupported();
 	if (unsupportedReason) {
 		return { exitCode: null, unsupported: true, reason: unsupportedReason };
 	}
 
+	const env = force ? { ...process.env, PI_FORCE_UPDATE: "1" } : process.env;
+
 	return new Promise<ScriptSelfUpdateResult>((resolve) => {
 		// curl 下载 update.sh 并通过管道交给 bash 执行
 		const child = spawnProcess("bash", ["-c", `curl -fsSL ${UPDATE_SCRIPT_URL} | bash`], {
 			stdio: "inherit",
+			env,
 		});
 
 		child.on("error", (error) => {

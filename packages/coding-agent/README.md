@@ -64,14 +64,6 @@ I regularly publish my own `pi-mono` work sessions here:
 ## Quick Start
 
 ```bash
-npm install -g --ignore-scripts @schovest/pi-coding-agent
-```
-
-`--ignore-scripts` disables dependency lifecycle scripts during install. Pi does not require install scripts for normal npm installs.
-
-install the prebuilt binary from GitHub release (no Node.js required):
-
-```bash
 curl -fsSL https://raw.githubusercontent.com/schovest/pi/main/scripts/update.sh | bash
 ```
 

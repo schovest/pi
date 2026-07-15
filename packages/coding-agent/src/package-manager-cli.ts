@@ -925,7 +925,7 @@ export async function handleSelfUpdateCommand(args: string[]): Promise<boolean> 
 			}
 		}
 
-		const result = await runScriptSelfUpdate();
+		const result = await runScriptSelfUpdate(force);
 		if (result.unsupported) {
 			console.error(chalk.red(`Error: ${result.reason}`));
 			process.exitCode = 1;
@@ -934,7 +934,7 @@ export async function handleSelfUpdateCommand(args: string[]): Promise<boolean> 
 		if (result.exitCode === 0) {
 			console.log(chalk.green(`Updated ${APP_NAME}`));
 		} else if (result.exitCode !== null) {
-			console.error(chalk.red(`update.sh exited with code ${result.exitCode}`));
+			console.error(chalk.red(`Update script exited with code ${result.exitCode}`));
 			process.exitCode = 1;
 		} else {
 			console.error(chalk.red(`update.sh failed: ${result.reason ?? "unknown error"}`));

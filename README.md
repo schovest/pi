@@ -65,6 +65,12 @@ If you need stronger boundaries, containerize or sandbox Pi. See [packages/codin
 - **Gondolin extension**: keep `pi` and provider auth on the host while routing built-in tools and `!` commands into a local Linux micro-VM.
 - **Plain Docker**: run the whole `pi` process in a local container for simple isolation.
 
+## Quick Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/schovest/pi/main/scripts/update.sh | bash
+```
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines and [AGENTS.md](AGENTS.md) for project-specific rules (for both humans and agents).

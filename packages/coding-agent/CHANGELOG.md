@@ -1,5 +1,20 @@
 # Changelog
 
+## [Unreleased]
+
+## [0.10.1] - 2026-07-15
+
+### Changed
+
+- 后台命令完成通知从 followUp 队列改为 steer 队列，确保 agent 更及时收到通知
+- `update.sh` 不再随安装包落地（从 dist-assets 移除），`pi self-update` 始终从 GitHub 拉取最新 update.sh 执行
+
+### Fixed
+
+- 安装脚本支持交互式选择安装目录（空白默认 `~/.local/share/pi`），并持久化到 `~/.pi/agent/.install-prefix`
+- 升级时正确检测并安装到用户自定义的安装目录（配置文件 → 符号链接 → 默认值三级回退），不再强制使用默认路径
+- `pi self-update --force` 现在正确跳过版本检查（通过 `PI_FORCE_UPDATE=1` 传递给 update.sh）
+
 ## [0.10.0] - 2026-07-15
 
 ### Added

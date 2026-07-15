@@ -11,10 +11,29 @@
 # 环境变量:
 #   PI_INSTALL_PREFIX   安装目录 (默认 ~/.local/share/pi)
 #   PI_INSTALL_BINDIR   符号链接目录 (默认 ~/.local/bin)
+#   PI_FORCE_UPDATE     设为 1 时强制更新，跳过版本检查
 
 set -euo pipefail
 
 GITHUB_REPO="schovest/pi"
+# ---------------------------------------------------------------------------
+# 安装目录检测
+#   优先级：环境变量 > 保存的配置 > 符号链接解析 > 默认值
+#   确保升级时正确定位用户自定义的安装目录
+# ---------------------------------------------------------------------------
+
+if [ -z "${PI_INSTALL_PREFIX:-}" ]; then
+	if [ -f "$HOME/.pi/agent/.install-prefix" ]; then
+		PI_INSTALL_PREFIX=$(cat "$HOME/.pi/agent/.install-prefix" 2>/dev/null)
+	elif [ -L "$HOME/.local/bin/pi" ]; then
+		# 通过符号链接解析实际安装目录
+		_resolved=$(readlink -f "$HOME/.local/bin/pi" 2>/dev/null)
+		if [ -n "$_resolved" ]; then
+			PI_INSTALL_PREFIX=$(dirname "$_resolved")
+		fi
+	fi
+fi
+
 PREFIX="${PI_INSTALL_PREFIX:-$HOME/.local/share/pi}"
 BINDIR="${PI_INSTALL_BINDIR:-$HOME/.local/bin}"
 
@@ -91,13 +110,13 @@ echo "    最新版本: $RELEASE_TAG"
 echo "    平台:     $PLATFORM"
 
 # ---------------------------------------------------------------------------
-# 版本检查：已安装且为最新则跳过
+# 版本检查：已安装且为最新则跳过（PI_FORCE_UPDATE=1 时强制更新）
 # ---------------------------------------------------------------------------
 
 if [ -x "$PREFIX/pi" ]; then
 	LOCAL_VERSION=$("$PREFIX/pi" --version 2>/dev/null | head -1)
 	echo "    当前版本: v${LOCAL_VERSION}"
-	if [ "$LOCAL_VERSION" = "$LATEST_VERSION" ]; then
+	if [ "${PI_FORCE_UPDATE:-0}" != "1" ] && [ "$LOCAL_VERSION" = "$LATEST_VERSION" ]; then
 		echo ""
 		echo "==> 已经是最新版本，无需更新。"
 		exit 0
@@ -190,7 +209,8 @@ else
 	# 扩展持久化在 ~/.pi/agent/ 目录，update 的 rm -rf $PREFIX 不会删除
 	# 通过 PI_INSTALL_MODE=update 通知 install.sh 跳过扩展安装，
 	# 避免用默认配置集覆盖用户首次安装时的自定义选择
-	PI_INSTALL_MODE=update bash ./install.sh < /dev/null
+	# 同时传递 PI_INSTALL_PREFIX 确保安装到正确的目录
+	PI_INSTALL_MODE=update PI_INSTALL_PREFIX="$PREFIX" bash ./install.sh < /dev/null
 fi
 
 echo ""

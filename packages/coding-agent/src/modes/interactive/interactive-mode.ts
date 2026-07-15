@@ -6039,7 +6039,7 @@ export class InteractiveMode {
 		let exitCode: number | null = null;
 		let errorMessage: string | undefined;
 		try {
-			const result = await runScriptSelfUpdate();
+			const result = await runScriptSelfUpdate(force);
 			exitCode = result.exitCode;
 			if (result.unsupported) {
 				errorMessage = result.reason;
