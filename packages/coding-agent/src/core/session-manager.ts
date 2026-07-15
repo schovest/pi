@@ -1,4 +1,5 @@
-import { type AgentMessage, type SubagentRunEntry, uuidv7 } from "@schovest/pi-agent-core";
+import { type AgentMessage, uuidv7 } from "@earendil-works/pi-agent-core";
+import type { SubagentRunEntry } from "./types/subagent-entry.ts";
 import type { ImageContent, Message, TextContent } from "@schovest/pi-ai";
 import { randomUUID } from "crypto";
 import {
