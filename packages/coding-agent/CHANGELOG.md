@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-07-15
+
 ### Changed
 
 - 后台命令完成通知从 followUp 队列改为 steer 队列，确保 agent 更及时收到通知
