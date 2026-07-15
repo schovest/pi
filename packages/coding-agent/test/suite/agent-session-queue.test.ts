@@ -1,5 +1,5 @@
-import type { AgentTool } from "@schovest/pi-agent-core";
-import { fauxAssistantMessage, fauxToolCall } from "@schovest/pi-ai";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
+import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
 import type { ExtensionAPI } from "@schovest/pi-coding-agent";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
