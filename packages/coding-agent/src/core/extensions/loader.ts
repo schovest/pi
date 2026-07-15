@@ -50,20 +50,21 @@ const VIRTUAL_MODULES: Record<string, unknown> = {
 	"@sinclair/typebox/compile": _bundledTypeboxCompile,
 	"@sinclair/typebox/value": _bundledTypeboxValue,
 	"@earendil-works/pi-agent-core": _bundledPiAgentCore,
-	"@schovest/pi-tui": _bundledPiTui,
+	"@earendil-works/pi-tui": _bundledPiTui,
 	"@earendil-works/pi-ai/compat": _bundledPiAi,
 	"@earendil-works/pi-ai/oauth": _bundledPiAiOauth,
+	"@earendil-works/pi-coding-agent": _bundledPiCodingAgent,
+	// Legacy scope aliases — extensions may import from any of these scopes
+	"@schovest/pi-agent-core": _bundledPiAgentCore,
+	"@schovest/pi-tui": _bundledPiTui,
+	"@schovest/pi-ai": _bundledPiAi,
+	"@schovest/pi-ai/oauth": _bundledPiAiOauth,
 	"@schovest/pi-coding-agent": _bundledPiCodingAgent,
 	"@mariozechner/pi-agent-core": _bundledPiAgentCore,
 	"@mariozechner/pi-tui": _bundledPiTui,
 	"@mariozechner/pi-ai": _bundledPiAi,
 	"@mariozechner/pi-ai/oauth": _bundledPiAiOauth,
 	"@mariozechner/pi-coding-agent": _bundledPiCodingAgent,
-	"@earendil-works/pi-agent-core": _bundledPiAgentCore,
-	"@earendil-works/pi-tui": _bundledPiTui,
-	"@earendil-works/pi-ai": _bundledPiAi,
-	"@earendil-works/pi-ai/oauth": _bundledPiAiOauth,
-	"@earendil-works/pi-coding-agent": _bundledPiCodingAgent,
 };
 
 const require = createRequire(import.meta.url);
@@ -94,10 +95,10 @@ function getAliases(): Record<string, string> {
 	};
 
 	const piCodingAgentEntry = packageIndex;
-	const piAgentCoreEntry = resolveWorkspaceOrImport("agent/dist/index.js", "@earendil-works/pi-agent-core");
+	const piAgentCoreEntry = fileURLToPath(import.meta.resolve("@earendil-works/pi-agent-core"));
 	const piTuiEntry = resolveWorkspaceOrImport("tui/dist/index.js", "@schovest/pi-tui");
-	const piAiEntry = resolveWorkspaceOrImport("ai/dist/index.js", "@earendil-works/pi-ai/compat");
-	const piAiOauthEntry = resolveWorkspaceOrImport("ai/dist/oauth.js", "@earendil-works/pi-ai/oauth");
+	const piAiEntry = fileURLToPath(import.meta.resolve("@earendil-works/pi-ai/compat"));
+	const piAiOauthEntry = fileURLToPath(import.meta.resolve("@earendil-works/pi-ai/oauth"));
 
 	_aliases = {
 		"@schovest/pi-coding-agent": piCodingAgentEntry,
@@ -105,13 +106,16 @@ function getAliases(): Record<string, string> {
 		"@schovest/pi-tui": piTuiEntry,
 		"@earendil-works/pi-ai/compat": piAiEntry,
 		"@earendil-works/pi-ai/oauth": piAiOauthEntry,
+		// Legacy scope aliases
+		"@schovest/pi-agent-core": piAgentCoreEntry,
+		"@schovest/pi-ai": piAiEntry,
+		"@schovest/pi-ai/oauth": piAiOauthEntry,
 		"@mariozechner/pi-coding-agent": piCodingAgentEntry,
 		"@mariozechner/pi-agent-core": piAgentCoreEntry,
 		"@mariozechner/pi-tui": piTuiEntry,
 		"@mariozechner/pi-ai": piAiEntry,
 		"@mariozechner/pi-ai/oauth": piAiOauthEntry,
 		"@earendil-works/pi-coding-agent": piCodingAgentEntry,
-		"@earendil-works/pi-agent-core": piAgentCoreEntry,
 		"@earendil-works/pi-tui": piTuiEntry,
 		"@earendil-works/pi-ai": piAiEntry,
 		"@earendil-works/pi-ai/oauth": piAiOauthEntry,
