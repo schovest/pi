@@ -149,52 +149,48 @@ npx vitest run --dir packages/agent/test agent-loop
 
 所有包使用 lockstep 版本号，统一升降。流程：
 
-以下步骤全部在 **dev 分支**上执行（步骤 1-8），然后 merge 到 main（步骤 9-11），最后切回 dev（步骤 12）：
+以下步骤全部在 **dev 分支**上执行（步骤 1-7），然后 merge 到 main（步骤 8-10），最后切回 dev（步骤 11）：
 
 ```bash
-# 1. 升级版本号（所有 workspace 包统一）
-npm version <patch|minor|major> -ws --no-git-tag-version
+# 1. 升级版本号 + 同步包间依赖 + 更新 lockfile（一步完成）
+#    npm run version:<patch|minor|major> 等价于：
+#      npm version <level> -ws --no-git-tag-version
+#      node scripts/sync-versions.js
+#      npm install --package-lock-only --ignore-scripts
+npm run version:<patch|minor|major>
 
-# 2. 同步包间依赖版本（将 ^0.x.0 更新为新版本）
-node scripts/sync-versions.js
+# 2. 更新 root package.json 版本号（手动编辑）
 
-# 3. 更新 root package.json 版本号（手动编辑）
-
-# 4. 更新 lockfile
-npm install --package-lock-only --ignore-scripts
-
-# 5. 更新 shrinkwrap
+# 3. 更新 shrinkwrap
 node scripts/generate-coding-agent-shrinkwrap.mjs
 
-# 6. 构建并打包 tgz
+# 4. 构建并打包 tgz
 npm run build:tgz
 
-# 7. 更新 CHANGELOG [`packages/coding-agent/CHANGELOG.md`]（将 [Unreleased] 条目移入新版本段落）
+# 5. 更新 CHANGELOG [`packages/coding-agent/CHANGELOG.md`]（将 [Unreleased] 条目移入新版本段落）
 
-# 8. 在 dev 上提交版本升级
+# 6. 在 dev 上提交版本升级
 PI_ALLOW_LOCKFILE_CHANGE=1 git commit -m "chore: bump version to x.y.z"
 
-# 9. 切到 main，merge dev（--no-ff 保留 merge commit）
+# 7. 切到 main，merge dev（--no-ff 保留 merge commit）
 git checkout main
 git merge dev --no-ff -m "release vx.y.z: <变更摘要>"
 
-# 10. 在 main 上打 tag
+# 8. 在 main 上打 tag
 git tag vx.y.z
 
-# 11. push main + tag
+# 9. push main + tag
 #    ★ 这是触发发布的关键动作 ★
 #    push tag 后 CI/CD 自动构建二进制、创建 GitHub Release、发布 npm
 #    不需要手动创建 release 或运行任何发布脚本
 git push origin main
 git push origin vx.y.z
 
-# 12. 切回 dev 分支（避免后续开发误在 main 上操作）
+# 10. 切回 dev 分支（避免后续开发误在 main 上操作）
 git checkout dev
 ```
 
-注意：`npm version -ws` 会因远程仓库无对应版本报 ETARGET 错误，不影响本地版本号更新，可忽略。
-
-**关键认知**：版本发布的全部自动化都在 CI/CD 中完成（`.github/workflows/build-binaries.yml`）。`git push origin vx.y.z` 是唯一触发发布的动作；步骤 1-10 只是准备工作。push tag 后等待 CI 完成即可，不要手动创建 GitHub Release 或运行 `scripts/release.mjs`。
+**关键认知**：版本发布的全部自动化都在 CI/CD 中完成（`.github/workflows/build-binaries.yml`）。`git push origin vx.y.z` 是唯一触发发布的动作；步骤 1-8 只是准备工作。push tag 后等待 CI 完成即可，不要手动创建 GitHub Release 或运行 `scripts/release.mjs`。
 
 ### 构建与测试
 
