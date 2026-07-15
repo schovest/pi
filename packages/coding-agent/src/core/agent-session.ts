@@ -155,6 +155,7 @@ export type AgentSessionEvent =
 	  }
 	| { type: "compaction_start"; reason: "manual" | "threshold" | "overflow" }
 	| { type: "session_info_changed"; name: string | undefined }
+	| { type: "agent_settled" }
 	| { type: "thinking_level_changed"; level: ThinkingLevel }
 	| {
 			type: "compaction_end";
@@ -298,6 +299,9 @@ export class AgentSession {
 	// Event subscription state
 	private _unsubscribeAgent?: () => void;
 	private _eventListeners: AgentSessionEventListener[] = [];
+	private _isAgentRunActive = false;
+	private _idleWaitPromise: Promise<void> | undefined;
+	private _resolveIdleWait: (() => void) | undefined;
 
 	/** Tracks pending steering messages for UI display. Removed when delivered. */
 	private _steeringMessages: string[] = [];
@@ -1136,6 +1140,7 @@ export class AgentSession {
 	// =========================================================================
 
 	private async _runAgentPrompt(messages: AgentMessage | AgentMessage[]): Promise<void> {
+		this._isAgentRunActive = true;
 		try {
 			await this.agent.prompt(messages);
 			while (await this._handlePostAgentRun()) {
@@ -1143,6 +1148,7 @@ export class AgentSession {
 			}
 		} finally {
 			this._flushPendingBashMessages();
+			await this._emitAgentSettled();
 		}
 	}
 
@@ -2940,6 +2946,40 @@ export class AgentSession {
 		this._pendingBashMessages = [];
 	}
 
+	private _getIdleWaitPromise(): Promise<void> {
+		if (!this._idleWaitPromise) {
+			this._idleWaitPromise = new Promise((resolve) => {
+				this._resolveIdleWait = resolve;
+			});
+		}
+		return this._idleWaitPromise;
+	}
+
+	private _resolveIdleWaitIfIdle(): void {
+		if (this._isAgentRunActive || !this._resolveIdleWait) {
+			return;
+		}
+		const resolve = this._resolveIdleWait;
+		this._idleWaitPromise = undefined;
+		this._resolveIdleWait = undefined;
+		resolve();
+	}
+
+	private async _emitAgentSettled(): Promise<void> {
+		this._isAgentRunActive = false;
+		try {
+			await this._extensionRunner.emit({ type: "agent_settled" });
+			this._emit({ type: "agent_settled" });
+		} finally {
+			this._resolveIdleWaitIfIdle();
+		}
+	}
+
+	async waitForIdle(): Promise<void> {
+		if (!this._isAgentRunActive) return;
+		await this._getIdleWaitPromise();
+	}
+
 	// =========================================================================
 	// Session Management
 	// =========================================================================
@@ -2949,7 +2989,9 @@ export class AgentSession {
 	 */
 	setSessionName(name: string): void {
 		this.sessionManager.appendSessionInfo(name);
-		this._emit({ type: "session_info_changed", name: this.sessionManager.getSessionName() });
+		const event = { type: "session_info_changed", name: this.sessionManager.getSessionName() } as const;
+		this._emit(event);
+		void this._extensionRunner.emit(event);
 	}
 
 	// =========================================================================

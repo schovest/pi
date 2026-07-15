@@ -3456,6 +3456,10 @@ export class InteractiveMode {
 				this.ui.requestRender();
 				break;
 
+			case "agent_settled":
+				await this.checkShutdownRequested();
+				break;
+
 			case "compaction_start": {
 				if (this.settingsManager.getShowTerminalProgress()) {
 					this.ui.terminal.setProgress(true);
