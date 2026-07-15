@@ -88,7 +88,7 @@
 		"clean": "shx rm -rf dist",
 		"generate-models": "node scripts/generate-models.ts",
 		"generate-image-models": "node scripts/generate-image-models.ts",
-		"build": "npm run generate-models && npm run generate-image-models && tsgo -p tsconfig.build.json",
+		"build": "npm run generate-models && npm run generate-image-models && npx biome format --write src/providers/*.models.ts src/models.generated.ts src/image-models.generated.ts && tsgo -p tsconfig.build.json",
 		"test": "vitest --run",
 		"prepublishOnly": "npm run clean && npm run build"
 	},
