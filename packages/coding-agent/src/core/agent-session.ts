@@ -397,7 +397,7 @@ export class AgentSession {
 		this._unsubscribeAgent = this.agent.subscribe(this._handleAgentEvent);
 		this._installAgentToolHooks();
 
-		// Notify agent when a background process completes (via follow-up queue)
+		// Notify agent when a background process completes (via steering queue)
 		this._backgroundProcessManager.onCompleted((proc) => {
 			this._notifyBackgroundProcessComplete(proc).catch(() => {});
 		});
@@ -1479,7 +1479,7 @@ export class AgentSession {
 
 	/**
 	 * Notify the agent that a background process has completed.
-	 * Injects a follow-up message with the command, exit code, and output summary.
+	 * Injects a steering message with the command, exit code, and output summary.
 	 */
 	private async _notifyBackgroundProcessComplete(proc: BackgroundProcess): Promise<void> {
 		const snapshot = proc.output.snapshot({ persistIfTruncated: true });
@@ -1493,10 +1493,10 @@ export class AgentSession {
 			text += `\n\nOutput:\n${preview}`;
 		}
 		if (this.isStreaming) {
-			// Agent is busy — queue as follow-up to be delivered after current turn.
-			this._followUpMessages.push(text);
+			// Agent is busy — queue as steer to be delivered promptly after the current turn's tool calls.
+			this._steeringMessages.push(text);
 			this._emitQueueUpdate();
-			this.agent.followUp({
+			this.agent.steer({
 				role: "user",
 				content: [{ type: "text", text }],
 				timestamp: Date.now(),

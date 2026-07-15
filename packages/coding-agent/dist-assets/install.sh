@@ -8,6 +8,24 @@ AGENT_BIN_DIR="${HOME}/.pi/agent/bin"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # ---------------------------------------------------------------------------
+# Interactive directory selection on fresh install
+#   - Skipped in update mode (PI_INSTALL_MODE=update)
+#   - Skipped when PI_INSTALL_PREFIX is already set via env var
+#   - Skipped in non-interactive terminal ([ -t 0 ])
+# ---------------------------------------------------------------------------
+if [ "${PI_INSTALL_MODE:-install}" != "update" ] && [ -z "${PI_INSTALL_PREFIX:-}" ] && [ -t 0 ]; then
+	printf "\n安装目录 [默认: %s]: " "$PREFIX"
+	read -r _dir_input
+	if [ -n "$_dir_input" ]; then
+		PREFIX="$_dir_input"
+	fi
+fi
+
+# Persist installation prefix so future updates can locate it
+mkdir -p "$HOME/.pi/agent"
+printf '%s' "$PREFIX" > "$HOME/.pi/agent/.install-prefix"
+
+# ---------------------------------------------------------------------------
 # fd download helper
 # ---------------------------------------------------------------------------
 
@@ -122,9 +140,6 @@ fi
 # 安装脚本本身 — 允许用户随时重新运行 install.sh 调整扩展选择
 if [ -f "$SCRIPT_DIR/install.sh" ]; then
 	cp "$SCRIPT_DIR/install.sh" "$PREFIX/install.sh"
-fi
-if [ -f "$SCRIPT_DIR/update.sh" ]; then
-	cp "$SCRIPT_DIR/update.sh" "$PREFIX/update.sh"
 fi
 
 ln -sf "$PREFIX/pi" "$BINDIR/pi"

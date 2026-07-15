@@ -158,7 +158,6 @@ for platform in "${PLATFORMS[@]}"; do
     cp -r dist-assets/extensions "$OUTPUT_DIR/$platform/"
     cp -r dist-assets/primary-agents "$OUTPUT_DIR/$platform/"
     cp dist-assets/install.sh "$OUTPUT_DIR/$platform/"
-    cp dist-assets/update.sh "$OUTPUT_DIR/$platform/"
 
     case "$platform" in
         darwin-arm64)
