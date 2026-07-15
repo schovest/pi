@@ -1,5 +1,4 @@
 import { type AgentMessage, uuidv7 } from "@earendil-works/pi-agent-core";
-import type { SubagentRunEntry } from "./types/subagent-entry.ts";
 import type { ImageContent, Message, TextContent } from "@earendil-works/pi-ai/compat";
 import { randomUUID } from "crypto";
 import {
@@ -27,6 +26,7 @@ import {
 	createCompactionSummaryMessage,
 	createCustomMessage,
 } from "./messages.ts";
+import type { SubagentRunEntry } from "./types/subagent-entry.ts";
 
 export const CURRENT_SESSION_VERSION = 3;
 

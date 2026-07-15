@@ -11,6 +11,7 @@ import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
+import { getOpenAICodexWebSocketDebugStats, streamSimple } from "@earendil-works/pi-ai/api/openai-codex-responses";
 import {
 	type Api,
 	type AssistantMessage,
@@ -21,10 +22,6 @@ import {
 	type SimpleStreamOptions,
 	Type,
 } from "@earendil-works/pi-ai/compat";
-import {
-	getOpenAICodexWebSocketDebugStats,
-	streamSimple,
-} from "@earendil-works/pi-ai/api/openai-codex-responses";
 import { AuthStorage } from "../src/core/auth-storage.ts";
 import { createExtensionRuntime } from "../src/core/extensions/loader.ts";
 import type { ToolDefinition } from "../src/core/extensions/types.ts";
@@ -286,8 +283,7 @@ async function main(): Promise<void> {
 		registryModel: Model<Api>,
 		context: Context,
 		options?: SimpleStreamOptions,
-	): AssistantMessageEventStream =>
-		streamSimple(registryModel as Model<"openai-codex-responses">, context, options);
+	): AssistantMessageEventStream => streamSimple(registryModel as Model<"openai-codex-responses">, context, options);
 	modelRegistry.registerProvider("openai-codex", {
 		api: "openai-codex-responses",
 		baseUrl: baseModel.baseUrl,

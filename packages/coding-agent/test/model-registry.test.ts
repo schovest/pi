@@ -1,7 +1,13 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { AnthropicMessagesCompat, Api, Context, Model, OpenAICompletionsCompat } from "@earendil-works/pi-ai/compat";
+import type {
+	AnthropicMessagesCompat,
+	Api,
+	Context,
+	Model,
+	OpenAICompletionsCompat,
+} from "@earendil-works/pi-ai/compat";
 import { getApiProvider } from "@earendil-works/pi-ai/compat";
 import { getOAuthProvider } from "@earendil-works/pi-ai/oauth";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
