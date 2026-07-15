@@ -315,6 +315,7 @@ export type ResolvedRequestAuth =
 			ok: true;
 			apiKey?: string;
 			headers?: Record<string, string>;
+			env?: Record<string, string>;
 	  }
 	| {
 			ok: false;

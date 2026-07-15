@@ -742,6 +742,7 @@ export async function compact(
 	signal?: AbortSignal,
 	thinkingLevel?: ThinkingLevel,
 	streamFn?: StreamFn,
+	_env?: Record<string, string>,
 ): Promise<CompactionResult> {
 	const {
 		firstKeptEntryId,

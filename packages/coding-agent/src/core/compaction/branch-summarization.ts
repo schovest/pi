@@ -69,6 +69,8 @@ export interface GenerateBranchSummaryOptions {
 	apiKey: string;
 	/** Request headers for the model */
 	headers?: Record<string, string>;
+	/** Provider-scoped environment values for the model */
+	env?: Record<string, string>;
 	/** Abort signal for cancellation */
 	signal: AbortSignal;
 	/** Optional custom instructions for summarization */
