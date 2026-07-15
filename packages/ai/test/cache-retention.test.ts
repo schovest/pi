@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { getModel } from "../src/compat.ts";
-import { streamOpenAICompletions } from "../src/providers/openai-completions.ts";
-import { streamOpenAIResponses } from "../src/providers/openai-responses.ts";
+import { stream as streamAnthropic } from "../src/api/anthropic-messages.ts";
+import { stream as streamOpenAICompletions } from "../src/api/openai-completions.ts";
+import { stream as streamOpenAIResponses } from "../src/api/openai-responses.ts";
+import { getModel, stream } from "../src/compat.ts";
+import { MODELS } from "../src/models.generated.ts";
 import type { Context, Model } from "../src/types.ts";
 
 class PayloadCaptured extends Error {
@@ -9,6 +11,11 @@ class PayloadCaptured extends Error {
 		super("payload captured");
 		this.name = "PayloadCaptured";
 	}
+}
+
+interface OpenAICompletionsCachePayload {
+	prompt_cache_key?: string;
+	prompt_cache_retention?: string;
 }
 
 function stopAfterPayload<TPayload>(capture: (payload: TPayload) => void): (payload: unknown) => never {
@@ -105,7 +112,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 			// and just verify the helper logic works correctly
 
 			try {
-				const s = stream(proxyModel, context, {
+				const s = streamAnthropic(proxyModel, context, {
 					apiKey: "fake-key",
 					onPayload: stopAfterPayload((payload) => {
 						capturedPayload = payload;
@@ -134,7 +141,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 			let capturedPayload: any = null;
 
 			try {
-				const s = stream(proxyModel, context, {
+				const s = streamAnthropic(proxyModel, context, {
 					apiKey: "fake-key",
 					cacheRetention: "long",
 					onPayload: stopAfterPayload((payload) => {
@@ -158,7 +165,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 			let capturedPayload: any = null;
 
 			try {
-				const s = stream(baseModel, context, {
+				const s = streamAnthropic(baseModel, context, {
 					apiKey: "fake-key",
 					cacheRetention: "none",
 					onPayload: stopAfterPayload((payload) => {
@@ -182,7 +189,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 			let capturedPayload: any = null;
 
 			try {
-				const s = stream(baseModel, context, {
+				const s = streamAnthropic(baseModel, context, {
 					apiKey: "fake-key",
 					onPayload: stopAfterPayload((payload) => {
 						capturedPayload = payload;
@@ -208,7 +215,7 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 			let capturedPayload: any = null;
 
 			try {
-				const s = stream(baseModel, context, {
+				const s = streamAnthropic(baseModel, context, {
 					apiKey: "fake-key",
 					cacheRetention: "long",
 					onPayload: stopAfterPayload((payload) => {
@@ -452,6 +459,40 @@ describe("Cache Retention (PI_CACHE_RETENTION)", () => {
 			expect(capturedPayload).not.toBeNull();
 			expect(capturedPayload.prompt_cache_key).toBeUndefined();
 			expect(capturedPayload.prompt_cache_retention).toBeUndefined();
+		});
+
+		it.each([
+			MODELS.opencode["deepseek-v4-flash"],
+			MODELS.opencode["deepseek-v4-pro"],
+			MODELS.opencode["kimi-k2.5"],
+			MODELS.opencode["kimi-k2.6"],
+			MODELS.opencode["minimax-m2.7"],
+			MODELS["opencode-go"]["kimi-k2.6"],
+		] as const)("should omit long cache retention for $provider/$id", async (metadata) => {
+			const model = metadata as Model<"openai-completions">;
+			let capturedPayload: OpenAICompletionsCachePayload | undefined;
+
+			try {
+				const s = streamOpenAICompletions(model, context, {
+					apiKey: "fake-key",
+					cacheRetention: "long",
+					sessionId: "session-opencode-long-cache-unsupported",
+					onPayload: stopAfterPayload<OpenAICompletionsCachePayload>((payload) => {
+						capturedPayload = payload;
+					}),
+				});
+
+				for await (const event of s) {
+					if (event.type === "error") break;
+				}
+			} catch {
+				// Expected to fail
+			}
+
+			expect(model.compat?.supportsLongCacheRetention).toBe(false);
+			expect(capturedPayload).toBeDefined();
+			expect(capturedPayload?.prompt_cache_key).toBeUndefined();
+			expect(capturedPayload?.prompt_cache_retention).toBeUndefined();
 		});
 	});
 });
