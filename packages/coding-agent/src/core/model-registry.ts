@@ -410,6 +410,7 @@ export class ModelRegistry {
 	private models: Model<Api>[] = [];
 	private providerRequestConfigs: Map<string, ProviderRequestConfig> = new Map();
 	private modelRequestHeaders: Map<string, Record<string, string>> = new Map();
+	private configModelOverrides: Map<string, Map<string, ModelOverride>> = new Map();
 	private registeredProviders: Map<string, ProviderConfigInput> = new Map();
 	private loopGuardConfigs: Map<string, { resilience?: "high" | "medium" | "low"; maxTurns?: number }> = new Map();
 	private loadError: string | undefined = undefined;
@@ -465,6 +466,7 @@ export class ModelRegistry {
 			modelOverrides,
 			error,
 		} = this.modelsJsonPath ? this.loadCustomModels(this.modelsJsonPath) : emptyCustomModelsResult();
+		this.configModelOverrides = modelOverrides;
 
 		if (error) {
 			this.loadError = error;
@@ -516,6 +518,15 @@ export class ModelRegistry {
 				return model;
 			});
 		});
+	}
+
+	private getConfiguredModelOverride(providerName: string, modelId: string): ModelOverride | undefined {
+		return this.configModelOverrides.get(providerName)?.get(modelId);
+	}
+
+	private applyConfiguredModelOverride(providerName: string, model: Model<Api>): Model<Api> {
+		const modelOverride = this.getConfiguredModelOverride(providerName, model.id);
+		return modelOverride ? applyModelOverride(model, modelOverride) : model;
 	}
 
 	/** Merge custom models into built-in list by provider+id (custom wins on conflicts). */
@@ -986,7 +997,12 @@ export class ModelRegistry {
 			// Parse and add new models
 			for (const modelDef of config.models) {
 				const api = modelDef.api || config.api;
-				this.storeModelHeaders(providerName, modelDef.id, modelDef.headers);
+				const modelOverride = this.getConfiguredModelOverride(providerName, modelDef.id);
+				const headers =
+					modelDef.headers || modelOverride?.headers
+						? { ...modelDef.headers, ...modelOverride?.headers }
+						: undefined;
+				this.storeModelHeaders(providerName, modelDef.id, headers);
 
 				// Store loop guard config if resilience is specified
 				if (modelDef.resilience !== undefined || modelDef.maxTurns !== undefined) {
@@ -996,7 +1012,7 @@ export class ModelRegistry {
 					});
 				}
 
-				this.models.push({
+				const model = this.applyConfiguredModelOverride(providerName, {
 					id: modelDef.id,
 					name: modelDef.name,
 					api: api as Api,
@@ -1011,6 +1027,7 @@ export class ModelRegistry {
 					headers: undefined,
 					compat: modelDef.compat,
 				} as Model<Api>);
+				this.models.push(model);
 			}
 
 			// Apply OAuth modifyModels if credentials exist (e.g., to update baseUrl)
