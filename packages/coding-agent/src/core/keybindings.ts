@@ -16,6 +16,7 @@ export interface AppKeybindings {
 	"app.exit": true;
 	"app.suspend": true;
 	"app.thinking.cycle": true;
+	"app.agent.cycle": true;
 	"app.thinking.select": true;
 	"app.model.cycleForward": true;
 	"app.model.cycleBackward": true;
@@ -73,8 +74,12 @@ export const KEYBINDINGS = {
 		description: "Suspend to background",
 	},
 	"app.thinking.cycle": {
-		defaultKeys: "shift+tab",
+		defaultKeys: [] as KeyId[],
 		description: "Cycle thinking level",
+	},
+	"app.agent.cycle": {
+		defaultKeys: "shift+tab",
+		description: "Cycle primary agent",
 	},
 	"app.thinking.select": {
 		defaultKeys: "ctrl+shift+l",

@@ -8,6 +8,10 @@
 - `agent-session-retry-events` 测试断言对齐上游 `agent_settled` 事件
 - 内置 `/plugins` 命令重命名为 `/claude-plugin`（CLI: `pi claude-plugin`），避免与 pi-plugin-manager 扩展的 `/plugins` 命令冲突
 
+### Changed
+
+- `Shift+Tab` 从循环切换思考强度改为循环切换 primary agent；思考强度切换通过命令面板访问
+
 ## [0.11.0] - 2026-07-16
 
 ### Changed
