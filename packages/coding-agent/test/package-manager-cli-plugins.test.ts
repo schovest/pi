@@ -59,7 +59,7 @@ describe("plugin CLI search", () => {
 		settingsManager.setPluginMarketplaces({ claude: { source: marketplaceRoot } });
 		await settingsManager.flush();
 
-		await handlePluginCommand(["plugins", "search", "super"]);
+		await handlePluginCommand(["claude-plugin", "search", "super"]);
 
 		const output = logSpy.mock.calls.flat().join("\n");
 		expect(output).toContain("superpowers@claude");
@@ -69,7 +69,7 @@ describe("plugin CLI search", () => {
 	});
 
 	it("prints a clear message when no plugin marketplaces are configured", async () => {
-		await handlePluginCommand(["plugins", "search", "super"]);
+		await handlePluginCommand(["claude-plugin", "search", "super"]);
 
 		expect(logSpy.mock.calls.flat().join("\n")).toContain("No plugin marketplaces configured.");
 		expect(process.exitCode).toBeUndefined();
@@ -82,7 +82,7 @@ describe("plugin CLI search", () => {
 		settingsManager.setPluginMarketplaces({ claude: { source: marketplaceRoot } });
 		await settingsManager.flush();
 
-		await handlePluginCommand(["plugins", "search", "missing"]);
+		await handlePluginCommand(["claude-plugin", "search", "missing"]);
 
 		expect(logSpy.mock.calls.flat().join("\n")).toContain("No matching plugins found.");
 		expect(process.exitCode).toBeUndefined();

@@ -20,7 +20,7 @@
 详细架构文档见 [`docs/specs/architecture.md`](docs/specs/architecture.md)，以下为摘要索引。**更新 `docs/specs/` 下文件时须同步更新本索引。**
 
 | 章节 | 文件 | 摘要 |
-|------|------|------|
+| ------ | ------ | ------ |
 | 包依赖关系 | `docs/specs/architecture.md#包依赖关系` | coding-agent → agent + tui → ai |
 | 各包职责 | `docs/specs/architecture.md#各包职责` | agent/ai/tui/coding-agent 四包职责与关键导出 |
 | 核心数据流 | `docs/specs/architecture.md#核心数据流` | 一次 prompt 的完整调用链：Mode → AgentSession → Agent → runAgentLoop → streamSimple → Provider → EventStream |
@@ -97,7 +97,7 @@ npx vitest run --dir packages/agent/test agent-loop
 **判断用哪种 runner**：
 
 | 包 | Runner | 命令 | 断言风格 |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | **tui** | `node:test` | `node --test test/*.test.ts`（从包目录） | `import assert from "node:assert"` |
 | **agent** | vitest | `npx vitest run --dir packages/agent/test <pattern>` | `import { describe, expect, it } from "vitest"` |
 | **ai** | vitest | `npx vitest run --dir packages/ai/test <pattern>` | `import { describe, expect, it } from "vitest"` |
@@ -108,6 +108,7 @@ npx vitest run --dir packages/agent/test agent-loop
 - **禁止混用**：tui 测试只用 `node:test` + `node:assert`，其他包只用 vitest；新增测试文件须遵循所属包的 runner
 
 **vitest 扫描问题**：
+
 - vitest 默认 `include` 模式为 `**/*.{test,spec}.{ts,tsx,...}`，从项目根递归扫描
 - `.worktrees/` 下的旧分支代码会被一并发现，导致加载失败或运行错误
 - `--dir` 将搜索根限定到指定目录，彻底避免此问题
@@ -139,9 +140,9 @@ npx vitest run --dir packages/agent/test agent-loop
 #### 分支策略
 
 - `dev`：日常开发分支，自由提交
-- `main`：保护分支，只有验证通过的版本才从 dev 合并进来
-- 一个版本一次 merge，merge commit message 填写该版本的全部变更摘要
-- tag 打在 main 的 merge commit 上，不在 dev 上打 tag
+- `main`：保护分支，dev 上的改动经 `npm run check` 通过并完成相关测试后可合并，不限于版本升级
+- 合并使用 `--no-ff`，merge commit message 填写变更摘要
+- 版本 tag 打在 main 的 merge commit 上，不在 dev 上打 tag
 
 #### 版本升级流程
 

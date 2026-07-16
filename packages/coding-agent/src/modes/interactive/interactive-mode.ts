@@ -2536,6 +2536,7 @@ export class InteractiveMode {
 		this.defaultEditor.onCtrlD = () => this.handleCtrlD();
 		this.defaultEditor.onAction("app.suspend", () => this.handleCtrlZ());
 		this.defaultEditor.onAction("app.thinking.cycle", () => this.cycleThinkingLevel());
+		this.defaultEditor.onAction("app.agent.cycle", () => this.cycleAgent());
 		this.defaultEditor.onAction("app.thinking.select", () => this.showThinkingSelector());
 		this.defaultEditor.onAction("app.model.cycleForward", () => this.cycleModel("forward"));
 		this.defaultEditor.onAction("app.model.cycleBackward", () => this.cycleModel("backward"));
@@ -2624,8 +2625,16 @@ export class InteractiveMode {
 			label: "切换思考级别",
 			description: "循环切换思考级别",
 			category: "settings",
-			keybinding: "shift+tab",
 			handler: () => this.cycleThinkingLevel(),
+		});
+
+		registry.register({
+			id: "app.agent.cycle",
+			label: "切换 Agent",
+			description: "循环切换 primary agent",
+			category: "settings",
+			keybinding: "shift+tab",
+			handler: () => this.cycleAgent(),
 		});
 
 		registry.register({
@@ -2738,9 +2747,9 @@ export class InteractiveMode {
 		});
 
 		registry.register({
-			id: "slash.plugins",
-			label: "/plugins",
-			description: "管理插件",
+			id: "slash.claude-plugin",
+			label: "/claude-plugin",
+			description: "管理 Claude 插件",
 			category: "slash",
 			handler: () => this.handlePluginsCommand(),
 		});
@@ -3029,7 +3038,7 @@ export class InteractiveMode {
 				this.editor.setText("");
 				return;
 			}
-			if (text === "/plugins") {
+			if (text === "/claude-plugin") {
 				this.handlePluginsCommand();
 				return;
 			}
@@ -4187,6 +4196,32 @@ export class InteractiveMode {
 			this.footer.invalidate();
 			this.updateEditorBorderColor();
 			this.showStatus(`Thinking level: ${newLevel}`);
+		}
+	}
+
+	private async cycleAgent(): Promise<void> {
+		const agents = discoverPrimaryAgentsSync({
+			cwd: this.session.cwd,
+			agentDir: this.session.agentDir,
+		});
+		if (agents.length === 0) {
+			this.showStatus("No primary agent definitions available");
+			return;
+		}
+		const current = this.session.currentPrimaryAgent;
+		const currentIndex = agents.findIndex((a) => a.name === current);
+		const nextIndex = (currentIndex + 1) % agents.length;
+		const nextAgent = agents[nextIndex];
+		if (!nextAgent || nextAgent.name === current) {
+			this.showStatus("Only one agent available");
+			return;
+		}
+		try {
+			await this.session.switchPrimaryAgent(nextAgent.name);
+			this.footer.invalidate();
+			this.showStatus(`Agent: ${nextAgent.name}`);
+		} catch (error) {
+			this.showError(error instanceof Error ? error.message : String(error));
 		}
 	}
 
@@ -6407,8 +6442,8 @@ export class InteractiveMode {
 		const clear = this.getAppKeyDisplay("app.clear");
 		const exit = this.getAppKeyDisplay("app.exit");
 		const suspend = this.getAppKeyDisplay("app.suspend");
-		const cycleThinkingLevel = this.getAppKeyDisplay("app.thinking.cycle");
 		const selectThinkingLevel = this.getAppKeyDisplay("app.thinking.select");
+		const cycleAgent = this.getAppKeyDisplay("app.agent.cycle");
 		const cycleModelForward = this.getAppKeyDisplay("app.model.cycleForward");
 		const selectModel = this.getAppKeyDisplay("app.model.select");
 		const expandTools = this.getAppKeyDisplay("app.tools.expand");
@@ -6452,7 +6487,7 @@ export class InteractiveMode {
 | \`${clear}\` | Clear editor (first) / exit (second) |
 | \`${exit}\` | Exit (when editor is empty) |
 | \`${suspend}\` | Suspend to background |
-| \`${cycleThinkingLevel}\` | Cycle thinking level |
+| \`${cycleAgent}\` | Cycle primary agent |
 | \`${selectThinkingLevel}\` | Open thinking level selector |
 | \`${cycleModelForward}\` / \`${cycleModelBackward}\` | Cycle models |
 | \`${selectModel}\` | Open model selector |

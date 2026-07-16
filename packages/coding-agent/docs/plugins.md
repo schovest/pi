@@ -1,35 +1,35 @@
 # Claude-Compatible Plugins
 
-Pi can install a subset of Claude marketplace plugins through the `pi plugins` command family. These plugins are separate from Pi packages.
+Pi can install a subset of Claude marketplace plugins through the `pi claude-plugin` command family. These plugins are separate from Pi packages.
 
-Use `pi install`, `pi remove`, `pi list`, and `pi update --extensions` for native Pi packages. Use `pi plugins ...` for Claude-compatible marketplace plugins.
+Use `pi install`, `pi remove`, `pi list`, and `pi update --extensions` for native Pi packages. Use `pi claude-plugin ...` for Claude-compatible marketplace plugins.
 
 ## Commands
 
 ```bash
-pi plugins marketplace add claude https://github.com/example/marketplace
-pi plugins marketplace list
-pi plugins marketplace remove claude
+pi claude-plugin marketplace add claude https://github.com/example/marketplace
+pi claude-plugin marketplace list
+pi claude-plugin marketplace remove claude
 
-pi plugins search
-pi plugins search super
-pi plugins search super --marketplace claude
+pi claude-plugin search
+pi claude-plugin search super
+pi claude-plugin search super --marketplace claude
 
-pi plugins install superpowers@claude
-pi plugins install https://github.com/user/claude-plugin
-pi plugins install ./local/plugin -l
+pi claude-plugin install superpowers@claude
+pi claude-plugin install https://github.com/user/claude-plugin
+pi claude-plugin install ./local/plugin -l
 
-pi plugins list
-pi plugins remove superpowers
-pi plugins update
-pi plugins update superpowers
+pi claude-plugin list
+pi claude-plugin remove superpowers
+pi claude-plugin update
+pi claude-plugin update superpowers
 ```
 
 By default, plugin settings are written to `~/.pi/agent/settings.json` and plugin clones are stored in `~/.pi/agent/plugins/`. Use `-l` with `install` or `remove` to use project scope: `.pi/settings.json` and `.pi/plugins/`.
 
-`pi plugins search [query]` searches the catalogs from configured `pluginMarketplaces`. With no query it lists all catalog entries. Use `--marketplace <name>` or `-m <name>` to search one configured marketplace.
+`pi claude-plugin search [query]` searches the catalogs from configured `pluginMarketplaces`. With no query it lists all catalog entries. Use `--marketplace <name>` or `-m <name>` to search one configured marketplace.
 
-In interactive mode, `/plugins` opens the plugin manager. It can search marketplace catalogs, install a selected plugin to user or project scope, list installed user/project plugins, update or remove installed plugins, and list/add/remove configured marketplaces. Marketplace add/remove writes user settings by default, matching the CLI behavior.
+In interactive mode, `/claude-plugin` opens the plugin manager. It can search marketplace catalogs, install a selected plugin to user or project scope, list installed user/project plugins, update or remove installed plugins, and list/add/remove configured marketplaces. Marketplace add/remove writes user settings by default, matching the CLI behavior.
 
 ## Supported Claude Fields
 
