@@ -41,5 +41,6 @@ plans/
 !docs/superpowers/plans/
 .pi/hf-sessions/
 .pi/hf-sessions-backup/
+.pi/settings.json
 collect.sh
 .worktrees/

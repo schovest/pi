@@ -1365,4 +1365,126 @@ bar`,
 			);
 		});
 	});
+
+	describe("Incremental rendering (appendText)", () => {
+		it("should produce identical output for incremental vs full render", () => {
+			// Simulates thinking text growing token by token
+			const segments = [
+				"Let me analyze this problem.",
+				"\n\nFirst, I need to check the function",
+				" signature.",
+				"\n\n```python\ndef foo():",
+				"\n    return 42",
+				"\n```",
+				"\n\nThe answer is **42**.",
+			];
+
+			// Incremental: append each segment then render once
+			const incrMd = new Markdown("", 0, 0, defaultMarkdownTheme);
+			for (const seg of segments) {
+				incrMd.appendText(seg);
+			}
+			const incrResult = incrMd.render(80);
+
+			// Full: set entire text at once
+			const fullText = segments.join("");
+			const fullMd = new Markdown(fullText, 0, 0, defaultMarkdownTheme);
+			const fullResult = fullMd.render(80);
+
+			assert.deepStrictEqual(
+				incrResult,
+				fullResult,
+				"Incremental render should produce identical output to full render",
+			);
+		});
+
+		it("should produce identical output when rendering after each append", () => {
+			// Render after each append, simulating real streaming
+			const segments = [
+				"Let me analyze this problem.",
+				"\n\nFirst, I need to check the function",
+				" signature.",
+				"\n\n```python\ndef foo():",
+				"\n    return 42",
+				"\n```",
+				"\n\nThe answer is **42**.",
+			];
+
+			const incrMd = new Markdown("", 0, 0, defaultMarkdownTheme);
+			let lastIncrResult: string[] = [];
+			for (const seg of segments) {
+				incrMd.appendText(seg);
+				lastIncrResult = incrMd.render(80);
+			}
+
+			// Compare final incremental result with full render of complete text
+			const fullText = segments.join("");
+			const fullMd = new Markdown(fullText, 0, 0, defaultMarkdownTheme);
+			const fullResult = fullMd.render(80);
+
+			assert.deepStrictEqual(
+				lastIncrResult,
+				fullResult,
+				"Interleaved append+render should produce identical final output",
+			);
+		});
+
+		it("should handle appendText after invalidate (width change)", () => {
+			const md = new Markdown("initial text", 0, 0, defaultMarkdownTheme);
+			md.render(80);
+
+			// Simulate resize
+			md.invalidate();
+			md.appendText(" more text");
+
+			const result = md.render(60);
+			const expected = new Markdown("initial text more text", 0, 0, defaultMarkdownTheme).render(60);
+
+			assert.deepStrictEqual(result, expected);
+		});
+
+		it("should produce identical output with complex markdown", () => {
+			const segments = [
+				"# Analysis\n\n",
+				"- Point one\n",
+				"- Point two\n\n",
+				"| Col1 | Col2 |\n| --- | --- |\n| A | B |\n\n",
+				"```\ncode here\n```\n\n",
+				"Final **conclusion**.",
+			];
+
+			// Incremental with interleaved renders
+			const incrMd = new Markdown("", 0, 0, defaultMarkdownTheme);
+			let lastIncrResult: string[] = [];
+			for (const seg of segments) {
+				incrMd.appendText(seg);
+				lastIncrResult = incrMd.render(40);
+			}
+
+			// Full render
+			const fullText = segments.join("");
+			const fullMd = new Markdown(fullText, 0, 0, defaultMarkdownTheme);
+			const fullResult = fullMd.render(40);
+
+			assert.deepStrictEqual(lastIncrResult, fullResult, "Complex markdown incremental should match full render");
+		});
+
+		it("should handle setext heading edge case (paragraph → heading type change)", () => {
+			// "text\n===" changes from paragraph to heading when === is appended
+			const segments = ["Some text", "\n==="];
+
+			const incrMd = new Markdown("", 0, 0, defaultMarkdownTheme);
+			for (const seg of segments) {
+				incrMd.appendText(seg);
+				incrMd.render(80); // render after each append to exercise incremental path
+			}
+			const incrResult = incrMd.render(80);
+
+			const fullText = segments.join("");
+			const fullMd = new Markdown(fullText, 0, 0, defaultMarkdownTheme);
+			const fullResult = fullMd.render(80);
+
+			assert.deepStrictEqual(incrResult, fullResult, "Setext heading type change should be handled by incremental");
+		});
+	});
 });

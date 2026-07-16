@@ -94,6 +94,11 @@ export class Markdown implements Component {
 	private cachedWidth?: number;
 	private cachedLines?: string[];
 
+	// --- Incremental rendering cache ---
+	private cachedNormalizedText?: string; // normalizedText from last lex
+	private cachedTokens?: Token[]; // lexer output from last render
+	private cachedTokenWrappedLines?: string[][]; // per-token wrapped lines
+
 	constructor(
 		text: string,
 		paddingX: number,
@@ -115,10 +120,23 @@ export class Markdown implements Component {
 		this.invalidate();
 	}
 
+	/**
+	 * Append text without discarding incremental rendering cache.
+	 * Use this for streaming content (e.g. thinking tokens) to avoid
+	 * full markdown re-parse on every token.
+	 */
+	appendText(suffix: string): void {
+		this.text += suffix;
+		this.cachedLines = undefined;
+	}
+
 	invalidate(): void {
 		this.cachedText = undefined;
 		this.cachedWidth = undefined;
 		this.cachedLines = undefined;
+		this.cachedNormalizedText = undefined;
+		this.cachedTokens = undefined;
+		this.cachedTokenWrappedLines = undefined;
 	}
 
 	render(width: number): string[] {
@@ -143,30 +161,57 @@ export class Markdown implements Component {
 		// Replace tabs with 3 spaces for consistent rendering
 		const normalizedText = this.text.replace(/\t/g, "   ");
 
-		// Parse markdown to HTML-like tokens
+		// Parse markdown to tokens
 		const tokens = markdownParser.lexer(normalizedText);
 
-		// Convert tokens to styled terminal output
-		const renderedLines: string[] = [];
+		// Incremental condition: same width + text is a prefix extension + have intermediate cache
+		const canIncremental =
+			this.cachedNormalizedText !== undefined &&
+			this.cachedTokens !== undefined &&
+			this.cachedTokenWrappedLines !== undefined &&
+			this.cachedWidth === width &&
+			normalizedText.startsWith(this.cachedNormalizedText);
 
-		for (let i = 0; i < tokens.length; i++) {
-			const token = tokens[i];
-			const nextToken = tokens[i + 1];
-			const tokenLines = this.renderToken(token, contentWidth, nextToken?.type);
-			for (const tokenLine of tokenLines) {
-				renderedLines.push(tokenLine);
+		const tokenWrappedLines: string[][] = [];
+
+		if (canIncremental) {
+			const oldTokens = this.cachedTokens!;
+			let firstChanged = -1;
+			for (let i = 0; i < tokens.length; i++) {
+				const oldToken = oldTokens[i];
+				if (!oldToken || oldToken.raw !== tokens[i]!.raw) {
+					firstChanged = i;
+					break;
+				}
+			}
+			// All existing tokens unchanged → only new tokens were added
+			if (firstChanged === -1) {
+				firstChanged = oldTokens.length;
+			}
+
+			// Back up one token to cover nextTokenType spacing dependency
+			const renderStart = Math.max(0, firstChanged - 1);
+
+			// Reuse cached lines before renderStart
+			for (let i = 0; i < renderStart && i < this.cachedTokenWrappedLines!.length; i++) {
+				tokenWrappedLines.push(this.cachedTokenWrappedLines![i]!);
+			}
+			// Re-render from renderStart onwards
+			for (let i = renderStart; i < tokens.length; i++) {
+				tokenWrappedLines.push(this.renderAndWrapToken(tokens, i, contentWidth));
+			}
+		} else {
+			// Full render
+			for (let i = 0; i < tokens.length; i++) {
+				tokenWrappedLines.push(this.renderAndWrapToken(tokens, i, contentWidth));
 			}
 		}
 
-		// Wrap lines (NO padding, NO background yet)
+		// Flatten token-wrapped lines
 		const wrappedLines: string[] = [];
-		for (const line of renderedLines) {
-			if (isImageLine(line)) {
+		for (const twl of tokenWrappedLines) {
+			for (const line of twl) {
 				wrappedLines.push(line);
-			} else {
-				for (const wrappedLine of wrapTextWithAnsi(line, contentWidth)) {
-					wrappedLines.push(wrappedLine);
-				}
 			}
 		}
 
@@ -209,8 +254,32 @@ export class Markdown implements Component {
 		this.cachedText = this.text;
 		this.cachedWidth = width;
 		this.cachedLines = result;
+		this.cachedNormalizedText = normalizedText;
+		this.cachedTokens = tokens;
+		this.cachedTokenWrappedLines = tokenWrappedLines;
 
 		return result.length > 0 ? result : [""];
+	}
+
+	/**
+	 * Render a single token and wrap its lines.
+	 * Extracted so incremental rendering can cache per-token wrapped output.
+	 */
+	private renderAndWrapToken(tokens: Token[], index: number, contentWidth: number): string[] {
+		const token = tokens[index]!;
+		const nextToken = tokens[index + 1];
+		const tokenLines = this.renderToken(token, contentWidth, nextToken?.type);
+		const wrapped: string[] = [];
+		for (const line of tokenLines) {
+			if (isImageLine(line)) {
+				wrapped.push(line);
+			} else {
+				for (const wrappedLine of wrapTextWithAnsi(line, contentWidth)) {
+					wrapped.push(wrappedLine);
+				}
+			}
+		}
+		return wrapped;
 	}
 
 	/**

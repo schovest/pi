@@ -16,6 +16,8 @@ export class AssistantMessageComponent extends Container {
 	private hiddenThinkingLabel: string;
 	private lastMessage?: AssistantMessage;
 	private hasToolCalls = false;
+	private thinkingMarkdown: Markdown | undefined;
+	private thinkingText: string = "";
 
 	constructor(
 		message?: AssistantMessage,
@@ -40,6 +42,8 @@ export class AssistantMessageComponent extends Container {
 
 	override invalidate(): void {
 		super.invalidate();
+		this.thinkingMarkdown = undefined;
+		this.thinkingText = "";
 		if (this.lastMessage) {
 			this.updateContent(this.lastMessage);
 		}
@@ -108,12 +112,24 @@ export class AssistantMessageComponent extends Container {
 					}
 				} else {
 					// Thinking traces in thinkingText color, italic
-					this.contentContainer.addChild(
-						new Markdown(content.thinking.trim(), 1, 0, this.markdownTheme, {
+					// Reuse Markdown instance to preserve incremental rendering cache
+					const trimmed = content.thinking.trim();
+					if (!this.thinkingMarkdown) {
+						this.thinkingMarkdown = new Markdown(trimmed, 1, 0, this.markdownTheme, {
 							color: (text: string) => theme.fg("thinkingText", text),
 							italic: true,
-						}),
-					);
+						});
+						this.thinkingText = trimmed;
+					} else if (trimmed.startsWith(this.thinkingText) && trimmed !== this.thinkingText) {
+						// Pure append: preserve incremental cache
+						this.thinkingMarkdown.appendText(trimmed.slice(this.thinkingText.length));
+						this.thinkingText = trimmed;
+					} else if (trimmed !== this.thinkingText) {
+						// Text changed non-appendingly
+						this.thinkingMarkdown.setText(trimmed);
+						this.thinkingText = trimmed;
+					}
+					this.contentContainer.addChild(this.thinkingMarkdown);
 					if (hasVisibleContentAfter) {
 						this.contentContainer.addChild(new Spacer(1));
 					}
