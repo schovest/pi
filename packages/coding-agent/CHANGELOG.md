@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Changed
+
+- install.sh 扩展和 Agent 拆分为两步独立选择：先选扩展（9 项，默认 4 项），再选 Primary Agent（plan/coding/config，全默认勾选）
+- 新增 `plan.md` primary agent 到 dist-assets，coding.md 移除 `thinking` frontmatter 参数
+- 扩展候选新增 superpowers、pi-plugin-manager、pi-lens
+
+### Removed
+
+- install.sh 移除 fd 下载逻辑（pi 已内置 fd 安装）
+
 ### Fixed
 
 - pi-lens `no-case-declarations` 误报：项目级规则覆盖修复嵌套 `inside` 缺 `stopBy: end`，case 块已有花括号时不再误报嵌套 if 块内的 const 声明为 error
