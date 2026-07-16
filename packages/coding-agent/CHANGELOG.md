@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.11.1] - 2026-07-16
 
 ### Fixed
 
@@ -52,6 +52,7 @@
 ## [0.10.0] - 2026-07-15
 
 ### Added
+
 - 上游合并 0.79.2~Unreleased: 108 项修复/功能 (架构迁移至 api/+providers/ 分离模式)
   - 新模型: Claude Sonnet 5/Fable 5, GPT-5.5/5.6, GLM-5.2 等
   - Provider 架构: api/ + providers/ factory 模式
@@ -62,11 +63,13 @@
   - Stability: Windows context 文件发现, 多 provider retry 修复
 
 ### Changed
+
 - pi-ai 根入口精简 (~50行), compat.ts 提供旧 API 兼容
 - models.generated.ts: 18k行单体 → 聚合 re-export
 - overflow recovery: 多重重试改为单次重试，匹配上游
 
 ### Fixed
+
 - 0.79.2~0.79.7: 24 项修复 (已有本地等价实现确认)
 - compilation: 源码零错误 (tsgo --noEmit)
 - 测试适配: compaction/session 行为变更同步更新测试
