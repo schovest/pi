@@ -3,7 +3,6 @@ set -euo pipefail
 
 PREFIX="${PI_INSTALL_PREFIX:-$HOME/.local/share/pi}"
 BINDIR="${PI_INSTALL_BINDIR:-$HOME/.local/bin}"
-AGENT_BIN_DIR="${HOME}/.pi/agent/bin"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -23,96 +22,7 @@ fi
 
 # Persist installation prefix so future updates can locate it
 mkdir -p "$HOME/.pi/agent"
-printf '%s' "$PREFIX" > "$HOME/.pi/agent/.install-prefix"
-
-# ---------------------------------------------------------------------------
-# fd download helper
-# ---------------------------------------------------------------------------
-
-download_fd() {
-  local dest="$AGENT_BIN_DIR/fd"
-  if [ -f "$dest" ]; then
-    echo "fd already installed at $dest"
-    return 0
-  fi
-
-  local os arch
-  os=$(uname -s | tr '[:upper:]' '[:lower:]')
-  arch=$(uname -m)
-  case "$arch" in
-    x86_64)  arch="x86_64" ;;
-    aarch64) arch="aarch64" ;;
-    arm64)   arch="aarch64" ;;
-    *)       echo "  warning: unsupported architecture $arch for fd download"; return 1 ;;
-  esac
-
-  local version asset redirect_url
-
-  # 首选：网页重定向（无速率限制）
-  # https://github.com/sharkdp/fd/releases/latest → 302 → /releases/tag/vX.Y.Z
-  redirect_url=$(curl -fsSL -o /dev/null -w '%{url_effective}' \
-    "https://github.com/sharkdp/fd/releases/latest" 2>/dev/null) || redirect_url=""
-  if [ -n "$redirect_url" ]; then
-    version="${redirect_url##*/tag/}"
-    # 无 /tag/ 时原样返回，据此判断失败
-    [ "$version" = "$redirect_url" ] && version=""
-    # 去掉 'v' 前缀
-    version="${version#v}"
-  fi
-
-  # 回退：GitHub API（匿名限速 60 次/小时）
-  if [ -z "$version" ]; then
-    version=$(curl -fsSL "https://api.github.com/repos/sharkdp/fd/releases/latest" 2>/dev/null \
-      | grep -o '"tag_name": *"v[^"]*"' | head -1 | sed 's/.*"v\([^"]*\)".*/\1/')
-  fi
-
-  if [ -z "$version" ]; then
-    echo "  warning: failed to fetch fd latest version"
-    return 1
-  fi
-
-  case "$os" in
-    darwin) asset="fd-v${version}-${arch}-apple-darwin.tar.gz" ;;
-    linux)  asset="fd-v${version}-${arch}-unknown-linux-gnu.tar.gz" ;;
-    *)      echo "  warning: unsupported OS $os for fd download"; return 1 ;;
-  esac
-
-  local url="https://github.com/sharkdp/fd/releases/download/v${version}/${asset}"
-  local tmpdir
-  tmpdir=$(mktemp -d)
-  local archive="$tmpdir/$asset"
-
-  echo "Downloading fd v${version} for ${os}/${arch}..."
-  if ! curl -fsSL -o "$archive" "$url" 2>/dev/null; then
-    echo "  warning: failed to download fd from $url"
-    rm -rf "$tmpdir"
-    return 1
-  fi
-
-  mkdir -p "$AGENT_BIN_DIR"
-  if [[ "$asset" == *.tar.gz ]]; then
-    tar xzf "$archive" -C "$tmpdir"
-  else
-    unzip -q "$archive" -d "$tmpdir" 2>/dev/null || true
-  fi
-
-  # Find fd binary in extracted tree
-  local fd_bin
-  fd_bin=$(find "$tmpdir" -type f -name "fd" -perm /111 2>/dev/null | head -1)
-  if [ -z "$fd_bin" ]; then
-    fd_bin=$(find "$tmpdir" -type f -name "fd" 2>/dev/null | head -1)
-  fi
-  if [ -z "$fd_bin" ]; then
-    echo "  warning: fd binary not found in archive"
-    rm -rf "$tmpdir"
-    return 1
-  fi
-
-  cp "$fd_bin" "$dest"
-  chmod +x "$dest"
-  rm -rf "$tmpdir"
-  echo "fd installed to $dest"
-}
+printf '%s' "$PREFIX" >"$HOME/.pi/agent/.install-prefix"
 
 # ---------------------------------------------------------------------------
 # Core installation (binary + assets)
@@ -144,61 +54,76 @@ fi
 
 ln -sf "$PREFIX/pi" "$BINDIR/pi"
 
-if [ -f "$PREFIX/bin/fd" ]; then
-	ln -sf "$PREFIX/bin/fd" "$BINDIR/fd"
-fi
-
 echo "Installed pi to $PREFIX"
 echo "Linked pi to $BINDIR/pi"
-if [ -f "$PREFIX/bin/fd" ]; then
-	echo "Linked fd to $BINDIR/fd"
-fi
 
 # ---------------------------------------------------------------------------
-# Extensions -- interactive selection
+# Extensions and Agents -- two-step interactive selection
 # ---------------------------------------------------------------------------
 
 # Extension definitions
 #   name:    extension identifier
 #   desc:    short description
 #   default: 1 = selected in standard set, 0 = not
-#   install: installation spec (file: = file copy to extensions/, agent: = file copy to primary-agents/, otherwise pi install)
+#   install: installation spec (file: = file copy to extensions/, otherwise pi install)
 
 EXT_NAMES=(
 	"pi-mcp-adapter"
 	"@juicesharp/rpiv-todo"
 	"@juicesharp/rpiv-ask-user-question"
 	"tps"
-	"config"
-	"coding"
 	"context-mode"
 	"@juicesharp/rpiv-btw"
+	"superpowers"
+	"pi-plugin-manager"
+	"pi-lens"
 )
 EXT_DESCS=(
 	"MCP 协议适配器"
 	"任务管理插件"
 	"用户交互问答"
 	"Tokens-per-second 监控"
-	"配置管理 Agent (primary-agent)"
-	"编码实现 Agent (primary-agent)"
 	"智能上下文模式切换"
 	"侧边栏问答命令"
+	"Superpowers 技能集"
+	"插件管理器"
+	"代码智能分析"
 )
-EXT_DEFAULTS=(1 1 1 0 1 0 0 0)
+EXT_DEFAULTS=(1 1 1 0 0 0 0 1 0)
 EXT_INSTALLS=(
 	"npm:pi-mcp-adapter"
 	"npm:@juicesharp/rpiv-todo"
 	"npm:@juicesharp/rpiv-ask-user-question"
 	"file:tps.ts"
-	"agent:config.md"
-	"agent:coding.md"
 	"npm:context-mode"
 	"npm:@juicesharp/rpiv-btw"
+	"git:github.com/obra/superpowers"
+	"npm:pi-plugin-manager"
+	"npm:pi-lens"
 )
 
-NUM=${#EXT_NAMES[@]}
-SELECTED=("${EXT_DEFAULTS[@]}")
-CURSOR=0
+# Primary Agent definitions
+#   name:    agent identifier
+#   desc:    short description
+#   default: 1 = selected, 0 = not
+#   install: agent: = file copy to primary-agents/
+
+AGENT_NAMES=(
+	"plan"
+	"coding"
+	"config"
+)
+AGENT_DESCS=(
+	"规划与探索 Agent"
+	"编码实现 Agent"
+	"配置管理 Agent"
+)
+AGENT_DEFAULTS=(1 1 1)
+AGENT_INSTALLS=(
+	"agent:plan.md"
+	"agent:coding.md"
+	"agent:config.md"
+)
 
 # -- Colors ----------------------------------------------------------------
 
@@ -212,34 +137,36 @@ else
 	BOLD="" DIM="" GREEN="" CYAN="" RESET=""
 fi
 
-# -- Draw menu -------------------------------------------------------------
+# -- Draw menu (generic — uses MN_* globals) --------------------------------
 
 draw_menu() {
+	local title="$1"
+
 	if [ "${_DRAWN:-0}" -eq 1 ]; then
-		printf "\033[%dA" $((NUM + 5))
+		printf "\033[%dA" $((MN_NUM + 5))
 	else
 		_DRAWN=1
 	fi
 
 	printf "\n"
-	printf "${BOLD}  Extensions${RESET}\n"
+	printf "${BOLD}  %s${RESET}\n" "$title"
 	printf "\n"
 
-	for i in $(seq 0 $((NUM - 1))); do
+	for i in $(seq 0 $((MN_NUM - 1))); do
 		local checkbox
-		if [ "${SELECTED[$i]}" -eq 1 ]; then
+		if [ "${MN_SELECTED[$i]}" -eq 1 ]; then
 			checkbox="${GREEN}[*]${RESET}"
 		else
 			checkbox="${DIM}[ ]${RESET}"
 		fi
 
 		local num=$((i + 1))
-		local label="${EXT_NAMES[$i]}"
+		local label="${MN_NAMES[$i]}"
 
-		if [ "$i" -eq "$CURSOR" ]; then
-			printf "  %s ${CYAN}%d. %-32s${RESET} ${DIM}%s${RESET}\n" "$checkbox" "$num" "$label" "${EXT_DESCS[$i]}"
+		if [ "$i" -eq "$MN_CURSOR" ]; then
+			printf "  %s ${CYAN}%d. %-32s${RESET} ${DIM}%s${RESET}\n" "$checkbox" "$num" "$label" "${MN_DESCS[$i]}"
 		else
-			printf "  %s  %d. %-32s ${DIM}%s${RESET}\n" "$checkbox" "$num" "$label" "${EXT_DESCS[$i]}"
+			printf "  %s  %d. %-32s ${DIM}%s${RESET}\n" "$checkbox" "$num" "$label" "${MN_DESCS[$i]}"
 		fi
 	done
 
@@ -265,9 +192,9 @@ read_key() {
 			if [ "$seq1" = "[" ]; then
 				IFS= read -r -n1 -t0.05 seq2 2>/dev/null || true
 				case "$seq2" in
-					A) key="UP" ;;
-					B) key="DOWN" ;;
-					*) key="UNKNOWN" ;;
+				A) key="UP" ;;
+				B) key="DOWN" ;;
+				*) key="UNKNOWN" ;;
 				esac
 			fi
 		fi
@@ -280,79 +207,115 @@ read_key() {
 	REPLY="$key"
 }
 
-# -- Interactive loop -------------------------------------------------------
+# -- Run a single interactive selection menu --------------------------------
+# Arguments: title names_ref descs_ref defaults_ref → sets MN_SELECTED, MN_NAMES, etc.
+# Environment: PI_INSTALL_MODE controls update mode (skip all)
 
-if [ "${PI_INSTALL_MODE:-install}" = "update" ]; then
-	echo ""
-	echo "Update mode: preserving existing extensions (skipping selection)."
-	echo ""
-	# 取消所有选择 — 后续安装循环自动跳过全部扩展
-	for i in $(seq 0 $((NUM - 1))); do SELECTED[$i]=0; done
-elif [ ! -t 0 ]; then
-	echo ""
-	echo "Non-interactive terminal detected. Installing standard extensions only."
-	echo ""
-else
-	_DRAWN=0
-	draw_menu
+run_menu() {
+	local title="$1"
+	local -n _mn_names=$2
+	local -n _mn_descs=$3
+	local -n _mn_defaults=$4
 
-	while true; do
-		read_key
-		case "$REPLY" in
+	# Copy arrays into globals used by draw_menu / read_key / loop
+	MN_NAMES=("${_mn_names[@]}")
+	MN_DESCS=("${_mn_descs[@]}")
+	MN_DEFAULTS=("${_mn_defaults[@]}")
+	MN_NUM=${#MN_NAMES[@]}
+	MN_SELECTED=("${MN_DEFAULTS[@]}")
+	MN_CURSOR=0
+
+	if [ "${PI_INSTALL_MODE:-install}" = "update" ]; then
+		echo ""
+		echo "Update mode: skipping ${title} selection."
+		echo ""
+		for i in $(seq 0 $((MN_NUM - 1))); do MN_SELECTED[$i]=0; done
+	elif [ ! -t 0 ]; then
+		echo ""
+		echo "Non-interactive terminal detected. Installing standard ${title} only."
+		echo ""
+	else
+		_DRAWN=0
+		draw_menu "$title"
+
+		while true; do
+			read_key
+			case "$REPLY" in
 			"")
 				# Enter — confirm
 				break
 				;;
 			UNKNOWN)
-				draw_menu
+				draw_menu "$title"
 				;;
-			q|Q)
-				# Skip all extensions
-				for i in $(seq 0 $((NUM - 1))); do SELECTED[$i]=0; done
+			q | Q)
+				# Skip all
+				for i in $(seq 0 $((MN_NUM - 1))); do MN_SELECTED[$i]=0; done
 				break
 				;;
 			" ")
 				# Toggle current item
-				if [ "${SELECTED[$CURSOR]}" -eq 1 ]; then
-					SELECTED[$CURSOR]=0
+				if [ "${MN_SELECTED[$MN_CURSOR]}" -eq 1 ]; then
+					MN_SELECTED[$MN_CURSOR]=0
 				else
-					SELECTED[$CURSOR]=1
+					MN_SELECTED[$MN_CURSOR]=1
 				fi
-				draw_menu
+				draw_menu "$title"
 				;;
 			UP)
-				CURSOR=$(((CURSOR - 1 + NUM) % NUM))
-				draw_menu
+				MN_CURSOR=$(((MN_CURSOR - 1 + MN_NUM) % MN_NUM))
+				draw_menu "$title"
 				;;
 			DOWN)
-				CURSOR=$(((CURSOR + 1) % NUM))
-				draw_menu
+				MN_CURSOR=$(((MN_CURSOR + 1) % MN_NUM))
+				draw_menu "$title"
 				;;
-			a|A)
-				# Select all (not install)
-				for i in $(seq 0 $((NUM - 1))); do SELECTED[$i]=1; done
-				draw_menu
+			a | A)
+				# Select all
+				for i in $(seq 0 $((MN_NUM - 1))); do MN_SELECTED[$i]=1; done
+				draw_menu "$title"
 				;;
-			s|S)
+			s | S)
 				# Standard set
-				for i in $(seq 0 $((NUM - 1))); do SELECTED[$i]=${EXT_DEFAULTS[$i]}; done
-				draw_menu
+				for i in $(seq 0 $((MN_NUM - 1))); do MN_SELECTED[$i]=${MN_DEFAULTS[$i]}; done
+				draw_menu "$title"
 				;;
-		esac
-	done
+			esac
+		done
 
-	# Clear menu from terminal
-	printf "\033[%dA" $((NUM + 5))
-	printf "\033[J"
-fi
+		# Clear menu from terminal
+		printf "\033[%dA" $((MN_NUM + 5))
+		printf "\033[J"
+	fi
 
-# -- Install selected extensions --------------------------------------------
+	# Write selection back to caller via global variable (caller reads MN_SELECTED, MN_NUM etc.)
+}
+
+# ---------------------------------------------------------------------------
+# Step 1: Extensions
+# ---------------------------------------------------------------------------
+
+run_menu "Extensions" EXT_NAMES EXT_DESCS EXT_DEFAULTS
+EXT_NUM=$MN_NUM
+EXT_SELECTED=("${MN_SELECTED[@]}")
+
+# ---------------------------------------------------------------------------
+# Step 2: Primary Agents
+# ---------------------------------------------------------------------------
+
+run_menu "Primary Agents" AGENT_NAMES AGENT_DESCS AGENT_DEFAULTS
+AGENT_NUM=$MN_NUM
+AGENT_SELECTED=("${MN_SELECTED[@]}")
+
+# ---------------------------------------------------------------------------
+# Install selected extensions
+# ---------------------------------------------------------------------------
 
 echo ""
 any_installed=0
 
-for i in $(seq 0 $((NUM - 1))); do
-	if [ "${SELECTED[$i]}" -ne 1 ]; then
+for i in $(seq 0 $((EXT_NUM - 1))); do
+	if [ "${EXT_SELECTED[$i]}" -ne 1 ]; then
 		continue
 	fi
 
@@ -372,25 +335,13 @@ for i in $(seq 0 $((NUM - 1))); do
 		else
 			echo "  warning - $src_file not found in $SCRIPT_DIR/extensions/"
 		fi
-	elif [ "${install_spec#agent:}" != "$install_spec" ]; then
-		# File copy install (primary agents)
-		src_file="${install_spec#agent:}"
-		echo "Installing $name (primary agent)..."
-		agent_dir="$HOME/.pi/agent/primary-agents"
-		mkdir -p "$agent_dir"
-		if [ -f "$SCRIPT_DIR/primary-agents/$src_file" ]; then
-			cp "$SCRIPT_DIR/primary-agents/$src_file" "$agent_dir/$src_file"
-			echo "  copied $src_file to $agent_dir/"
-		else
-			echo "  warning - $src_file not found in $SCRIPT_DIR/primary-agents/"
-		fi
 	else
-		# pi install
+		# pi install (npm or git)
 		echo "Installing $name..."
 		if [ -x "$BINDIR/pi" ]; then
-			err_output=$("$BINDIR/pi" install "$install_spec" 2>&1) \
-				&& echo "  pi: installed $install_spec" \
-				|| echo "  pi: warning - pi install $install_spec failed: $err_output"
+			err_output=$("$BINDIR/pi" install "$install_spec" 2>&1) &&
+				echo "  pi: installed $install_spec" ||
+				echo "  pi: warning - pi install $install_spec failed: $err_output"
 		else
 			echo "  pi: warning - pi binary not found at $BINDIR/pi"
 		fi
@@ -401,12 +352,37 @@ if [ "$any_installed" -eq 0 ]; then
 	echo "No extensions selected. Skipping."
 fi
 
-echo ""
+# ---------------------------------------------------------------------------
+# Install selected primary agents
+# ---------------------------------------------------------------------------
 
-# ---------------------------------------------------------------------------
-# Download fd to ~/.pi/agent/bin/fd
-# ---------------------------------------------------------------------------
-download_fd
+any_agents=0
+
+for i in $(seq 0 $((AGENT_NUM - 1))); do
+	if [ "${AGENT_SELECTED[$i]}" -ne 1 ]; then
+		continue
+	fi
+
+	name="${AGENT_NAMES[$i]}"
+	install_spec="${AGENT_INSTALLS[$i]}"
+	any_agents=1
+
+	# File copy install (primary agents)
+	src_file="${install_spec#agent:}"
+	echo "Installing $name (primary agent)..."
+	agent_dir="$HOME/.pi/agent/primary-agents"
+	mkdir -p "$agent_dir"
+	if [ -f "$SCRIPT_DIR/primary-agents/$src_file" ]; then
+		cp "$SCRIPT_DIR/primary-agents/$src_file" "$agent_dir/$src_file"
+		echo "  copied $src_file to $agent_dir/"
+	else
+		echo "  warning - $src_file not found in $SCRIPT_DIR/primary-agents/"
+	fi
+done
+
+if [ "$any_agents" -eq 0 ]; then
+	echo "No agents selected. Skipping."
+fi
 
 echo ""
 echo "Installation complete."

@@ -131,6 +131,11 @@ export class FooterDataProvider {
 		return this.cachedBranch;
 	}
 
+	/** Clear cached branch so the next getGitBranch() re-reads from disk */
+	invalidateBranchCache(): void {
+		this.cachedBranch = undefined;
+	}
+
 	/** Extension status texts set via ctx.ui.setStatus() */
 	getExtensionStatuses(): ReadonlyMap<string, string> {
 		return this.extensionStatuses;
@@ -313,12 +318,13 @@ export class FooterDataProvider {
 		// Watch the directory containing HEAD, not HEAD itself.
 		// Git uses atomic writes (write temp, rename over HEAD), which changes the inode.
 		// fs.watch on a file stops working after the inode changes.
+		// Accept any change in the directory. Git uses atomic writes (write temp,
+		// rename over HEAD) so the fs.watch event filename is the temp file, not "HEAD".
+		// The debounce + cachedBranch comparison below filters out irrelevant changes.
 		this.headWatcher = watchWithErrorHandler(
 			dirname(this.gitPaths.headPath),
-			(_eventType, filename) => {
-				if (!filename || filename === "HEAD") {
-					this.scheduleRefresh();
-				}
+			() => {
+				this.scheduleRefresh();
 			},
 			() => this.handleGitWatcherError(),
 		);

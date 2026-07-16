@@ -1,5 +1,24 @@
 # Changelog
 
+## [Unreleased]
+
+## [0.11.2] - 2026-07-16
+
+### Changed
+
+- install.sh 扩展和 Agent 拆分为两步独立选择：先选扩展（9 项，默认 4 项），再选 Primary Agent（plan/coding/config，全默认勾选）
+- 新增 `plan.md` primary agent 到 dist-assets，coding.md 移除 `thinking` frontmatter 参数
+- 扩展候选新增 superpowers、pi-plugin-manager、pi-lens
+
+### Removed
+
+- install.sh 移除 fd 下载逻辑（pi 已内置 fd 安装）
+
+### Fixed
+
+- pi-lens `no-case-declarations` 误报：项目级规则覆盖修复嵌套 `inside` 缺 `stopBy: end`，case 块已有花括号时不再误报嵌套 if 块内的 const 声明为 error
+- footer 分支显示不动态更新：agent 执行 bash 命令或外部 shell 切换分支后底栏分支标签不刷新（fs.watch 原子写事件过滤遗漏 + FooterComponent.invalidate() 为 no-op 未清除缓存）
+
 ## [0.11.1] - 2026-07-16
 
 ### Fixed
@@ -73,26 +92,6 @@
 - 0.79.2~0.79.7: 24 项修复 (已有本地等价实现确认)
 - compilation: 源码零错误 (tsgo --noEmit)
 - 测试适配: compaction/session 行为变更同步更新测试
-
-## [Unreleased]
-
-本仓库基于上游 Pi（schovest/pi）fork 开发，版本号从 0.6.0 起独立维护。上游变更通过合并引入，本地变更单独记录。
-
-### Fixed
-
-- 合并上游 0.79.2~0.79.7 (24 项)：
-  - overflow 正则修复：支持括号化 OpenAI 上下文溢出错误信息 ("Input length (X) exceeds model's maximum context length (Y)")
-  - 项目信任修复：$HOME 目录下忽略全局 ~/.pi/agent 目录，避免不必要的信任提示
-  - Anthropic refusal 修复：mapStopReason 返回 `{stopReason, errorMessage}`，保留 stop_details 解释
-  - agent-loop 修复：工具完成后 `acceptingUpdates` 旗帜忽略陈旧进度回调，防止陈旧 tool_execution_update 事件
-  - Anthropic 1h cache 计费修复：1h cache write 使用 2x input 定价 (cacheWrite1h 字段)
-  - auth.json 增强：ApiKeyCredential 支持 env 字段实现 per-provider 环境变量覆盖
-  - HTTP dispatcher 修复：保留调用方 fetch override (originalGlobalFetch 守卫)
-  - RPC 修复：unknown-command 错误响应包含 request id
-  - session 修复：名称换行符标准化 (\r\n → 空格)
-  - httpProxy 设置：通过 settings.json 配置全局 HTTP 代理
-  - 公共 API 导出：CONFIG_DIR_NAME, EditDiffResult, generateDiffString, generateUnifiedPatch
-  - Usage 类型增强：reasoning token 计数, cacheWrite1h 字段
 
 ## [0.9.2] - 2026-07-10
 

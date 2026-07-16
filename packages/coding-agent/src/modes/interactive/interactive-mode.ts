@@ -3258,6 +3258,7 @@ export class InteractiveMode {
 		}
 
 		this.footer.invalidate();
+		this.footerDataProvider.invalidateBranchCache();
 
 		switch (event.type) {
 			case "agent_start":
@@ -6642,6 +6643,7 @@ export class InteractiveMode {
 			// Record the result in session
 			this.session.recordBashResult(command, result, { excludeFromContext });
 			this.bashComponent = undefined;
+			this.footerDataProvider.invalidateBranchCache();
 			this.ui.requestRender();
 			return;
 		}
@@ -6688,6 +6690,7 @@ export class InteractiveMode {
 		}
 
 		this.bashComponent = undefined;
+		this.footerDataProvider.invalidateBranchCache();
 		this.ui.requestRender();
 	}
 

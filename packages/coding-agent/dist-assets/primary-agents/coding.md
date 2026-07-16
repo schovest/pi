@@ -1,6 +1,5 @@
 ---
 description: 专注编码的实现 Agent，遵循最小化变更和目标驱动原则。
-thinking: xhigh
 includedTools: ["*"]
 ---
 
