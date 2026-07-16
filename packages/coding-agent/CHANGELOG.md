@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `loader.ts` 模块解析：新增 `resolveModuleEntry` fallback，修复 vitest SSR 环境下 `import.meta.resolve` 不可用导致 59 个扩展相关测试失败
+- `agent-session-retry-events` 测试断言对齐上游 `agent_settled` 事件
+
 ## [0.11.0] - 2026-07-16
 
 ### Changed

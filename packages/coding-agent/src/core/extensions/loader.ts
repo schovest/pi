@@ -70,6 +70,35 @@ const VIRTUAL_MODULES: Record<string, unknown> = {
 const require = createRequire(import.meta.url);
 
 /**
+ * Resolve a module specifier to its entry file path.
+ * Uses import.meta.resolve in production; falls back to node_modules walk
+ * for vitest SSR where import.meta.resolve is unavailable.
+ */
+function resolveModuleEntry(specifier: string, fromDir: string): string {
+	try {
+		return fileURLToPath(import.meta.resolve(specifier));
+	} catch {
+		const parts = specifier.split("/");
+		const pkgName = specifier.startsWith("@") ? parts.slice(0, 2).join("/") : parts[0];
+		const subpath = specifier.startsWith("@") ? parts.slice(2).join("/") : parts.slice(1).join("/");
+
+		let dir = fromDir;
+		while (dir !== path.dirname(dir)) {
+			const candidate = path.join(dir, "node_modules", pkgName);
+			if (fs.existsSync(candidate)) {
+				const pkg = JSON.parse(fs.readFileSync(path.join(candidate, "package.json"), "utf-8"));
+				const exportKey = subpath ? `./${subpath}` : ".";
+				const entry =
+					pkg.exports?.[exportKey]?.import ?? pkg.exports?.[exportKey]?.default ?? pkg.main ?? "./dist/index.js";
+				return path.resolve(candidate, entry);
+			}
+			dir = path.dirname(dir);
+		}
+		throw new Error(`Cannot find package ${pkgName}`);
+	}
+}
+
+/**
  * Get aliases for jiti (used in Node.js/development mode).
  * In Bun binary mode, virtualModules is used instead.
  */
@@ -91,14 +120,14 @@ function getAliases(): Record<string, string> {
 		if (fs.existsSync(workspacePath)) {
 			return workspacePath;
 		}
-		return fileURLToPath(import.meta.resolve(specifier));
+		return resolveModuleEntry(specifier, __dirname);
 	};
 
 	const piCodingAgentEntry = packageIndex;
-	const piAgentCoreEntry = fileURLToPath(import.meta.resolve("@earendil-works/pi-agent-core"));
+	const piAgentCoreEntry = resolveWorkspaceOrImport("agent/dist/index.js", "@earendil-works/pi-agent-core");
 	const piTuiEntry = resolveWorkspaceOrImport("tui/dist/index.js", "@schovest/pi-tui");
-	const piAiEntry = fileURLToPath(import.meta.resolve("@earendil-works/pi-ai/compat"));
-	const piAiOauthEntry = fileURLToPath(import.meta.resolve("@earendil-works/pi-ai/oauth"));
+	const piAiEntry = resolveWorkspaceOrImport("ai/dist/compat.js", "@earendil-works/pi-ai/compat");
+	const piAiOauthEntry = resolveWorkspaceOrImport("ai/dist/oauth.js", "@earendil-works/pi-ai/oauth");
 
 	_aliases = {
 		"@schovest/pi-coding-agent": piCodingAgentEntry,
