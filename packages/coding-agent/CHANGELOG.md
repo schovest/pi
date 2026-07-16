@@ -80,6 +80,7 @@
 
 ### Fixed
 
+- footer 分支显示不动态更新：agent 执行 bash 命令或外部 shell 切换分支后底栏分支标签不刷新（fs.watch 原子写事件过滤遗漏 + FooterComponent.invalidate() 为 no-op 未清除缓存）
 - 合并上游 0.79.2~0.79.7 (24 项)：
   - overflow 正则修复：支持括号化 OpenAI 上下文溢出错误信息 ("Input length (X) exceeds model's maximum context length (Y)")
   - 项目信任修复：$HOME 目录下忽略全局 ~/.pi/agent 目录，避免不必要的信任提示
