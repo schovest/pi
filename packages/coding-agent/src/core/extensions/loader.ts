@@ -7,9 +7,9 @@ import * as fs from "node:fs";
 import { createRequire } from "node:module";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import * as _bundledPiAgentCore from "@schovest/pi-agent-core";
-import * as _bundledPiAi from "@schovest/pi-ai";
-import * as _bundledPiAiOauth from "@schovest/pi-ai/oauth";
+import * as _bundledPiAgentCore from "@earendil-works/pi-agent-core";
+import * as _bundledPiAi from "@earendil-works/pi-ai/compat";
+import * as _bundledPiAiOauth from "@earendil-works/pi-ai/oauth";
 import type { KeyId } from "@schovest/pi-tui";
 import * as _bundledPiTui from "@schovest/pi-tui";
 import { createJiti } from "jiti/static";
@@ -27,9 +27,9 @@ import { resolvePath } from "../../utils/paths.ts";
 import { createEventBus, type EventBus } from "../event-bus.ts";
 import type { ExecOptions } from "../exec.ts";
 import { execCommand } from "../exec.ts";
-import { convertToLlm } from "../messages.ts";
 import { createSyntheticSourceInfo } from "../source-info.ts";
 import type {
+	EntryRenderer,
 	Extension,
 	ExtensionAPI,
 	ExtensionFactory,
@@ -49,6 +49,12 @@ const VIRTUAL_MODULES: Record<string, unknown> = {
 	"@sinclair/typebox": _bundledTypebox,
 	"@sinclair/typebox/compile": _bundledTypeboxCompile,
 	"@sinclair/typebox/value": _bundledTypeboxValue,
+	"@earendil-works/pi-agent-core": _bundledPiAgentCore,
+	"@earendil-works/pi-tui": _bundledPiTui,
+	"@earendil-works/pi-ai/compat": _bundledPiAi,
+	"@earendil-works/pi-ai/oauth": _bundledPiAiOauth,
+	"@earendil-works/pi-coding-agent": _bundledPiCodingAgent,
+	// Legacy scope aliases — extensions may import from any of these scopes
 	"@schovest/pi-agent-core": _bundledPiAgentCore,
 	"@schovest/pi-tui": _bundledPiTui,
 	"@schovest/pi-ai": _bundledPiAi,
@@ -59,11 +65,6 @@ const VIRTUAL_MODULES: Record<string, unknown> = {
 	"@mariozechner/pi-ai": _bundledPiAi,
 	"@mariozechner/pi-ai/oauth": _bundledPiAiOauth,
 	"@mariozechner/pi-coding-agent": _bundledPiCodingAgent,
-	"@earendil-works/pi-agent-core": _bundledPiAgentCore,
-	"@earendil-works/pi-tui": _bundledPiTui,
-	"@earendil-works/pi-ai": _bundledPiAi,
-	"@earendil-works/pi-ai/oauth": _bundledPiAiOauth,
-	"@earendil-works/pi-coding-agent": _bundledPiCodingAgent,
 };
 
 const require = createRequire(import.meta.url);
@@ -94,15 +95,19 @@ function getAliases(): Record<string, string> {
 	};
 
 	const piCodingAgentEntry = packageIndex;
-	const piAgentCoreEntry = resolveWorkspaceOrImport("agent/dist/index.js", "@schovest/pi-agent-core");
+	const piAgentCoreEntry = fileURLToPath(import.meta.resolve("@earendil-works/pi-agent-core"));
 	const piTuiEntry = resolveWorkspaceOrImport("tui/dist/index.js", "@schovest/pi-tui");
-	const piAiEntry = resolveWorkspaceOrImport("ai/dist/index.js", "@schovest/pi-ai");
-	const piAiOauthEntry = resolveWorkspaceOrImport("ai/dist/oauth.js", "@schovest/pi-ai/oauth");
+	const piAiEntry = fileURLToPath(import.meta.resolve("@earendil-works/pi-ai/compat"));
+	const piAiOauthEntry = fileURLToPath(import.meta.resolve("@earendil-works/pi-ai/oauth"));
 
 	_aliases = {
 		"@schovest/pi-coding-agent": piCodingAgentEntry,
-		"@schovest/pi-agent-core": piAgentCoreEntry,
+		"@earendil-works/pi-agent-core": piAgentCoreEntry,
 		"@schovest/pi-tui": piTuiEntry,
+		"@earendil-works/pi-ai/compat": piAiEntry,
+		"@earendil-works/pi-ai/oauth": piAiOauthEntry,
+		// Legacy scope aliases
+		"@schovest/pi-agent-core": piAgentCoreEntry,
 		"@schovest/pi-ai": piAiEntry,
 		"@schovest/pi-ai/oauth": piAiOauthEntry,
 		"@mariozechner/pi-coding-agent": piCodingAgentEntry,
@@ -111,10 +116,8 @@ function getAliases(): Record<string, string> {
 		"@mariozechner/pi-ai": piAiEntry,
 		"@mariozechner/pi-ai/oauth": piAiOauthEntry,
 		"@earendil-works/pi-coding-agent": piCodingAgentEntry,
-		"@earendil-works/pi-agent-core": piAgentCoreEntry,
 		"@earendil-works/pi-tui": piTuiEntry,
 		"@earendil-works/pi-ai": piAiEntry,
-		"@earendil-works/pi-ai/oauth": piAiOauthEntry,
 		typebox: typeboxEntry,
 		"typebox/compile": typeboxCompileEntry,
 		"typebox/value": typeboxValueEntry,
@@ -245,6 +248,12 @@ function createExtensionAPI(
 			extension.messageRenderers.set(customType, renderer as MessageRenderer);
 		},
 
+		registerEntryRenderer<T>(customType: string, renderer: EntryRenderer<T>): void {
+			runtime.assertActive();
+			extension.entryRenderers ??= new Map();
+			extension.entryRenderers.set(customType, renderer as EntryRenderer);
+		},
+
 		// Flag access - checks extension registered it, reads from runtime
 		getFlag(name: string): boolean | string | undefined {
 			runtime.assertActive();
@@ -334,17 +343,6 @@ function createExtensionAPI(
 		},
 
 		events: eventBus,
-
-		convertToLlm(entries: unknown[]): import("@schovest/pi-ai").Message[] {
-			runtime.assertActive();
-			const agentMessages = entries
-				.filter(
-					(e): e is Record<string, unknown> =>
-						typeof e === "object" && e !== null && (e as Record<string, unknown>).type === "message",
-				)
-				.map((e) => (e as Record<string, unknown>).message as import("@schovest/pi-agent-core").AgentMessage);
-			return convertToLlm(agentMessages);
-		},
 	} as ExtensionAPI;
 
 	return api;
@@ -381,6 +379,7 @@ function createExtension(extensionPath: string, resolvedPath: string): Extension
 		handlers: new Map(),
 		tools: new Map(),
 		messageRenderers: new Map(),
+		entryRenderers: new Map(),
 		commands: new Map(),
 		flags: new Map(),
 		shortcuts: new Map(),

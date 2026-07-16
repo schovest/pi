@@ -1,4 +1,4 @@
-import type { AssistantMessage } from "@schovest/pi-ai";
+import type { AssistantMessage } from "@earendil-works/pi-ai/compat";
 import { Container, Markdown, type MarkdownTheme, Spacer, Text } from "@schovest/pi-tui";
 import { getMarkdownTheme, theme } from "../theme/theme.ts";
 

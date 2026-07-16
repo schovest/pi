@@ -1,4 +1,4 @@
-import { getOAuthProviders, type OAuthDeviceCodeInfo } from "@schovest/pi-ai/oauth";
+import { getOAuthProviders, type OAuthDeviceCodeInfo } from "@earendil-works/pi-ai/oauth";
 import { Container, type Focusable, getKeybindings, Input, Spacer, Text, type TUI } from "@schovest/pi-tui";
 import { openBrowser } from "../../../utils/open-browser.ts";
 import { theme } from "../theme/theme.ts";

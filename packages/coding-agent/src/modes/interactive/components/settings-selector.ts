@@ -1,5 +1,5 @@
-import type { ThinkingLevel } from "@schovest/pi-agent-core";
-import type { Transport } from "@schovest/pi-ai";
+import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
+import type { Transport } from "@earendil-works/pi-ai/compat";
 import {
 	Container,
 	getCapabilities,
@@ -29,6 +29,7 @@ const THINKING_DESCRIPTIONS: Record<ThinkingLevel, string> = {
 	medium: "Moderate reasoning (~8k tokens)",
 	high: "Deep reasoning (~16k tokens)",
 	xhigh: "Maximum reasoning (~32k tokens)",
+	max: "Maximum reasoning (model limit)",
 };
 
 const DEFAULT_PROJECT_TRUST_LABELS: Record<DefaultProjectTrust, string> = {

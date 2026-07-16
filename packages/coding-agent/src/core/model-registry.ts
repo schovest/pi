@@ -17,8 +17,8 @@ import {
 	registerApiProvider,
 	resetApiProviders,
 	type SimpleStreamOptions,
-} from "@schovest/pi-ai";
-import { registerOAuthProvider, resetOAuthProviders } from "@schovest/pi-ai/oauth";
+} from "@earendil-works/pi-ai/compat";
+import { registerOAuthProvider, resetOAuthProviders } from "@earendil-works/pi-ai/oauth";
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { type Static, Type } from "typebox";
@@ -315,6 +315,7 @@ export type ResolvedRequestAuth =
 			ok: true;
 			apiKey?: string;
 			headers?: Record<string, string>;
+			env?: Record<string, string>;
 	  }
 	| {
 			ok: false;

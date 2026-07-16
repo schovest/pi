@@ -301,6 +301,7 @@ user sends prompt ────────────────────�
   │   └─► turn_end                                 │       │
   │                                                        │
   └─► agent_end                                            │
+      └─► agent_settled (full cycle done, including retries/compaction)
                                                            │
 user sends another prompt ◄────────────────────────────────┘
 
@@ -389,6 +390,17 @@ pi.on("session_start", async (event, ctx) => {
 });
 ```
 
+#### session_info_changed
+
+Fired when the current session metadata (e.g. display name) changes.
+
+```typescript
+pi.on("session_info_changed", async (event, ctx) => {
+  // event.name - current session name, or undefined when cleared
+  console.log(`Session name changed to: ${event.name ?? "(cleared)"}`);
+});
+```
+
 #### session_before_switch
 
 Fired before starting a new session (`/new`) or switching sessions (`/resume`).
@@ -431,7 +443,9 @@ Fired on compaction. See [compaction.md](compaction.md) for details.
 
 ```typescript
 pi.on("session_before_compact", async (event, ctx) => {
-  const { preparation, branchEntries, customInstructions, signal } = event;
+  const { preparation, branchEntries, customInstructions, signal, reason, willRetry } = event;
+  // event.reason - "manual" (user /compact), "threshold" (context threshold), "overflow" (overflow recovery)
+  // event.willRetry - true when the aborted turn is retried after this compaction (overflow recovery)
 
   // Cancel:
   return { cancel: true };
@@ -449,6 +463,8 @@ pi.on("session_before_compact", async (event, ctx) => {
 pi.on("session_compact", async (event, ctx) => {
   // event.compactionEntry - the saved compaction
   // event.fromExtension - whether extension provided it
+  // event.reason - "manual", "threshold", or "overflow"
+  // event.willRetry - true when the aborted turn is retried after compaction (overflow recovery)
 });
 ```
 
@@ -530,6 +546,17 @@ pi.on("agent_start", async (_event, ctx) => {});
 
 pi.on("agent_end", async (event, ctx) => {
   // event.messages - messages from this prompt
+});
+```
+
+#### agent_settled
+
+Fired after an agent run has fully settled — including retries, auto-compaction, and queued continuations. Use this when you need to know the agent is truly idle.
+
+```typescript
+pi.on("agent_settled", async (_event, ctx) => {
+  // Agent is now idle — safe to trigger follow-up actions
+  await ctx.ui.notify("Agent cycle complete", "info");
 });
 ```
 
@@ -635,6 +662,20 @@ pi.on("before_provider_request", (event, ctx) => {
 ```
 
 This is mainly useful for debugging provider serialization and cache behavior.
+
+#### before_provider_headers
+
+Fired after request headers are assembled, before the provider HTTP call. Handlers mutate `headers` in place (e.g. to inject tracing/session headers); the return value is ignored. A `null` value deletes that header.
+
+```typescript
+pi.on("before_provider_headers", (event, ctx) => {
+  // event.headers - mutable Record<string, string | null>
+  // Inject a custom header:
+  event.headers["x-trace-id"] = generateTraceId();
+  // Delete a header:
+  event.headers["x-sensitive"] = null;
+});
+```
 
 #### after_provider_response
 
@@ -1487,6 +1528,21 @@ mode and would not execute if sent via `prompt`.
 ### pi.registerMessageRenderer(customType, renderer)
 
 Register a custom TUI renderer for messages with your `customType`. See [Custom UI](#custom-ui).
+
+### pi.registerEntryRenderer(customType, renderer)
+
+Register a custom TUI renderer for `CustomEntry` session entries. Custom entries do not participate in LLM context — they are for extension state persistence with optional UI rendering.
+
+```typescript
+import type { EntryRenderer } from "@earendil-works/pi-ai/compat";
+
+const renderer: EntryRenderer = (entry, options, theme) => {
+  // Render a custom component for this entry type
+  return new Text(theme.fg("accent", entry.data?.title ?? "Todo"), 0, 0);
+};
+
+pi.registerEntryRenderer("todo-entry", renderer);
+```
 
 ### pi.registerShortcut(shortcut, options)
 
