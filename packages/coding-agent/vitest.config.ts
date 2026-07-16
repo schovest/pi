@@ -1,9 +1,8 @@
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
-const aiSrcIndex = fileURLToPath(new URL("../ai/src/index.ts", import.meta.url));
-const aiSrcOAuth = fileURLToPath(new URL("../ai/src/oauth.ts", import.meta.url));
-const agentSrcIndex = fileURLToPath(new URL("../agent/src/index.ts", import.meta.url));
+// pi-tui is still a workspace package — alias it to source for fast iteration.
+// pi-ai and pi-agent-core are now upstream npm packages — let vite resolve them naturally.
 const tuiSrcIndex = fileURLToPath(new URL("../tui/src/index.ts", import.meta.url));
 
 export default defineConfig({
@@ -13,24 +12,18 @@ export default defineConfig({
 		testTimeout: 30000,
 		server: {
 			deps: {
-				external: [/@silvia-odwyer\/photon-node/],
+				external: [/@earendil-works\/pi-ai/, /@earendil-works\/pi-agent-core/],
 			},
 		},
 	},
 	resolve: {
 		alias: [
-			{ find: /^@schovest\/pi-ai$/, replacement: aiSrcIndex },
-			{ find: /^@schovest\/pi-ai\/oauth$/, replacement: aiSrcOAuth },
-			{ find: /^@schovest\/pi-agent-core$/, replacement: agentSrcIndex },
 			{ find: /^@schovest\/pi-tui$/, replacement: tuiSrcIndex },
-			{ find: /^@mariozechner\/pi-ai$/, replacement: aiSrcIndex },
-			{ find: /^@mariozechner\/pi-ai\/oauth$/, replacement: aiSrcOAuth },
-			{ find: /^@mariozechner\/pi-agent-core$/, replacement: agentSrcIndex },
 			{ find: /^@mariozechner\/pi-tui$/, replacement: tuiSrcIndex },
-			{ find: /^@earendil-works\/pi-ai$/, replacement: aiSrcIndex },
-			{ find: /^@earendil-works\/pi-ai\/oauth$/, replacement: aiSrcOAuth },
-			{ find: /^@earendil-works\/pi-agent-core$/, replacement: agentSrcIndex },
 			{ find: /^@earendil-works\/pi-tui$/, replacement: tuiSrcIndex },
 		],
+	},
+	ssr: {
+		noExternal: [],
 	},
 });

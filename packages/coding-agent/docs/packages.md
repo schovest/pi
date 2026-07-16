@@ -168,7 +168,9 @@ If no `pi` manifest is present, pi auto-discovers resources from these directori
 
 Third party runtime dependencies belong in `dependencies` in `package.json`. Dependencies that do not register extensions, skills, prompt templates, or themes also belong in `dependencies`. When pi installs a package from npm or git, it runs `npm install`, so those dependencies are installed automatically.
 
-Pi bundles core packages for extensions and skills. If you import any of these, list them in `peerDependencies` with a `"*"` range and do not bundle them: `@schovest/pi-ai`, `@schovest/pi-agent-core`, `@schovest/pi-coding-agent`, `@schovest/pi-tui`, `typebox`.
+Pi bundles core packages for extensions and skills via VIRTUAL_MODULES. If you import any of these, list them in `peerDependencies` with a `"*"` range and do not bundle them: `@earendil-works/pi-ai` (or `@earendil-works/pi-ai/compat`), `@earendil-works/pi-agent-core`, `@schovest/pi-coding-agent`, `@schovest/pi-tui`, `typebox`.
+
+For backward compatibility, the loader also maps the legacy scopes `@schovest/*` and `@mariozechner/*` to the same bundled packages. New extensions should prefer the `@earendil-works/*` scope for ai/agent packages and `@schovest/*` for coding-agent/tui.
 
 Other pi packages must be bundled in your tarball. Add them to `dependencies` and `bundledDependencies`, then reference their resources through `node_modules/` paths. Pi loads packages with separate module roots, so separate installs do not collide or share modules.
 

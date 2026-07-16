@@ -11,27 +11,26 @@
                     └──────┬──────┘
                            │ 依赖
               ┌────────────┼────────────┐
-              ▼            ▼
-        ┌──────────┐ ┌──────────┐
-        │  agent   │ │   tui    │
-        │ (核心框架) │ │ (终端UI) │
-        └────┬─────┘ └──────────┘
-             │ 依赖
-             ▼
-        ┌──────────┐
-        │    ai    │
-        │(统一LLM) │
-        └──────────┘
+              ▼            ▼            ▼
+        ┌──────────┐ ┌──────────┐ ┌──────────┐
+        │  agent   │ │   tui    │ │   ai     │
+        │ (外部npm) │ │ (工作区)  │ │ (外部npm) │
+        └──────────┘ └──────────┘ └──────────┘
+              ▲            ▲            │
+              │            │            │ (tui 不依赖 ai/agent)
+              │            │            │
+              └────────────┴────────────┘
+                   (npm 包依赖)
 ```
 
 ### 各包职责
 
-| 包 | npm 名 | 职责 | 关键导出 |
-|---|---|---|---|
-| `agent` | `pi-agent-core` | Agent 循环、会话树、技能/模板、压缩、执行环境 | `Agent`, `AgentHarness`, `Session`, `AgentLoop` |
-| `ai` | `pi-ai` | 统一 LLM API、多 provider 适配、模型注册表、OAuth | `stream()`, `complete()`, `getModel()`, providers |
-| `tui` | `pi-tui` | 差分渲染引擎、终端组件库、键盘/快捷键系统 | `TUI`, `Terminal`, components |
-| `coding-agent` | `pi-coding-agent` | CLI/TUI/RPC 三种运行模式、内置工具、扩展系统、SDK | `createAgentSession()`, tools, `InteractiveMode` |
+| 包 | npm 名 | 来源 | 职责 | 关键导出 |
+|---|---|---|---|---|
+| `agent` | `pi-agent-core` | 外部 npm (`@earendil-works/pi-agent-core`) | Agent 循环、会话树、技能/模板、压缩、执行环境 | `Agent`, `AgentHarness`, `Session`, `AgentLoop` |
+| `ai` | `pi-ai` | 外部 npm (`@earendil-works/pi-ai`) | 统一 LLM API、多 provider 适配、模型注册表、OAuth | `stream()`, `complete()`, `getModel()`, providers |
+| `tui` | `pi-tui` | 工作区包 (`packages/tui`) | 差分渲染引擎、终端组件库、键盘/快捷键系统 | `TUI`, `Terminal`, components |
+| `coding-agent` | `pi-coding-agent` | 工作区包 (`packages/coding-agent`) | CLI/TUI/RPC 三种运行模式、内置工具、扩展系统、SDK | `createAgentSession()`, tools, `InteractiveMode` |
 
 ## 核心数据流
 

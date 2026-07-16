@@ -1,4 +1,4 @@
-import type { Model } from "@schovest/pi-ai";
+import type { Model } from "@earendil-works/pi-ai/compat";
 import { describe, expect, test } from "vitest";
 import {
 	defaultModelPerProvider,
@@ -344,6 +344,7 @@ describe("resolveCliModel", () => {
 		};
 		const registry = {
 			getAll: () => [...allModels, zaiModel, gatewayModel],
+			hasConfiguredAuth: () => true,
 		} as unknown as Parameters<typeof resolveCliModel>[0]["modelRegistry"];
 
 		const result = resolveCliModel({

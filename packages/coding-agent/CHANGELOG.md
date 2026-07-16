@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `loader.ts` 模块解析：新增 `resolveModuleEntry` fallback，修复 vitest SSR 环境下 `import.meta.resolve` 不可用导致 59 个扩展相关测试失败
+- `agent-session-retry-events` 测试断言对齐上游 `agent_settled` 事件
+
+## [0.11.0] - 2026-07-16
+
+### Changed
+
+- **移除本地 ai/agent 包，改用上游 npm 依赖**：`@earendil-works/pi-ai@0.80.6` 和 `@earendil-works/pi-agent-core@0.80.6`，减少 ~86k 行维护代码
+- **Extension API 与上游完全对齐**：补回 `session_info_changed`、`before_provider_headers`、`agent_settled` 事件和 `registerEntryRenderer` API 方法
+- **agent-session 行为对齐上游**：compaction 携带 `env`、overflow zero-usage 兜底、`content ?? []` 归一化、`isIdle/isStreaming` 改用 `_isAgentRunActive`、`getSessionStats` 遍历所有 session entries 等
+- **`convertToLlm` 从 ExtensionAPI 移除**：上游从未暴露，扩展通过 SDK import 使用即可
+- **`SubagentRunEntry` 类型外提至 coding-agent**：不再侵入 agent 包
+- extensions.md 文档补全新增事件和 API，packages.md 更新包引用
+
+### Removed
+
+- `packages/ai` 和 `packages/agent` 两个工作区包全部删除
+- `PlanEngine` / `Plan` 死代码移除
+- `InlineExtension` 类型（上游新增，fork 未使用）
+
 ## [0.10.2] - 2026-07-15
 
 ### Changed

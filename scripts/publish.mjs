@@ -5,8 +5,6 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const packages = [
-	{ directory: "packages/ai", name: "@schovest/pi-ai" },
-	{ directory: "packages/agent", name: "@schovest/pi-agent-core" },
 	{ directory: "packages/tui", name: "@schovest/pi-tui" },
 	{ directory: "packages/coding-agent", name: "@schovest/pi-coding-agent" },
 ];

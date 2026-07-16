@@ -1,7 +1,7 @@
-import type { SubagentRunEntry } from "@schovest/pi-agent-core";
 import { Container, getKeybindings, Spacer, Text, truncateToWidth } from "@schovest/pi-tui";
 import type { AgentSession } from "../../../core/agent-session.ts";
 import type { SubagentRunEvent, SubagentRunResult, SubagentTaskResult } from "../../../core/subagents/types.ts";
+import type { SubagentRunEntry } from "../../../core/types/subagent-entry.ts";
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { keyHint, rawKeyHint } from "./keybinding-hints.ts";

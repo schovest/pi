@@ -1,6 +1,6 @@
 import { constants } from "node:fs";
 import { access as fsAccess } from "node:fs/promises";
-import type { AgentTool } from "@schovest/pi-agent-core";
+import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Container, Text, truncateToWidth } from "@schovest/pi-tui";
 import { type ChildProcess, spawn } from "child_process";
 import { type Static, Type } from "typebox";
