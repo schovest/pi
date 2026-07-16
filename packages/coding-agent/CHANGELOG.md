@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.11.2] - 2026-07-16
+
 ### Changed
 
 - install.sh 扩展和 Agent 拆分为两步独立选择：先选扩展（9 项，默认 4 项），再选 Primary Agent（plan/coding/config，全默认勾选）
