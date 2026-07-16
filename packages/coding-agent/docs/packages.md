@@ -4,7 +4,7 @@
 
 Pi packages bundle extensions, skills, prompt templates, and themes so you can share them through npm or git. A package can declare resources in `package.json` under the `pi` key, or use conventional directories.
 
-Claude-compatible marketplace plugins are managed separately. Use [`pi plugins`](plugins.md) for Claude plugin catalogs and `.claude-plugin/plugin.json` manifests.
+Claude-compatible marketplace plugins are managed separately. Use [`pi claude-plugin`](plugins.md) for Claude plugin catalogs and `.claude-plugin/plugin.json` manifests.
 
 ## Table of Contents
 
@@ -38,7 +38,7 @@ pi update npm:@foo/bar      # update one package
 pi update --extension npm:@foo/bar
 ```
 
-These commands manage pi packages, not Claude-compatible plugins or the pi CLI installation. To install Claude-compatible plugins, use [`pi plugins`](plugins.md). To uninstall pi itself, see [Quickstart](quickstart.md#uninstall).
+These commands manage pi packages, not Claude-compatible plugins or the pi CLI installation. To install Claude-compatible plugins, use [`pi claude-plugin`](plugins.md). To uninstall pi itself, see [Quickstart](quickstart.md#uninstall).
 
 By default, `install` and `remove` write to user settings (`~/.pi/agent/settings.json`). Use `-l` to write to project settings (`.pi/settings.json`) instead. Project settings can be shared with your team, and pi installs any missing packages automatically on startup after the project is trusted.
 

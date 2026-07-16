@@ -232,9 +232,9 @@ ${chalk.bold("Commands:")}
   ${APP_NAME} update [source]            Update installed extensions
   ${APP_NAME} self-update [--force]     Upgrade pi itself to the latest version
   ${APP_NAME} list                      List installed extensions from settings
-  ${APP_NAME} plugins <command>         Manage Claude-compatible plugins
+  ${APP_NAME} claude-plugin <command>   Manage Claude-compatible plugins
   ${APP_NAME} config                    Open TUI to enable/disable package resources
-  ${APP_NAME} <command> --help          Show help for install/remove/uninstall/update/list/plugins
+  ${APP_NAME} <command> --help          Show help for install/remove/uninstall/update/list/claude-plugin
 
 ${chalk.bold("Options:")}
   --provider <name>              Provider name (default: google)

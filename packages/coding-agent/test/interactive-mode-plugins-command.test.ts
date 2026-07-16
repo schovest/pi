@@ -27,9 +27,9 @@ beforeAll(() => {
 	initTheme("dark");
 });
 
-describe("InteractiveMode /plugins", () => {
-	it("registers /plugins as a built-in slash command", () => {
-		expect(BUILTIN_SLASH_COMMANDS.some((command) => command.name === "plugins")).toBe(true);
+describe("InteractiveMode /claude-plugin", () => {
+	it("registers /claude-plugin as a built-in slash command", () => {
+		expect(BUILTIN_SLASH_COMMANDS.some((command) => command.name === "claude-plugin")).toBe(true);
 	});
 
 	it("registers /running-subagents as a built-in slash command", () => {

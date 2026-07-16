@@ -483,21 +483,21 @@ export async function handleConfigCommand(
 
 function printPluginCommandHelp(): void {
 	console.log(`${chalk.bold("Usage:")}
-  ${APP_NAME} plugins marketplace add <name> <repo-or-url>
-  ${APP_NAME} plugins marketplace list
-  ${APP_NAME} plugins marketplace remove <name>
-  ${APP_NAME} plugins search [query] [--marketplace <name>]
-  ${APP_NAME} plugins install <name@marketplace|git-url|https-url> [-l]
-  ${APP_NAME} plugins list
-  ${APP_NAME} plugins remove <plugin> [-l]
-  ${APP_NAME} plugins update [plugin]
+  ${APP_NAME} claude-plugin marketplace add <name> <repo-or-url>
+  ${APP_NAME} claude-plugin marketplace list
+  ${APP_NAME} claude-plugin marketplace remove <name>
+  ${APP_NAME} claude-plugin search [query] [--marketplace <name>]
+  ${APP_NAME} claude-plugin install <name@marketplace|git-url|https-url> [-l]
+  ${APP_NAME} claude-plugin list
+  ${APP_NAME} claude-plugin remove <plugin> [-l]
+  ${APP_NAME} claude-plugin update [plugin]
 
 Claude-compatible plugins are managed separately from Pi packages. Use ${APP_NAME} install/list for native packages.
 `);
 }
 
 export async function handlePluginCommand(args: string[]): Promise<boolean> {
-	if (args[0] !== "plugins") {
+	if (args[0] !== "claude-plugin") {
 		return false;
 	}
 

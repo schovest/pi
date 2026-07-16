@@ -2738,9 +2738,9 @@ export class InteractiveMode {
 		});
 
 		registry.register({
-			id: "slash.plugins",
-			label: "/plugins",
-			description: "管理插件",
+			id: "slash.claude-plugin",
+			label: "/claude-plugin",
+			description: "管理 Claude 插件",
 			category: "slash",
 			handler: () => this.handlePluginsCommand(),
 		});
@@ -3029,7 +3029,7 @@ export class InteractiveMode {
 				this.editor.setText("");
 				return;
 			}
-			if (text === "/plugins") {
+			if (text === "/claude-plugin") {
 				this.handlePluginsCommand();
 				return;
 			}
