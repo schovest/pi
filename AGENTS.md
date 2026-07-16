@@ -135,7 +135,7 @@ npx vitest run --dir packages/agent/test agent-loop
 - 不 force push
 - **升级版本必须打 tag**
 - **严禁添加 upstream 类远程仓库**（如 upstream-temp），严禁 fetch 上游仓库的 tag。只在 origin (schovest/pi) 上管理版本标签
-- **严禁批量删除/重建标签**，标签操作限定为版本升级流程中在 main 上打新版本 tag
+- **严禁批量删除/重建标签**，标签操作限定为版本升级时在 main 上打新版本 tag
 
 #### 分支策略
 
@@ -143,55 +143,6 @@ npx vitest run --dir packages/agent/test agent-loop
 - `main`：保护分支，dev 上的改动经 `npm run check` 通过并完成相关测试后可合并，不限于版本升级
 - 合并使用 `--no-ff`，merge commit message 填写变更摘要
 - 版本 tag 打在 main 的 merge commit 上，不在 dev 上打 tag
-
-#### 版本升级流程
-
-> **⚠️ 禁止使用 `scripts/release.mjs`**：该脚本绕过 dev→main 合并流程，在当前分支直接提交并推送 tag，会导致 main 分支与 dev 分支脱节。版本发布必须严格按以下手动步骤执行。
-
-所有包使用 lockstep 版本号，统一升降。流程：
-
-以下步骤全部在 **dev 分支**上执行（步骤 1-7），然后 merge 到 main（步骤 8-10），最后切回 dev（步骤 11）：
-
-```bash
-# 1. 升级版本号 + 同步包间依赖 + 更新 lockfile（一步完成）
-#    npm run version:<patch|minor|major> 等价于：
-#      npm version <level> -ws --no-git-tag-version
-#      node scripts/sync-versions.js
-#      npm install --package-lock-only --ignore-scripts
-npm run version:<patch|minor|major>
-
-# 2. 更新 root package.json 版本号（手动编辑）
-
-# 3. 更新 shrinkwrap
-node scripts/generate-coding-agent-shrinkwrap.mjs
-
-# 4. 构建并打包 tgz
-npm run build:tgz
-
-# 5. 更新 CHANGELOG [`packages/coding-agent/CHANGELOG.md`]（将 [Unreleased] 条目移入新版本段落）
-
-# 6. 在 dev 上提交版本升级
-PI_ALLOW_LOCKFILE_CHANGE=1 git commit -m "chore: bump version to x.y.z"
-
-# 7. 切到 main，merge dev（--no-ff 保留 merge commit）
-git checkout main
-git merge dev --no-ff -m "release vx.y.z: <变更摘要>"
-
-# 8. 在 main 上打 tag
-git tag vx.y.z
-
-# 9. push main + tag
-#    ★ 这是触发发布的关键动作 ★
-#    push tag 后 CI/CD 自动构建二进制、创建 GitHub Release、发布 npm
-#    不需要手动创建 release 或运行任何发布脚本
-git push origin main
-git push origin vx.y.z
-
-# 10. 切回 dev 分支（避免后续开发误在 main 上操作）
-git checkout dev
-```
-
-**关键认知**：版本发布的全部自动化都在 CI/CD 中完成（`.github/workflows/build-binaries.yml`）。`git push origin vx.y.z` 是唯一触发发布的动作；步骤 1-8 只是准备工作。push tag 后等待 CI 完成即可，不要手动创建 GitHub Release 或运行 `scripts/release.mjs`。
 
 ### 构建与测试
 
@@ -220,14 +171,14 @@ git checkout dev
 
 #### Build Binaries（build-binaries.yml）— 发布构建
 
-- **触发**：push `v*` tag（版本升级流程 step 11 自动触发），或手动 `workflow_dispatch`
+- **触发**：push `v*` tag，或手动 `workflow_dispatch`
 - **build job**：checkout tag → `scripts/build-binaries.sh` 构建 6 平台二进制 → 生成 `sha256sums.txt` → 从 CHANGELOG 提取 release notes → 创建 GitHub Release 并上传所有资产
 - **publish-npm job**：依赖 build job 完成 → checkout tag → 构建 → check → test → 验证源文件无变更 → 发布 npm 包（trusted publishing）
 - **环境**：npm 发布使用 `npm-publish` environment（需审批）
 
 #### 版本发布与 CI 的关系
 
-版本升级流程步骤 11 的 `git push origin vx.y.z` 触发 `build-binaries.yml`，CI 自动完成全部发布工作：
+执行 `/up` prompt 最后 push tag (`git push origin vx.y.z`) 触发 `build-binaries.yml`，CI 自动完成全部发布工作：
 
 1. **构建二进制**：checkout tag → `scripts/build-binaries.sh` 构建 6 平台二进制 → 生成 `sha256sums.txt`
 2. **创建 GitHub Release**：从 CHANGELOG 提取 release notes → 创建 Release 并上传所有资产
@@ -240,7 +191,7 @@ git checkout dev
 
 - **每个功能/修复 commit 都必须同步写 CHANGELOG 条目**，放入 `## [Unreleased]` 下对应分类（`### Added` / `### Changed` / `### Fixed` / `### Removed`），与代码改动在同一个 commit 中提交。禁止先提交代码再补写 CHANGELOG。
 - 不修改已发布版本段落的内容
-- **版本升级时**：将 `[Unreleased]` 下的条目移入新版本段落（如 `## [0.8.1] - 2026-07-09`），然后清空 `[Unreleased]`。这是版本升级流程 step 7 的工作。
+- **版本升级时**：将 `[Unreleased]` 下的条目移入新版本段落（如 `## [0.8.1] - 2026-07-09`），然后清空 `[Unreleased]`。这是 `/up` prompt 执行流程的一部分。
 - CHANGELOG 条目按 `### Added` / `### Changed` / `### Fixed` / `### Removed` 分类，每条一行简述
 - 纯文档、重构、CI 等不影响用户行为的改动可不写 CHANGELOG
 
