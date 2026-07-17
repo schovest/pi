@@ -1,12 +1,12 @@
 # 自定义 Agents 开发规则
 
-本仓库基于上游 `0.79.1`的 Pi 开发自己的 agents、工具链和发行版。默认目标不是维护上游 `pi`，而是在保留 Pi 核心能力的基础上，迭代适合本地工作流的 agent 运行时、内置扩展、MCP 能力、技能和二进制分发。
+本仓库基于上游 `0.80.6` 的 Pi 开发自己的 agents、工具链和发行版。默认目标不是维护上游 `pi`，而是在保留 Pi 核心能力的基础上，迭代适合本地工作流的 agent 运行时、内置扩展、MCP 能力、技能和二进制分发。
 
 ## 项目目标
 
 将 Pi 作为 agent 平台底座，而非原版 CLI。扩展优先级：
 
-1. **可安装扩展** — 通过 `pi install` 按需安装，核心扩展在 `install.sh` 中提供
+1. **可安装扩展** — 通过 `pi install` 按需安装，核心扩展在 `packages/coding-agent/dist-assets/install.sh` 中提供
 2. **Skills/Prompt Templates** — `.pi/skills/`、`.pi/prompts/`，项目级或用户级
 3. **MCP Server** — 通过内置 MCP 插件桥接，默认 proxy 模式控制上下文占用
 4. **配置层** — settings.json、keybindings、themes
@@ -17,16 +17,16 @@
 
 ## 架构参考索引
 
-详细架构文档见 [`docs/specs/architecture.md`](docs/specs/architecture.md)，以下为摘要索引。**更新 `docs/specs/` 下文件时须同步更新本索引。**
+详细架构文档见 [`docs/architecture.md`](docs/architecture.md)，以下为摘要索引。**更新 `docs/architecture.md` 时须同步更新本索引。**
 
 | 章节 | 文件 | 摘要 |
 | ------ | ------ | ------ |
-| 包依赖关系 | `docs/specs/architecture.md#包依赖关系` | coding-agent → agent + tui → ai |
-| 各包职责 | `docs/specs/architecture.md#各包职责` | agent/ai/tui/coding-agent 四包职责与关键导出 |
-| 核心数据流 | `docs/specs/architecture.md#核心数据流` | 一次 prompt 的完整调用链：Mode → AgentSession → Agent → runAgentLoop → streamSimple → Provider → EventStream |
-| Agent 抽象层 | `docs/specs/architecture.md#agent-抽象层` | 低层 agentLoop → 中层 Agent → 应用层 AgentSession；AgentHarness 为独立抽象，不在主调用链 |
-| 扩展点与能力归属 | `docs/specs/architecture.md#扩展点与能力归属` | 16 类能力的归属位置、配置方式和关键约束 |
-| 关键路径入口 | `docs/specs/architecture.md#关键路径入口` | 13 个功能模块的入口文件和调用链 |
+| 包依赖关系 | `docs/architecture.md#包依赖关系` | coding-agent → agent + tui → ai |
+| 各包职责 | `docs/architecture.md#各包职责` | agent/ai/tui/coding-agent 四包职责与关键导出 |
+| 核心数据流 | `docs/architecture.md#核心数据流` | 一次 prompt 的完整调用链：Mode → AgentSession → Agent → runAgentLoop → streamSimple → Provider → EventStream |
+| Agent 抽象层 | `docs/architecture.md#agent-抽象层` | 低层 agentLoop → 中层 Agent → 应用层 AgentSession；AgentHarness 为独立抽象，不在主调用链 |
+| 扩展点与能力归属 | `docs/architecture.md#扩展点与能力归属` | 16 类能力的归属位置、配置方式和关键约束 |
+| 关键路径入口 | `docs/architecture.md#关键路径入口` | 13 个功能模块的入口文件和调用链 |
 
 ## 交流风格
 
@@ -201,7 +201,7 @@ npx vitest run --dir packages/agent/test agent-loop
 
 ### 架构文档索引同步
 
-更新 `docs/specs/` 下的文件时，须同步更新本文件中「架构参考索引」的摘要列，确保索引与实际内容一致。新增章节须在索引表中新增对应行；删除章节须移除对应行；章节内容变更须更新摘要描述。
+更新 `docs/architecture.md` 时，须同步更新本文件中「架构参考索引」的摘要列，确保索引与实际内容一致。新增章节须在索引表中新增对应行；删除章节须移除对应行；章节内容变更须更新摘要描述。
 
 ## 用户覆盖
 

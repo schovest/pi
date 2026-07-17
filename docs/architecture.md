@@ -26,11 +26,11 @@
 ### 各包职责
 
 | 包 | npm 名 | 来源 | 职责 | 关键导出 |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | `agent` | `pi-agent-core` | 外部 npm (`@earendil-works/pi-agent-core`) | Agent 循环、会话树、技能/模板、压缩、执行环境 | `Agent`, `AgentHarness`, `Session`, `AgentLoop` |
 | `ai` | `pi-ai` | 外部 npm (`@earendil-works/pi-ai`) | 统一 LLM API、多 provider 适配、模型注册表、OAuth | `stream()`, `complete()`, `getModel()`, providers |
-| `tui` | `pi-tui` | 工作区包 (`packages/tui`) | 差分渲染引擎、终端组件库、键盘/快捷键系统 | `TUI`, `Terminal`, components |
-| `coding-agent` | `pi-coding-agent` | 工作区包 (`packages/coding-agent`) | CLI/TUI/RPC 三种运行模式、内置工具、扩展系统、SDK | `createAgentSession()`, tools, `InteractiveMode` |
+| `tui` | `@schovest/pi-tui` | 工作区包 (`packages/tui`) | 差分渲染引擎、终端组件库、键盘/快捷键系统 | `TUI`, `Terminal`, components |
+| `coding-agent` | `@schovest/pi-coding-agent` | 工作区包 (`packages/coding-agent`) | CLI/TUI/RPC 三种运行模式、内置工具、扩展系统、SDK | `createAgentSession()`, tools, `InteractiveMode` |
 
 ## 核心数据流
 
@@ -40,7 +40,7 @@
 用户输入
   │
   ▼
-InteractiveMode / PrintMode / RpcMode
+InteractiveMode / runPrintMode() / runRpcMode()
   │  session.prompt(text, options)
   ▼
 AgentSession.prompt()                    ← coding-agent/core/agent-session.ts
@@ -95,7 +95,7 @@ AssistantMessageEventStream              ← ai/utils/event-stream.ts
 ## Agent 抽象层
 
 | 层 | 类 | 文件 | 职责 |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | 低层 | `agentLoop` / `runAgentLoop` | `agent/agent-loop.ts` | 纯算法：LLM 调用循环、tool call 执行、事件发射、guard 系统 |
 | 中层 | `Agent` | `agent/agent.ts` | 有状态封装：transcript 管理、steering/follow-up 队列、abort、lifecycle |
 | 应用层 | `AgentSession` | `coding-agent/core/agent-session.ts` | 应用特化：扩展命令、skill/模板展开、内置工具、模型切换、自动压缩、持久化 |
@@ -106,9 +106,9 @@ AssistantMessageEventStream              ← ai/utils/event-stream.ts
 新增能力时，按以下表格确定归属层：
 
 | 能力类型 | 归属位置 | 配置/注册方式 | 示例 |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | 核心运行时能力 | `packages/agent/src/` | 修改源码，需上游同步考虑 | 新的 AgentLoop 策略、新的 Session 条目类型 |
-| 可安装扩展 | `pi install <source>` 或 `.pi/extensions/*.ts` | install.sh 交互选择 + settings.json | todo、ask-user-question、tps 等 |
+| 可安装扩展 | `pi install <source>` 或 `.pi/extensions/*.ts` | `dist-assets/install.sh` 交互选择 + settings.json | todo、ask-user-question、tps 等 |
 | 项目级 skill | `.pi/skills/*.md` | SKILL.md frontmatter | add-llm-provider.md |
 | 项目级 prompt | `.pi/prompts/*.md` | YAML frontmatter | pr.md, is.md |
 | 项目级扩展 | `.pi/extensions/*.ts` | ExtensionAPI 注册 | tps.ts, redraws.ts |
@@ -126,25 +126,26 @@ AssistantMessageEventStream              ← ai/utils/event-stream.ts
 
 ### 关键约束
 
-- 扩展通过 `pi install` 安装或 `.pi/extensions/` 发现；核心扩展列表见 `install.sh`
+- 扩展通过 `pi install` 安装或 `.pi/extensions/` 发现；核心扩展列表见 `packages/coding-agent/dist-assets/install.sh`
 - MCP 能力通过 Claude-compatible 插件系统间接支持，插件安装时将 MCP 服务器配置写入 `mcp.json`；默认 proxy 模式控制上下文占用
 - Claude 兼容插件使用独立 `plugins` settings，不污染 Pi 原生 `packages` 配置
 - Subagent 工具通过 `includedTools`/`excludedTools` glob 模式控制工具权限；旧 `tools` 字段自动映射
 - Primary agent 的 system prompt 始终 prepend 在 SYSTEM.md 之前
 - 内置工具默认启用 `read, bash, edit, write`；`grep, find, ls` 按需启用
+- 发行版资产目录 `packages/coding-agent/dist-assets/` 包含随二进制分发的内置扩展（tps.ts、sudo-helper.ts）、内置 primary agents（coding.md、config.md、plan.md）和 `install.sh` 安装脚本
 
 ## 关键路径入口
 
 修改以下功能时，从这些入口开始追踪：
 
 | 功能 | 主入口 | 关键调用链 |
-|---|---|---|
+| --- | --- | --- |
 | **工具注册** | `coding-agent/core/sdk.ts:createAgentSession()` | → `createXxxTool()` → `AgentTool` 接口 → `Agent` 注册 |
 | **工具匹配** | `coding-agent/core/tool-matcher.ts:resolveActiveTools()` | glob 模式 → `includedTools`/`excludedTools` → 最终工具集 |
 | **模型解析** | `coding-agent/core/model-resolver.ts:findInitialModel()` | → `ModelRegistry.getModel()` → `ai/models.ts` → provider 匹配 |
 | **会话持久化** | `coding-agent/core/session-manager.ts:SessionManager` | → `SessionManager.appendMessage()` → `Session.appendMessage()` → `JsonlSessionStorage.appendEntry()` |
 | **扩展加载** | `coding-agent/core/extensions/loader.ts:discoverAndLoadExtensions()` | → `ExtensionRunner` → 事件分发 → 扩展 handler |
-| **技能加载** | `agent/harness/skills.ts:loadSkills()` | → 目录扫描 → SKILL.md 解析 → `formatSkillsForSystemPrompt()` |
+| **技能加载** | `coding-agent/core/skills.ts:loadSkills()` | → `loadSkillsFromDir()` → SKILL.md 解析 → `formatSkillsForPrompt()` |
 | **系统提示词** | `coding-agent/core/system-prompt.ts:buildSystemPrompt()` | Primary Agent → SYSTEM.md → 默认 → Append → 上下文文件 → Skills |
 | **Primary Agent** | `coding-agent/core/primary-agents/discovery.ts` | → `switchPrimaryAgent()` → 工具重解析 → `defaultPrimaryAgent` 持久化 |
 | **压缩** | `coding-agent/core/compaction/compaction.ts:compact()` | → `findCutPoint()` → `generateSummary()` → 会话条目重写 |

@@ -36,7 +36,7 @@ out.jsonl
 pi-*.html
 out.html
 packages/coding-agent/binaries/
-todo.md
+TODO.md
 plans/
 !docs/superpowers/plans/
 .pi/hf-sessions/
