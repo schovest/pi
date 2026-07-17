@@ -148,6 +148,14 @@ export default function (pi: ExtensionAPI) {
 			return { block: true, reason: "用户取消了 sudo 密码输入" };
 		}
 
+		// 关闭 cat stdin：cat 读到 EOF 后关闭 FIFO 写端
+		// 否则 askpass 的 cat FIFO 永远收不到 EOF，sudo 假死
+		try {
+			writer.stdin.end();
+		} catch {
+			// stdin 可能已关闭
+		}
+
 		// 修改命令：仅第一个 sudo → SUDO_ASKPASS=<script> sudo -A
 		// 后续 sudo 不修改，靠第一个 sudo 建立的 timestamp 缓存执行
 		// session 记录原始 toolCall（无修改），args 用修改后的值执行
