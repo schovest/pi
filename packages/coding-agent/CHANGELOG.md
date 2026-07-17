@@ -15,6 +15,7 @@
 
 - TUI 卡顿修复：thinking 流式渲染引入 Markdown token 级增量缓存，消除每个 streaming token 触发的全量 markdown 重解析（lexer + wrapTextWithAnsi）；`AssistantMessageComponent.updateContent` 复用 thinking Markdown 实例，通过 `appendText()` 保留渲染缓存，将单帧渲染成本从 O(总文本) 降到 O(最后一个 token)
 - `sudo-helper` 假死修复：SecureBuffer 重构时遗漏 `writer.stdin.end()` 调用，导致 cat 进程不关闭 FIFO 写端，askpass 的 cat FIFO 永远收不到 EOF，sudo 无限等待 askpass 返回
+- `sudo-helper` 鼠标滚轮误触关闭修复：`handleInput` 逐字符检测 `\x1b` 导致箭头键转义序列（`\x1b[A`，鼠标滚轮转义）被误判为 Escape 键。改用 `matchesKey()` 精确匹配，仅独立 Escape / Ctrl+C / Ctrl+D 触发取消
 
 ## [0.11.2] - 2026-07-16
 

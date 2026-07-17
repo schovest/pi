@@ -27,7 +27,7 @@ import { spawn } from "node:child_process";
 import { randomFillSync, randomUUID } from "node:crypto";
 import { chmod, unlink, writeFile } from "node:fs/promises";
 import type { ExtensionAPI } from "@schovest/pi-coding-agent";
-import { type Component, type Focusable } from "@schovest/pi-tui";
+import { type Component, type Focusable, matchesKey } from "@schovest/pi-tui";
 
 /** 匹配命令中第一个 sudo（用于检测和单次替换） */
 const SUDO_PATTERN = /\bsudo(?=\s)/;
@@ -291,31 +291,36 @@ class PasswordInputComponent implements Component, Focusable {
 	handleInput(data: string): boolean | void {
 		if (this.done) return;
 
-		// 忽略 bracketed paste 标记，避免 \x1b 触发取消
-		const clean = data.replace(/\x1b\[200~|\x1b\[201~/g, "");
+		// 用 matchesKey 判断特殊键，正确区分 Escape 键和转义序列
+		// 避免 \x1b[A（箭头键/鼠标滚轮）被误判为 Escape 导致弹窗关闭
 
-		for (const char of clean) {
+		// Enter 提交
+		if (matchesKey(data, "enter")) {
+			this.submit();
+			return;
+		}
+
+		// 仅 Escape / Ctrl+C / Ctrl+D 取消
+		if (matchesKey(data, "escape") || matchesKey(data, "ctrl+c") || matchesKey(data, "ctrl+d")) {
+			this.cancel();
+			return;
+		}
+
+		// Backspace
+		if (matchesKey(data, "backspace") || matchesKey(data, "ctrl+h")) {
+			this.secure.backspace();
+			return;
+		}
+
+		// 忽略所有其他转义序列（箭头键、功能键、鼠标等）
+		if (data.startsWith("\x1b")) return;
+
+		// 忽略 bracketed paste 标记
+		if (data.includes("\x1b[200~") || data.includes("\x1b[201~")) return;
+
+		// 可打印字符（逐字符处理，含 Unicode）
+		for (const char of data) {
 			const code = char.charCodeAt(0);
-
-			// Enter 提交
-			if (char === "\r" || char === "\n") {
-				this.submit();
-				return;
-			}
-
-			// Escape / Ctrl+C / Ctrl+D 取消
-			if (char === "\x1b" || code === 0x03 || code === 0x04) {
-				this.cancel();
-				return;
-			}
-
-			// Backspace
-			if (code === 0x7f || code === 0x08) {
-				this.secure.backspace();
-				continue;
-			}
-
-			// 可打印字符（含 Unicode），拒绝控制字符
 			if (code >= 0x20) {
 				this.secure.append(char);
 			}
