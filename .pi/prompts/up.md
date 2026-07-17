@@ -32,15 +32,19 @@ npm install --package-lock-only --ignore-scripts
 node scripts/generate-coding-agent-shrinkwrap.mjs
 ```
 
-### 4. 构建并打包 tgz
+### 4. 更新 CHANGELOG
+
+将 `packages/coding-agent/CHANGELOG.md` 中 `## [Unreleased]` 下的条目移入新版本段落 `## [<VER>] - <YYYY-MM-DD>`，然后清空 `[Unreleased]`。
+
+### 5. 构建并打包（门控测试）
+
+基于所有源文件已到最终状态（版本号、CHANGELOG 等）执行构建测试：
 
 ```bash
 npm run build:tgz
 ```
 
-### 5. 更新 CHANGELOG
-
-将 `packages/coding-agent/CHANGELOG.md` 中 `## [Unreleased]` 下的条目移入新版本段落 `## [<VER>] - <YYYY-MM-DD>`，然后清空 `[Unreleased]`。
+构建失败则中止版本升级，修复 bug 后重新执行全流程；成功才继续提交。产物在 `packages/coding-agent/binaries/`（已被 gitignore，不入库，CI 会自行重建）。
 
 ### 6. 在 dev 上提交
 
@@ -48,7 +52,6 @@ npm run build:tgz
 
 ```bash
 git add package.json package-lock.json packages/*/package.json packages/coding-agent/npm-shrinkwrap.json packages/coding-agent/CHANGELOG.md
-git add packages/coding-agent/*.tgz  # build:tgz 产物
 PI_ALLOW_LOCKFILE_CHANGE=1 git commit -m "chore: bump version to <VER>"
 ```
 
