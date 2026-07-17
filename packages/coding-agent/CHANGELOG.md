@@ -10,6 +10,7 @@
 
 - install.sh 已安装检测：重复运行 install.sh 时自动跳过核心二进制/资源拷贝，仅触发扩展和 Agent 选择安装
 - install.sh 扩展候选新增 sudo-helper（file:sudo-helper.ts，默认不勾选）
+- install.sh 扩展候选新增 pi-hermes-memory（npm:pi-hermes-memory，默认不勾选）：持久记忆与自驱动学习循环
 
 ### Fixed
 

@@ -85,6 +85,7 @@ EXT_NAMES=(
 	"superpowers"
 	"pi-plugin-manager"
 	"pi-lens"
+	"pi-hermes-memory"
 )
 # shellcheck disable=SC2034 # used via nameref in run_menu
 EXT_DESCS=(
@@ -98,9 +99,10 @@ EXT_DESCS=(
 	"Superpowers 技能集"
 	"插件管理器"
 	"代码智能分析"
+	"持久记忆与学习循环"
 )
 # shellcheck disable=SC2034 # used via nameref in run_menu
-EXT_DEFAULTS=(1 1 1 0 0 0 0 0 1 0)
+EXT_DEFAULTS=(1 1 1 0 0 0 0 0 1 0 0)
 # shellcheck disable=SC2034 # used via nameref in run_menu
 EXT_INSTALLS=(
 	"npm:pi-mcp-adapter"
@@ -113,6 +115,7 @@ EXT_INSTALLS=(
 	"git:github.com/obra/superpowers"
 	"npm:pi-plugin-manager"
 	"npm:pi-lens"
+	"npm:pi-hermes-memory"
 )
 
 # Primary Agent definitions
