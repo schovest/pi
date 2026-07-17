@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.11.3] - 2026-07-17
+
 ### Added
 
 - `sudo-helper` 扩展：当 agent 通过 bash 工具执行 sudo 命令时，弹出遮罩密码输入框，通过 SUDO_ASKPASS + FIFO（/dev/shm tmpfs）安全注入密码。密码全程不落盘、不传 agent、不在 ps 中可见，XOR 动态加密存储，用完即毁
