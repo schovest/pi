@@ -28,34 +28,40 @@ printf '%s' "$PREFIX" >"$HOME/.pi/agent/.install-prefix"
 # Core installation (binary + assets)
 # ---------------------------------------------------------------------------
 
-mkdir -p "$PREFIX"
-mkdir -p "$BINDIR"
+# Detect existing installation: skip core copy, only adjust extensions/agents
+if [ -x "$PREFIX/pi" ]; then
+	echo "Pi already installed at $PREFIX — skipping core installation."
+	echo "Only extension/agent selection will run."
+else
+	mkdir -p "$PREFIX"
+	mkdir -p "$BINDIR"
 
-cp -r "$SCRIPT_DIR/pi" "$PREFIX/pi"
-cp -r "$SCRIPT_DIR/package.json" "$PREFIX/package.json"
-cp -r "$SCRIPT_DIR/README.md" "$PREFIX/README.md"
-cp -r "$SCRIPT_DIR/CHANGELOG.md" "$PREFIX/CHANGELOG.md"
-cp -r "$SCRIPT_DIR/photon_rs_bg.wasm" "$PREFIX/photon_rs_bg.wasm"
+	cp -r "$SCRIPT_DIR/pi" "$PREFIX/pi"
+	cp -r "$SCRIPT_DIR/package.json" "$PREFIX/package.json"
+	cp -r "$SCRIPT_DIR/README.md" "$PREFIX/README.md"
+	cp -r "$SCRIPT_DIR/CHANGELOG.md" "$PREFIX/CHANGELOG.md"
+	cp -r "$SCRIPT_DIR/photon_rs_bg.wasm" "$PREFIX/photon_rs_bg.wasm"
 
-for dir in theme assets export-html docs examples extensions primary-agents; do
-	if [ -d "$SCRIPT_DIR/$dir" ]; then
-		cp -r "$SCRIPT_DIR/$dir" "$PREFIX/$dir"
+	for dir in theme assets export-html docs examples extensions primary-agents; do
+		if [ -d "$SCRIPT_DIR/$dir" ]; then
+			cp -r "$SCRIPT_DIR/$dir" "$PREFIX/$dir"
+		fi
+	done
+
+	if [ -d "$SCRIPT_DIR/bin" ]; then
+		cp -r "$SCRIPT_DIR/bin" "$PREFIX/bin"
 	fi
-done
 
-if [ -d "$SCRIPT_DIR/bin" ]; then
-	cp -r "$SCRIPT_DIR/bin" "$PREFIX/bin"
+	# 安装脚本本身 — 允许用户随时重新运行 install.sh 调整扩展选择
+	if [ -f "$SCRIPT_DIR/install.sh" ]; then
+		cp "$SCRIPT_DIR/install.sh" "$PREFIX/install.sh"
+	fi
+
+	ln -sf "$PREFIX/pi" "$BINDIR/pi"
+
+	echo "Installed pi to $PREFIX"
+	echo "Linked pi to $BINDIR/pi"
 fi
-
-# 安装脚本本身 — 允许用户随时重新运行 install.sh 调整扩展选择
-if [ -f "$SCRIPT_DIR/install.sh" ]; then
-	cp "$SCRIPT_DIR/install.sh" "$PREFIX/install.sh"
-fi
-
-ln -sf "$PREFIX/pi" "$BINDIR/pi"
-
-echo "Installed pi to $PREFIX"
-echo "Linked pi to $BINDIR/pi"
 
 # ---------------------------------------------------------------------------
 # Extensions and Agents -- two-step interactive selection
@@ -67,34 +73,41 @@ echo "Linked pi to $BINDIR/pi"
 #   default: 1 = selected in standard set, 0 = not
 #   install: installation spec (file: = file copy to extensions/, otherwise pi install)
 
+# shellcheck disable=SC2034 # used via nameref in run_menu
 EXT_NAMES=(
 	"pi-mcp-adapter"
 	"@juicesharp/rpiv-todo"
 	"@juicesharp/rpiv-ask-user-question"
 	"tps"
+	"sudo-helper"
 	"context-mode"
 	"@juicesharp/rpiv-btw"
 	"superpowers"
 	"pi-plugin-manager"
 	"pi-lens"
 )
+# shellcheck disable=SC2034 # used via nameref in run_menu
 EXT_DESCS=(
 	"MCP 协议适配器"
 	"任务管理插件"
 	"用户交互问答"
 	"Tokens-per-second 监控"
+	"sudo 密码安全注入"
 	"智能上下文模式切换"
 	"侧边栏问答命令"
 	"Superpowers 技能集"
 	"插件管理器"
 	"代码智能分析"
 )
-EXT_DEFAULTS=(1 1 1 0 0 0 0 1 0)
+# shellcheck disable=SC2034 # used via nameref in run_menu
+EXT_DEFAULTS=(1 1 1 0 0 0 0 0 1 0)
+# shellcheck disable=SC2034 # used via nameref in run_menu
 EXT_INSTALLS=(
 	"npm:pi-mcp-adapter"
 	"npm:@juicesharp/rpiv-todo"
 	"npm:@juicesharp/rpiv-ask-user-question"
 	"file:tps.ts"
+	"file:sudo-helper.ts"
 	"npm:context-mode"
 	"npm:@juicesharp/rpiv-btw"
 	"git:github.com/obra/superpowers"
@@ -108,17 +121,21 @@ EXT_INSTALLS=(
 #   default: 1 = selected, 0 = not
 #   install: agent: = file copy to primary-agents/
 
+# shellcheck disable=SC2034 # used via nameref in run_menu
 AGENT_NAMES=(
 	"plan"
 	"coding"
 	"config"
 )
+# shellcheck disable=SC2034 # used via nameref in run_menu
 AGENT_DESCS=(
 	"规划与探索 Agent"
 	"编码实现 Agent"
 	"配置管理 Agent"
 )
+# shellcheck disable=SC2034 # used via nameref in run_menu
 AGENT_DEFAULTS=(1 1 1)
+# shellcheck disable=SC2034 # used via nameref in run_menu
 AGENT_INSTALLS=(
 	"agent:plan.md"
 	"agent:coding.md"

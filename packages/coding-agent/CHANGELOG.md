@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- `sudo-helper` 扩展：当 agent 通过 bash 工具执行 sudo 命令时，弹出遮罩密码输入框，通过 SUDO_ASKPASS + FIFO（/dev/shm tmpfs）安全注入密码。密码全程不落盘、不传 agent、不在 ps 中可见，XOR 动态加密存储，用完即毁
+
+### Changed
+
+- install.sh 已安装检测：重复运行 install.sh 时自动跳过核心二进制/资源拷贝，仅触发扩展和 Agent 选择安装
+- install.sh 扩展候选新增 sudo-helper（file:sudo-helper.ts，默认不勾选）
+
 ### Fixed
 
 - TUI 卡顿修复：thinking 流式渲染引入 Markdown token 级增量缓存，消除每个 streaming token 触发的全量 markdown 重解析（lexer + wrapTextWithAnsi）；`AssistantMessageComponent.updateContent` 复用 thinking Markdown 实例，通过 `appendText()` 保留渲染缓存，将单帧渲染成本从 O(总文本) 降到 O(最后一个 token)
