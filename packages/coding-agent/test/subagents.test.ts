@@ -13,7 +13,7 @@ import type { Skill } from "../src/core/skills.ts";
 import { createSyntheticSourceInfo } from "../src/core/source-info.ts";
 import { discoverSubagents } from "../src/core/subagents/discovery.ts";
 import type { SubagentRunEvent, SubagentRunRequest } from "../src/core/subagents/types.ts";
-import { resolveActiveSkills } from "../src/core/tool-matcher.ts";
+import { resolveActiveSkills, resolvePrimaryAgentSkills } from "../src/core/tool-matcher.ts";
 import { createHarness, getMessageText } from "./suite/harness.ts";
 
 describe("subagents discovery", () => {
@@ -413,6 +413,48 @@ describe("resolveActiveSkills", () => {
 	it("matches all skills with wildcard", () => {
 		const result = resolveActiveSkills(allSkills, ["*"]);
 		expect(result.map((s) => s.name)).toEqual(["search-files", "search-code", "inspect", "build"]);
+	});
+});
+
+describe("resolvePrimaryAgentSkills", () => {
+	const allSkills = [
+		createTestSkill("search-files"),
+		createTestSkill("search-code"),
+		createTestSkill("inspect"),
+		createTestSkill("build"),
+	];
+
+	it("returns undefined when patterns is undefined (use all skills)", () => {
+		expect(resolvePrimaryAgentSkills(allSkills, undefined)).toBeUndefined();
+	});
+
+	it("returns empty array when patterns is explicitly empty", () => {
+		expect(resolvePrimaryAgentSkills(allSkills, [])).toEqual([]);
+	});
+
+	it("matches exact skill names", () => {
+		const result = resolvePrimaryAgentSkills(allSkills, ["inspect"]);
+		expect(result?.map((s) => s.name)).toEqual(["inspect"]);
+	});
+
+	it("matches glob patterns", () => {
+		const result = resolvePrimaryAgentSkills(allSkills, ["search-*"]);
+		expect(result?.map((s) => s.name)).toEqual(["search-files", "search-code"]);
+	});
+
+	it("matches multiple patterns", () => {
+		const result = resolvePrimaryAgentSkills(allSkills, ["search-*", "build"]);
+		expect(result?.map((s) => s.name)).toEqual(["search-files", "search-code", "build"]);
+	});
+
+	it("returns empty when no skills match patterns", () => {
+		const result = resolvePrimaryAgentSkills(allSkills, ["nonexistent-*"]);
+		expect(result).toEqual([]);
+	});
+
+	it("matches all skills with wildcard", () => {
+		const result = resolvePrimaryAgentSkills(allSkills, ["*"]);
+		expect(result?.map((s) => s.name)).toEqual(["search-files", "search-code", "inspect", "build"]);
 	});
 });
 

@@ -109,7 +109,7 @@ import type {
 } from "./subagents/index.ts";
 import { createSubagentToolDefinition, discoverSubagents, runSubagents } from "./subagents/index.ts";
 import { type BuildSystemPromptOptions, buildSystemPrompt } from "./system-prompt.ts";
-import { matchesAnyToolPattern, resolveActiveTools } from "./tool-matcher.ts";
+import { matchesAnyToolPattern, resolveActiveTools, resolvePrimaryAgentSkills } from "./tool-matcher.ts";
 import { type BashOperations, createLocalBashOperations } from "./tools/bash.ts";
 import { createAllToolDefinitions } from "./tools/index.ts";
 import { createToolDefinitionFromAgentTool } from "./tools/tool-definition-wrapper.ts";
@@ -327,6 +327,7 @@ export class AgentSession {
 	// Primary agent state
 	private _currentPrimaryAgent = "build";
 	private _primaryAgentPrompt = "";
+	private _primaryAgentSkills?: Skill[];
 
 	// Bash execution state
 	private _bashAbortController: AbortController | undefined = undefined;
@@ -937,6 +938,10 @@ export class AgentSession {
 		this._currentPrimaryAgent = name;
 		this._primaryAgentPrompt = definition.systemPrompt;
 
+		// Resolve skills filter for this primary agent
+		const allSkills = this._resourceLoader.getSkills().skills;
+		this._primaryAgentSkills = resolvePrimaryAgentSkills(allSkills, definition.skills);
+
 		// Compute new active tool set
 		const allToolNames = Array.from(this._toolRegistry.keys());
 		const newActiveTools = resolveActiveTools(allToolNames, definition.includedTools, definition.excludedTools);
@@ -1161,7 +1166,7 @@ export class AgentSession {
 		const loaderAppendSystemPrompt = this._resourceLoader.getAppendSystemPrompt();
 		const appendSystemPrompt =
 			loaderAppendSystemPrompt.length > 0 ? loaderAppendSystemPrompt.join("\n\n") : undefined;
-		const loadedSkills = this._skillsOverride ?? this._resourceLoader.getSkills().skills;
+		const loadedSkills = this._skillsOverride ?? this._primaryAgentSkills ?? this._resourceLoader.getSkills().skills;
 		const loadedContextFiles = this._resourceLoader.getAgentsFiles().agentsFiles;
 
 		this._baseSystemPromptOptions = {

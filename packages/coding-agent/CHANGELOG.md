@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Primary agent 支持 `skills` 字段：通过 glob 模式按需过滤可用 skills。不配置则使用全部 skills（默认行为），显式空数组则禁用 skills，配置模式则只启用匹配的 skills。Primary agent 的 skills 过滤仅影响主会话系统提示词，不影响 subagent
+
 ## [0.11.3] - 2026-07-17
 
 ### Added
