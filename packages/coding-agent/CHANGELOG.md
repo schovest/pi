@@ -5,6 +5,10 @@
 ### Added
 
 - Primary agent 支持 `skills` 字段：通过 glob 模式按需过滤可用 skills。不配置则使用全部 skills（默认行为），显式空数组则禁用 skills，配置模式则只启用匹配的 skills。Primary agent 的 skills 过滤仅影响主会话系统提示词，不影响 subagent
+- Goal 自主编排扩展：`/goal <target>` 启动全自动编排（分解→调度→追踪→循环完成），通过 `before_agent_start`/`agent_end` 事件 hooks 实现无人值守的多 turn 自动驱动
+- `updateGoal` LLM 工具：结构化进度更新（set_tasks / update_task / complete），含子任务重试逻辑（最多 2 次）
+- `/goal:status` 和 `/goal:abort` 命令：查看编排进度、中止当前编排
+- install.sh 扩展候选新增 goal（file:goal.ts，默认不勾选）
 
 ## [0.11.3] - 2026-07-17
 
