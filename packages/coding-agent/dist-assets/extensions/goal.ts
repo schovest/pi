@@ -48,6 +48,9 @@ interface GoalState {
 
 let activeGoal: GoalState | undefined;
 
+/** 用户配置的 maxTurns（通过 /goal:config 设置），undefined 表示用默认值 */
+let configMaxTurns: number | undefined;
+
 const DEFAULT_MAX_TURNS = 50;
 
 function createGoal(target: string, maxTurns = DEFAULT_MAX_TURNS): GoalState {
@@ -229,7 +232,7 @@ export default function goalExtension(pi: ExtensionAPI): void {
 			}
 
 			// 创建新 goal
-			activeGoal = createGoal(target);
+			activeGoal = createGoal(target, configMaxTurns);
 			persistGoal(pi);
 			syncFooter(ctx);
 			ctx.ui.notify(`🎯 目标编排已启动: ${truncate(target, 50)}`, "info");
@@ -304,6 +307,38 @@ export default function goalExtension(pi: ExtensionAPI): void {
 			ctx.ui.notify(`编排已中止。已完成 ${done}/${goal.tasks.length} 子任务。`, "warning");
 			ctx.ui.setStatus("goal", undefined);
 			activeGoal = undefined;
+		},
+	});
+
+	// ========================================================================
+	// 命令: /goal:config maxTurns [N|reset]
+	// ========================================================================
+	pi.registerCommand("goal:config", {
+		description: "配置 goal 参数（当前支持: maxTurns）",
+		handler: async (args: string, ctx: ExtensionCommandContext) => {
+			const parts = args.trim().split(/\s+/);
+			const key = parts[0];
+			const value = parts[1];
+
+			if (key !== "maxTurns") {
+				ctx.ui.notify("Usage: /goal:config maxTurns <N|reset>", "error");
+				return;
+			}
+
+			if (value === "reset" || value === undefined) {
+				configMaxTurns = undefined;
+				ctx.ui.notify(`maxTurns 已恢复默认值 (${DEFAULT_MAX_TURNS})`, "info");
+				return;
+			}
+
+			const n = Number(value);
+			if (!Number.isInteger(n) || n < 1) {
+				ctx.ui.notify(`无效值: "${value}"。maxTurns 必须是正整数。`, "error");
+				return;
+			}
+
+			configMaxTurns = n;
+			ctx.ui.notify(`maxTurns 已设为 ${n}（下次 /goal 生效）`, "info");
 		},
 	});
 
