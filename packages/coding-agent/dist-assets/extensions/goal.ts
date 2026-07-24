@@ -109,6 +109,26 @@ function checkGoalCompletion(state: GoalState): CompletionResult {
 }
 
 // ============================================================================
+// 循环检测
+// ============================================================================
+
+const LOOP_THRESHOLD = 3;
+
+/** 检测连续相同 tool call 签名，超阈值返回 true */
+function detectLoop(state: GoalState, signature: string): boolean {
+	if (state.lastToolCallSignature === signature) {
+		state.consecutiveSameCalls++;
+		if (state.consecutiveSameCalls >= LOOP_THRESHOLD) {
+			return true;
+		}
+	} else {
+		state.consecutiveSameCalls = 0;
+		state.lastToolCallSignature = signature;
+	}
+	return false;
+}
+
+// ============================================================================
 // 格式化
 // ============================================================================
 
@@ -170,11 +190,22 @@ function buildOrchestrationContext(state: GoalState): string {
 	].join("\n");
 }
 
+/** Footer 底栏进度显示 */
+function formatFooter(state: GoalState): string {
+	const done = state.tasks.filter((t) => t.status === "done" || t.status === "skipped").length;
+	const total = state.tasks.length;
+	return `🎯 goal: ${done}/${total} (${state.status})`;
+}
+
 // ============================================================================
 // 扩展入口
 // ============================================================================
 
 export default function goalExtension(pi: ExtensionAPI): void {
+	/** 同步 footer 进度显示（goal 无活动时清除） */
+	function syncFooter(ctx: ExtensionContext): void {
+		ctx.ui.setStatus("goal", activeGoal ? formatFooter(activeGoal) : undefined);
+	}
 	// ========================================================================
 	// 命令: /goal <target>
 	// ========================================================================
@@ -200,6 +231,7 @@ export default function goalExtension(pi: ExtensionAPI): void {
 			// 创建新 goal
 			activeGoal = createGoal(target);
 			persistGoal(pi);
+			syncFooter(ctx);
 			ctx.ui.notify(`🎯 目标编排已启动: ${truncate(target, 50)}`, "info");
 
 			// 发送初始编排 prompt（sendUserMessage 始终触发 turn）
@@ -270,6 +302,7 @@ export default function goalExtension(pi: ExtensionAPI): void {
 			persistGoal(pi);
 			const done = goal.tasks.filter((t) => t.status === "done" || t.status === "skipped").length;
 			ctx.ui.notify(`编排已中止。已完成 ${done}/${goal.tasks.length} 子任务。`, "warning");
+			ctx.ui.setStatus("goal", undefined);
 			activeGoal = undefined;
 		},
 	});
@@ -341,6 +374,7 @@ export default function goalExtension(pi: ExtensionAPI): void {
 					}));
 					activeGoal.status = "executing";
 					persistGoal(pi);
+					syncFooter(ctx);
 					return textResult(`✅ 已设置 ${activeGoal.tasks.length} 个子任务。开始执行第一个。`);
 				}
 
@@ -360,6 +394,7 @@ export default function goalExtension(pi: ExtensionAPI): void {
 							task.status = "pending"; // 重置为待重试
 							task.result = params.result;
 							persistGoal(pi);
+							syncFooter(ctx);
 							return textResult(
 								`🔄 Task ${task.id} 失败，将重试 (${task.retryCount}/2)。原因: ${params.result ?? "未知"}`,
 							);
@@ -369,8 +404,9 @@ export default function goalExtension(pi: ExtensionAPI): void {
 					} else {
 						task.status = params.status;
 					}
-					task.result = params.result;
+						task.result = params.result;
 					persistGoal(pi);
+					syncFooter(ctx);
 					return textResult(`✅ Task ${task.id} → ${task.status}`);
 				}
 
@@ -378,6 +414,7 @@ export default function goalExtension(pi: ExtensionAPI): void {
 					activeGoal.status = "completed";
 					activeGoal.summary = params.summary;
 					persistGoal(pi);
+					syncFooter(ctx);
 					return textResult(`🎉 Goal 已标记完成。${params.summary ?? ""}`);
 				}
 
@@ -410,6 +447,7 @@ export default function goalExtension(pi: ExtensionAPI): void {
 		);
 
 		persistGoal(pi);
+		syncFooter(ctx);
 		return { systemPrompt: event.systemPrompt + orchestrationCtx };
 	});
 
@@ -429,6 +467,7 @@ export default function goalExtension(pi: ExtensionAPI): void {
 				activeGoal.status = "completed";
 				persistGoal(pi);
 				ctx.ui.notify(`🎉 Goal 完成: ${truncate(activeGoal.target, 40)}`, "info");
+				ctx.ui.setStatus("goal", undefined);
 				activeGoal = undefined;
 				break;
 			}
@@ -443,6 +482,7 @@ export default function goalExtension(pi: ExtensionAPI): void {
 						? `达到最大轮次 (${activeGoal.maxTurns})`
 						: "有子任务失败";
 				ctx.ui.notify(`❌ Goal 失败: ${reason}`, "warning");
+				ctx.ui.setStatus("goal", undefined);
 				activeGoal = undefined;
 				break;
 			}
@@ -464,6 +504,33 @@ export default function goalExtension(pi: ExtensionAPI): void {
 				);
 				break;
 			}
+		}
+	});
+
+	// ========================================================================
+	// 事件: tool_call（循环检测）
+	// ========================================================================
+	pi.on("tool_call", (event, _ctx) => {
+		if (!activeGoal) return;
+
+		// 构建 tool call 签名（toolName + 参数），用于检测连续相同操作
+		const signature = `${event.toolName}:${JSON.stringify(event.input)}`;
+
+		if (detectLoop(activeGoal, signature)) {
+			// 超阈值（连续 3 次相同操作），注入纠正消息
+			pi.sendMessage(
+				{
+					customType: "goal_loop_warning",
+					content: [
+						{
+							type: "text",
+							text: "⚠️ 检测到循环行为（连续 3 次相同操作）。请改变策略或标记当前子任务为 failed。",
+						},
+					],
+					display: false,
+				},
+				{ deliverAs: "nextTurn" },
+			);
 		}
 	});
 }
