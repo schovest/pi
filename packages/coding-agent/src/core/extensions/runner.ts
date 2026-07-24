@@ -3,7 +3,7 @@
  */
 
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
-import type { ImageContent, Model, ProviderHeaders } from "@earendil-works/pi-ai/compat";
+import type { ImageContent, Model, Provider, ProviderHeaders } from "@earendil-works/pi-ai/compat";
 import type { KeyId } from "@schovest/pi-tui";
 import { type Theme, theme } from "../../modes/interactive/theme/theme.ts";
 import type { ResourceDiagnostic } from "../diagnostics.ts";
@@ -78,6 +78,7 @@ const RESERVED_KEYBINDINGS_FOR_EXTENSION_CONFLICTS = [
 	"app.tools.expand",
 	"app.thinking.toggle",
 	"app.editor.external",
+	"app.message.copy",
 	"app.message.followUp",
 	"tui.input.submit",
 	"tui.select.confirm",
@@ -312,6 +313,7 @@ export class ExtensionRunner {
 		contextActions: ExtensionContextActions,
 		providerActions?: {
 			registerProvider?: (name: string, config: ProviderConfig) => void;
+			registerNativeProvider?: (provider: Provider) => void;
 			unregisterProvider?: (name: string) => void;
 		},
 	): void {
@@ -362,6 +364,23 @@ export class ExtensionRunner {
 			}
 		}
 		this.runtime.pendingProviderRegistrations = [];
+		for (const { provider, extensionPath } of this.runtime.pendingNativeProviderRegistrations) {
+			try {
+				if (providerActions?.registerNativeProvider) {
+					providerActions.registerNativeProvider(provider);
+				} else {
+					this.modelRegistry.registerProvider(provider);
+				}
+			} catch (err) {
+				this.emitError({
+					extensionPath,
+					event: "register_provider",
+					error: err instanceof Error ? err.message : String(err),
+					stack: err instanceof Error ? err.stack : undefined,
+				});
+			}
+		}
+		this.runtime.pendingNativeProviderRegistrations = [];
 
 		// From this point on, provider registration/unregistration takes effect immediately
 		// without requiring a /reload.
@@ -371,6 +390,13 @@ export class ExtensionRunner {
 				return;
 			}
 			this.modelRegistry.registerProvider(name, config);
+		};
+		this.runtime.registerNativeProvider = (provider) => {
+			if (providerActions?.registerNativeProvider) {
+				providerActions.registerNativeProvider(provider);
+				return;
+			}
+			this.modelRegistry.registerProvider(provider);
 		};
 		this.runtime.unregisterProvider = (name) => {
 			if (providerActions?.unregisterProvider) {
@@ -602,6 +628,10 @@ export class ExtensionRunner {
 		});
 	}
 
+	getModelRegistry(): ModelRegistry {
+		return this.modelRegistry;
+	}
+
 	getRegisteredCommands(): ResolvedCommand[] {
 		this.commandDiagnostics = [];
 		return this.resolveRegisteredCommands();
@@ -621,6 +651,11 @@ export class ExtensionRunner {
 	 */
 	shutdown(): void {
 		this.shutdownHandler();
+	}
+
+	getActiveTools(): string[] {
+		this.assertActive();
+		return this.runtime.getActiveTools();
 	}
 
 	/**
@@ -747,7 +782,6 @@ export class ExtensionRunner {
 	}
 
 	async emit<TEvent extends RunnerEmitEvent>(event: TEvent): Promise<RunnerEmitResult<TEvent>> {
-		if (this.staleMessage) return undefined as RunnerEmitResult<TEvent>;
 		const ctx = this.createContext();
 		let result: SessionBeforeEventResult | undefined;
 
@@ -782,7 +816,6 @@ export class ExtensionRunner {
 	}
 
 	async emitMessageEnd(event: MessageEndEvent): Promise<AgentMessage | undefined> {
-		if (this.staleMessage) return undefined;
 		const ctx = this.createContext();
 		let currentMessage = event.message;
 		let modified = false;
@@ -825,7 +858,6 @@ export class ExtensionRunner {
 	}
 
 	async emitToolResult(event: ToolResultEvent): Promise<ToolResultEventResult | undefined> {
-		if (this.staleMessage) return undefined;
 		const ctx = this.createContext();
 		const currentEvent: ToolResultEvent = { ...event };
 		let modified = false;
@@ -851,6 +883,10 @@ export class ExtensionRunner {
 						currentEvent.isError = handlerResult.isError;
 						modified = true;
 					}
+					if (handlerResult.usage !== undefined) {
+						currentEvent.usage = handlerResult.usage;
+						modified = true;
+					}
 				} catch (err) {
 					const message = err instanceof Error ? err.message : String(err);
 					const stack = err instanceof Error ? err.stack : undefined;
@@ -872,11 +908,11 @@ export class ExtensionRunner {
 			content: currentEvent.content,
 			details: currentEvent.details,
 			isError: currentEvent.isError,
+			usage: currentEvent.usage,
 		};
 	}
 
 	async emitToolCall(event: ToolCallEvent): Promise<ToolCallEventResult | undefined> {
-		if (this.staleMessage) return undefined;
 		const ctx = this.createContext();
 		let result: ToolCallEventResult | undefined;
 
@@ -900,7 +936,6 @@ export class ExtensionRunner {
 	}
 
 	async emitUserBash(event: UserBashEvent): Promise<UserBashEventResult | undefined> {
-		if (this.staleMessage) return undefined;
 		const ctx = this.createContext();
 
 		for (const ext of this.extensions) {
@@ -930,7 +965,6 @@ export class ExtensionRunner {
 	}
 
 	async emitContext(messages: AgentMessage[]): Promise<AgentMessage[]> {
-		if (this.staleMessage) return messages;
 		const ctx = this.createContext();
 		let currentMessages = structuredClone(messages);
 
@@ -963,7 +997,6 @@ export class ExtensionRunner {
 	}
 
 	async emitBeforeProviderRequest(payload: unknown): Promise<unknown> {
-		if (this.staleMessage) return payload;
 		const ctx = this.createContext();
 		let currentPayload = payload;
 
@@ -1034,7 +1067,6 @@ export class ExtensionRunner {
 		systemPrompt: string,
 		systemPromptOptions: BuildSystemPromptOptions,
 	): Promise<BeforeAgentStartCombinedResult | undefined> {
-		if (this.staleMessage) return undefined;
 		let currentSystemPrompt = systemPrompt;
 		const ctx = Object.defineProperties(
 			{},
@@ -1103,7 +1135,6 @@ export class ExtensionRunner {
 		promptPaths: Array<{ path: string; extensionPath: string }>;
 		themePaths: Array<{ path: string; extensionPath: string }>;
 	}> {
-		if (this.staleMessage) return { skillPaths: [], promptPaths: [], themePaths: [] };
 		const ctx = this.createContext();
 		const skillPaths: Array<{ path: string; extensionPath: string }> = [];
 		const promptPaths: Array<{ path: string; extensionPath: string }> = [];
@@ -1151,7 +1182,6 @@ export class ExtensionRunner {
 		source: InputSource,
 		streamingBehavior?: "steer" | "followUp",
 	): Promise<InputEventResult> {
-		if (this.staleMessage) return { action: "continue" };
 		const ctx = this.createContext();
 		let currentText = text;
 		let currentImages = images;

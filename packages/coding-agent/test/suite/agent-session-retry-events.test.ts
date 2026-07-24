@@ -1,7 +1,8 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
-import { fauxAssistantMessage, fauxThinking, fauxToolCall } from "@earendil-works/pi-ai/compat";
+import { fauxAssistantMessage, fauxThinking, fauxToolCall } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
+import type { ExtensionAPI } from "../../src/index.ts";
 import { createHarness, type Harness } from "./harness.ts";
 
 function normalizeEventOrder(events: Harness["events"]): string[] {
@@ -100,7 +101,7 @@ describe("AgentSession retry and event characterization", () => {
 		const harness = await createHarness({
 			settings: { retry: { enabled: true, maxRetries: 3, baseDelayMs: 1 } },
 			extensionFactories: [
-				(pi) => {
+				(pi: ExtensionAPI) => {
 					pi.on("message_end", async (event) => {
 						if (event.message.role === "assistant") {
 							await new Promise((resolve) => setTimeout(resolve, 40));
@@ -204,7 +205,7 @@ describe("AgentSession retry and event characterization", () => {
 		const order: string[] = [];
 		const harness = await createHarness({
 			extensionFactories: [
-				(pi) => {
+				(pi: ExtensionAPI) => {
 					pi.on("message_start", async (event) => {
 						order.push(`extension:${event.type}:${event.message.role}`);
 					});

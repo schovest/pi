@@ -218,6 +218,7 @@ export function createExtensionRuntime(): ExtensionRuntime {
 		setThinkingLevel: notInitialized,
 		flagValues: new Map(),
 		pendingProviderRegistrations: [],
+		pendingNativeProviderRegistrations: [],
 		assertActive,
 		invalidate: (message) => {
 			state.staleMessage ??=
@@ -231,6 +232,9 @@ export function createExtensionRuntime(): ExtensionRuntime {
 		},
 		unregisterProvider: (name) => {
 			runtime.pendingProviderRegistrations = runtime.pendingProviderRegistrations.filter((r) => r.name !== name);
+		},
+		registerNativeProvider: (_provider) => {
+			// Pre-bind: no-op until bindCore
 		},
 	};
 

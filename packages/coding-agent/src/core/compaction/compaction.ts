@@ -87,6 +87,8 @@ export interface CompactionResult<T = unknown> {
 	estimatedTokensAfter?: number;
 	/** Extension-specific data (e.g., ArtifactIndex, version markers for structured compaction) */
 	details?: T;
+	/** Usage from the LLM call(s) that generated this summary, if available. */
+	usage?: Usage;
 }
 
 // ============================================================================

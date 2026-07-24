@@ -9,8 +9,8 @@
 			"version": "0.11.3",
 			"license": "MIT",
 			"dependencies": {
-				"@earendil-works/pi-agent-core": "0.80.6",
-				"@earendil-works/pi-ai": "0.80.6",
+				"@earendil-works/pi-agent-core": "0.81.1",
+				"@earendil-works/pi-ai": "0.81.1",
 				"@schovest/pi-tui": "^0.11.3",
 				"@silvia-odwyer/photon-node": "0.3.4",
 				"chalk": "5.6.2",
@@ -474,12 +474,12 @@
 			}
 		},
 		"node_modules/@earendil-works/pi-agent-core": {
-			"version": "0.80.6",
-			"resolved": "https://registry.npmjs.org/@earendil-works/pi-agent-core/-/pi-agent-core-0.80.6.tgz",
-			"integrity": "sha512-Lvn89ko42h5ETUb6Z0Ku6ldskEqXaTdQBYvSa0+7bdG9V6rUEpXptv5e0OVZ1HDcvi8s6/2lGCQWsxKX+DFHNw==",
+			"version": "0.81.1",
+			"resolved": "https://registry.npmjs.org/@earendil-works/pi-agent-core/-/pi-agent-core-0.81.1.tgz",
+			"integrity": "sha512-yqbh68CyhqxMov/jUogFJfMqlu2Gd37GAki+tr59YCmAPHfomiCA5ESzusXtpGzABeiZFC/OrRdQ4GwCCOMIHA==",
 			"license": "MIT",
 			"dependencies": {
-				"@earendil-works/pi-ai": "^0.80.6",
+				"@earendil-works/pi-ai": "^0.81.1",
 				"ignore": "7.0.5",
 				"typebox": "1.1.38",
 				"yaml": "2.9.0"
@@ -489,9 +489,9 @@
 			}
 		},
 		"node_modules/@earendil-works/pi-ai": {
-			"version": "0.80.6",
-			"resolved": "https://registry.npmjs.org/@earendil-works/pi-ai/-/pi-ai-0.80.6.tgz",
-			"integrity": "sha512-7xfLk8sANBp+bpPEbjoOZTbPxsa+++b1JXAoSJsNa3vbs9AHHEclmvg54XLQcxH+fuwaeti/g2jeIfJ+mVYLpA==",
+			"version": "0.81.1",
+			"resolved": "https://registry.npmjs.org/@earendil-works/pi-ai/-/pi-ai-0.81.1.tgz",
+			"integrity": "sha512-hzHE7Z8l5mgJk+ke67Lge0rwS2+wbKJrFKl9o5M1R1rh33+cCT7D1AHz1OAtX5wFs90E1/BTGhyJRTUHaMxGvQ==",
 			"license": "MIT",
 			"dependencies": {
 				"@anthropic-ai/sdk": "0.91.1",
@@ -511,26 +511,6 @@
 			},
 			"engines": {
 				"node": ">=22.19.0"
-			}
-		},
-		"node_modules/@earendil-works/pi-ai/node_modules/@mistralai/mistralai": {
-			"version": "2.2.6",
-			"resolved": "https://registry.npmjs.org/@mistralai/mistralai/-/mistralai-2.2.6.tgz",
-			"integrity": "sha512-W8pX7zHxjJvMIpw8JMxeJEleapXX0Q9NPszdNzqkM3MIEoIGPObdodujj+WHteXEvGfaP/AMwlNyRfEzSY6dQQ==",
-			"license": "Apache-2.0",
-			"dependencies": {
-				"@opentelemetry/semantic-conventions": "^1.40.0",
-				"ws": "^8.18.0",
-				"zod": "^3.25.0 || ^4.0.0",
-				"zod-to-json-schema": "^3.25.0"
-			},
-			"peerDependencies": {
-				"@opentelemetry/api": "^1.9.0"
-			},
-			"peerDependenciesMeta": {
-				"@opentelemetry/api": {
-					"optional": true
-				}
 			}
 		},
 		"node_modules/@google/genai": {
@@ -750,6 +730,26 @@
 				"x64"
 			],
 			"optional": true
+		},
+		"node_modules/@mistralai/mistralai": {
+			"version": "2.2.6",
+			"resolved": "https://registry.npmjs.org/@mistralai/mistralai/-/mistralai-2.2.6.tgz",
+			"integrity": "sha512-W8pX7zHxjJvMIpw8JMxeJEleapXX0Q9NPszdNzqkM3MIEoIGPObdodujj+WHteXEvGfaP/AMwlNyRfEzSY6dQQ==",
+			"license": "Apache-2.0",
+			"dependencies": {
+				"@opentelemetry/semantic-conventions": "^1.40.0",
+				"ws": "^8.18.0",
+				"zod": "^3.25.0 || ^4.0.0",
+				"zod-to-json-schema": "^3.25.0"
+			},
+			"peerDependencies": {
+				"@opentelemetry/api": "^1.9.0"
+			},
+			"peerDependenciesMeta": {
+				"@opentelemetry/api": {
+					"optional": true
+				}
+			}
 		},
 		"node_modules/@nodable/entities": {
 			"version": "2.1.0",

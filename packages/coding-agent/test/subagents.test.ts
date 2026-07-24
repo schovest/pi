@@ -5,7 +5,7 @@ import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat
 import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.ts";
-import { ModelRegistry } from "../src/core/model-registry.ts";
+import { ModelRuntime } from "../src/core/model-runtime.ts";
 import { createAgentSession } from "../src/core/sdk.ts";
 import { SessionManager } from "../src/core/session-manager.ts";
 import { SettingsManager } from "../src/core/settings-manager.ts";
@@ -220,9 +220,9 @@ describe("AgentSession subagents", () => {
 		try {
 			const model = harness.getModel();
 			const authStorage = AuthStorage.inMemory();
-			authStorage.setRuntimeApiKey(model.provider, "faux-key");
-			const modelRegistry = ModelRegistry.inMemory(authStorage);
-			modelRegistry.registerProvider(model.provider, {
+			const modelRuntime = await ModelRuntime.create({ credentials: authStorage, modelsPath: null });
+			await modelRuntime.setRuntimeApiKey(model.provider, "faux-key");
+			modelRuntime.registerProvider(model.provider, {
 				api: harness.faux.api,
 				baseUrl: model.baseUrl,
 				apiKey: "faux-key",
@@ -250,8 +250,7 @@ describe("AgentSession subagents", () => {
 				cwd: harness.tempDir,
 				agentDir: harness.tempDir,
 				model,
-				authStorage,
-				modelRegistry,
+				modelRuntime,
 				sessionManager: SessionManager.inMemory(),
 				settingsManager: SettingsManager.inMemory(),
 			};

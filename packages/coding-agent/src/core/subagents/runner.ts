@@ -99,8 +99,8 @@ function resolveModel(session: AgentSession, requested: string | undefined): Mod
 		const slashIndex = requested.indexOf("/");
 		const model =
 			slashIndex === -1
-				? session.modelRegistry.getAll().find((candidate) => candidate.id === requested)
-				: session.modelRegistry.find(requested.slice(0, slashIndex), requested.slice(slashIndex + 1));
+				? session.modelRuntime.getModels().find((candidate) => candidate.id === requested)
+				: session.modelRuntime.getModel(requested.slice(0, slashIndex), requested.slice(slashIndex + 1));
 		if (!model) {
 			throw new Error(`Unknown subagent model: ${requested}`);
 		}
@@ -110,8 +110,8 @@ function resolveModel(session: AgentSession, requested: string | undefined): Mod
 	const defaultProvider = session.settingsManager.getDefaultProvider();
 	const defaultModel = session.settingsManager.getDefaultModel();
 	if (defaultProvider && defaultModel) {
-		const model = session.modelRegistry.find(defaultProvider, defaultModel);
-		if (model && session.modelRegistry.hasConfiguredAuth(model)) {
+		const model = session.modelRuntime.getModel(defaultProvider, defaultModel);
+		if (model && session.modelRuntime.hasConfiguredAuth(model.provider)) {
 			return model;
 		}
 	}

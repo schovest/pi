@@ -9,14 +9,13 @@ import * as os from "node:os";
 import * as path from "node:path";
 import * as readline from "node:readline";
 import type { AgentMessage, ThinkingLevel } from "@earendil-works/pi-agent-core";
+import type { AuthEvent, AuthPrompt } from "@earendil-works/pi-ai";
 import {
 	type AssistantMessage,
 	getProviders,
 	type ImageContent,
 	type Message,
 	type Model,
-	type OAuthProviderId,
-	type OAuthSelectPrompt,
 } from "@earendil-works/pi-ai/compat";
 import type {
 	AutocompleteItem,
@@ -78,10 +77,10 @@ import { FooterDataProvider, type ReadonlyFooterDataProvider } from "../../core/
 import { configureHttpDispatcher, formatHttpIdleTimeoutMs } from "../../core/http-dispatcher.ts";
 import { type AppKeybinding, KeybindingsManager } from "../../core/keybindings.ts";
 import { createCompactionSummaryMessage } from "../../core/messages.ts";
+import { ModelRegistry } from "../../core/model-registry.ts";
 import { defaultModelPerProvider, findExactModelReferenceMatch, resolveModelScope } from "../../core/model-resolver.ts";
 import { DefaultPackageManager } from "../../core/package-manager.ts";
 import { discoverPrimaryAgentsSync } from "../../core/primary-agents/index.ts";
-import { BUILT_IN_PROVIDER_DISPLAY_NAMES } from "../../core/provider-display-names.ts";
 import type { ResourceDiagnostic } from "../../core/resource-loader.ts";
 import { formatMissingSessionCwdPrompt, MissingSessionCwdError } from "../../core/session-cwd.ts";
 import { type SessionContext, SessionManager } from "../../core/session-manager.ts";
@@ -92,7 +91,7 @@ import { isInstallTelemetryEnabled } from "../../core/telemetry.ts";
 import type { TruncationResult } from "../../core/tools/truncate.ts";
 import { hasProjectConfigDir, hasProjectTrustInputs, ProjectTrustStore } from "../../core/trust-manager.ts";
 import { getChangelogPath, getNewEntries, normalizeChangelogLinks, parseChangelog } from "../../utils/changelog.ts";
-import { copyToClipboard } from "../../utils/clipboard.ts";
+import { copyToClipboard, readClipboardText } from "../../utils/clipboard.ts";
 import { extensionForImageMimeType, readClipboardImage } from "../../utils/clipboard-image.ts";
 import { parseGitUrl } from "../../utils/git.ts";
 import { getCwdRelativePath } from "../../utils/paths.ts";
@@ -261,7 +260,7 @@ export function isApiKeyLoginProvider(
 	oauthProviderIds: ReadonlySet<string>,
 	builtInProviderIds: ReadonlySet<string> = BUILT_IN_MODEL_PROVIDERS,
 ): boolean {
-	if (BUILT_IN_PROVIDER_DISPLAY_NAMES[providerId]) {
+	if (builtInProviderIds.has(providerId)) {
 		return true;
 	}
 	if (builtInProviderIds.has(providerId)) {
@@ -533,7 +532,7 @@ export class InteractiveMode {
 				const models =
 					this.session.scopedModels.length > 0
 						? this.session.scopedModels.map((s) => s.model)
-						: this.session.modelRegistry.getAvailable();
+						: this.session.modelRuntime.getAvailableSnapshot();
 
 				if (models.length === 0) return null;
 
@@ -729,7 +728,7 @@ export class InteractiveMode {
 				rawKeyHint("!!", "to run bash (no context)"),
 				hint("app.message.followUp", "to queue follow-up"),
 				hint("app.message.dequeue", "to edit all queued messages"),
-				hint("app.clipboard.pasteImage", "to paste image"),
+				hint("app.clipboard.pasteImage", "to paste image (with text fallback)"),
 				rawKeyHint("drop files", "to attach"),
 			].join("\n");
 			const compactInstructions = [
@@ -850,7 +849,7 @@ export class InteractiveMode {
 			this.showWarning(`Migrated credentials to auth.json: ${migratedProviders.join(", ")}`);
 		}
 
-		const modelsJsonError = this.session.modelRegistry.getError();
+		const modelsJsonError = this.session.modelRuntime.getError();
 		if (modelsJsonError) {
 			this.showError(`models.json error: ${modelsJsonError}`);
 		}
@@ -1740,7 +1739,7 @@ export class InteractiveMode {
 			hasUI: true,
 			cwd: this.sessionManager.getCwd(),
 			sessionManager: this.sessionManager,
-			modelRegistry: this.session.modelRegistry,
+			modelRegistry: new ModelRegistry(this.session.modelRuntime),
 			model: this.session.model,
 			isIdle: () => !this.session.isStreaming,
 			isProjectTrusted: () => this.settingsManager.isProjectTrusted(),
@@ -2547,6 +2546,7 @@ export class InteractiveMode {
 		this.defaultEditor.onAction("app.tools.expand", () => this.toggleToolOutputExpansion());
 		this.defaultEditor.onAction("app.thinking.toggle", () => this.toggleThinkingBlockVisibility());
 		this.defaultEditor.onAction("app.editor.external", () => this.openExternalEditor());
+		this.defaultEditor.onAction("app.message.copy", () => void this.handleCopyCommand());
 		this.defaultEditor.onAction("app.message.followUp", () => this.handleFollowUp());
 		this.defaultEditor.onAction("app.message.dequeue", () => this.handleDequeue());
 		this.defaultEditor.onAction("app.session.new", () => this.handleClearCommand());
@@ -2564,9 +2564,10 @@ export class InteractiveMode {
 			}
 		};
 
-		// Handle clipboard image paste (triggered on Ctrl+V)
+		// Handle clipboard paste (triggered on Ctrl+V). Images are attached by path;
+		// otherwise, paste plain text from the system clipboard.
 		this.defaultEditor.onPasteImage = () => {
-			this.handleClipboardImagePaste();
+			void this.handleClipboardPaste();
 		};
 	}
 
@@ -2734,7 +2735,7 @@ export class InteractiveMode {
 			description: "从剪贴板粘贴图片",
 			category: "tools",
 			handler: () => {
-				void this.handleClipboardImagePaste();
+				void this.handleClipboardPaste();
 			},
 		});
 
@@ -3005,23 +3006,26 @@ export class InteractiveMode {
 		});
 	}
 
-	private async handleClipboardImagePaste(): Promise<void> {
+	private async handleClipboardPaste(): Promise<void> {
 		try {
 			const image = await readClipboardImage();
-			if (!image) {
+			if (image) {
+				const tmpDir = os.tmpdir();
+				const ext = extensionForImageMimeType(image.mimeType) ?? "png";
+				const fileName = `pi-clipboard-${crypto.randomUUID()}.${ext}`;
+				const filePath = path.join(tmpDir, fileName);
+				fs.writeFileSync(filePath, Buffer.from(image.bytes));
+
+				this.editor.insertTextAtCursor?.(filePath);
+				this.ui.requestRender();
 				return;
 			}
 
-			// Write to temp file
-			const tmpDir = os.tmpdir();
-			const ext = extensionForImageMimeType(image.mimeType) ?? "png";
-			const fileName = `pi-clipboard-${crypto.randomUUID()}.${ext}`;
-			const filePath = path.join(tmpDir, fileName);
-			fs.writeFileSync(filePath, Buffer.from(image.bytes));
-
-			// Insert file path directly
-			this.editor.insertTextAtCursor?.(filePath);
-			this.ui.requestRender();
+			const text = await readClipboardText();
+			if (text) {
+				this.editor.insertTextAtCursor?.(text);
+				this.ui.requestRender();
+			}
 		} catch {
 			// Silently ignore clipboard errors (may not have permission, etc.)
 		}
@@ -5002,9 +5006,9 @@ export class InteractiveMode {
 			return this.session.scopedModels.map((scoped) => scoped.model);
 		}
 
-		this.session.modelRegistry.refresh();
+		this.session.modelRuntime.refresh();
 		try {
-			return await this.session.modelRegistry.getAvailable();
+			return [...(await this.session.modelRuntime.getAvailable())];
 		} catch {
 			return [];
 		}
@@ -5030,15 +5034,15 @@ export class InteractiveMode {
 			return;
 		}
 
-		const storedCredential = this.session.modelRegistry.authStorage.get("anthropic");
-		if (storedCredential?.type === "oauth") {
+		const authCheck = await this.session.modelRuntime.checkAuth("anthropic");
+		if (authCheck?.type === "oauth") {
 			this.anthropicSubscriptionWarningShown = true;
 			this.showWarning(ANTHROPIC_SUBSCRIPTION_AUTH_WARNING);
 			return;
 		}
 
 		try {
-			const apiKey = await this.session.modelRegistry.getApiKeyForProvider(model.provider);
+			const apiKey = (await this.session.modelRuntime.getAuth(model))?.auth.apiKey;
 			if (!isAnthropicSubscriptionAuthKey(apiKey)) {
 				return;
 			}
@@ -5106,7 +5110,7 @@ export class InteractiveMode {
 				this.ui,
 				this.session.model,
 				this.settingsManager,
-				this.session.modelRegistry,
+				this.session.modelRuntime,
 				this.session.scopedModels,
 				async (model) => {
 					try {
@@ -5178,8 +5182,8 @@ export class InteractiveMode {
 
 	private async showModelsSelector(): Promise<void> {
 		// Get all available models
-		this.session.modelRegistry.refresh();
-		const allModels = this.session.modelRegistry.getAvailable();
+		this.session.modelRuntime.refresh();
+		const allModels = [...this.session.modelRuntime.getAvailableSnapshot()];
 
 		if (allModels.length === 0) {
 			this.showStatus("No models available");
@@ -5200,7 +5204,7 @@ export class InteractiveMode {
 			// Fall back to settings
 			const patterns = this.settingsManager.getEnabledModels();
 			if (patterns !== undefined && patterns.length > 0) {
-				const scopedModels = await resolveModelScope(patterns, this.session.modelRegistry);
+				const scopedModels = await resolveModelScope(patterns, this.session.modelRuntime);
 				currentEnabledIds = scopedModels.map((scoped) => `${scoped.model.provider}/${scoped.model.id}`);
 			}
 		}
@@ -5209,7 +5213,7 @@ export class InteractiveMode {
 		const updateSessionModels = async (enabledIds: string[] | null) => {
 			currentEnabledIds = enabledIds === null ? null : [...enabledIds];
 			if (enabledIds && enabledIds.length > 0 && enabledIds.length < allModels.length) {
-				const newScopedModels = await resolveModelScope(enabledIds, this.session.modelRegistry);
+				const newScopedModels = await resolveModelScope(enabledIds, this.session.modelRuntime);
 				this.session.setScopedModels(
 					newScopedModels.map((sm) => ({
 						model: sm.model,
@@ -5441,6 +5445,18 @@ export class InteractiveMode {
 				initialSelectedId,
 				initialFilterMode,
 			);
+			selector.onCopy = async (text) => {
+				if (!text) {
+					this.showError("Selected entry has no text to copy");
+					return;
+				}
+				try {
+					await copyToClipboard(text);
+					this.showStatus("Copied selected message to clipboard");
+				} catch (error) {
+					this.showError(error instanceof Error ? error.message : String(error));
+				}
+			};
 			return { component: selector, focus: selector };
 		});
 	}
@@ -5527,48 +5543,39 @@ export class InteractiveMode {
 	}
 
 	private getLoginProviderOptions(authType?: "oauth" | "api_key"): AuthSelectorProvider[] {
-		const authStorage = this.session.modelRegistry.authStorage;
-		const oauthProviders = authStorage.getOAuthProviders();
-		const oauthProviderIds = new Set(oauthProviders.map((provider) => provider.id));
-		const options: AuthSelectorProvider[] = oauthProviders.map((provider) => ({
-			id: provider.id,
-			name: provider.name,
-			authType: "oauth",
-		}));
-
-		const modelProviders = new Set(this.session.modelRegistry.getAll().map((model) => model.provider));
-		for (const providerId of modelProviders) {
-			if (!isApiKeyLoginProvider(providerId, oauthProviderIds)) {
-				continue;
+		const options: AuthSelectorProvider[] = [];
+		for (const provider of this.session.modelRuntime.getProviders()) {
+			const authStatus = this.session.modelRuntime.getProviderAuthStatus(provider.id);
+			const status = authStatus.configured
+				? {
+						type: this.session.modelRuntime.isUsingOAuth(provider.id) ? ("oauth" as const) : ("api_key" as const),
+						source: authStatus.label ?? authStatus.source,
+					}
+				: undefined;
+			if ((!authType || authType === "oauth") && provider.auth.oauth) {
+				options.push({
+					id: provider.id,
+					name: provider.name,
+					authType: "oauth",
+					method: provider.auth.oauth,
+					status,
+				});
 			}
-			options.push({
-				id: providerId,
-				name: this.session.modelRegistry.getProviderDisplayName(providerId),
-				authType: "api_key",
-			});
+			if ((!authType || authType === "api_key") && provider.auth.apiKey) {
+				options.push({
+					id: provider.id,
+					name: provider.name,
+					authType: "api_key",
+					method: provider.auth.apiKey,
+					status,
+				});
+			}
 		}
-
-		const filteredOptions = authType ? options.filter((option) => option.authType === authType) : options;
-		return filteredOptions.sort((a, b) => a.name.localeCompare(b.name));
+		return options.sort((a, b) => a.name.localeCompare(b.name));
 	}
 
-	private getLogoutProviderOptions(): AuthSelectorProvider[] {
-		const authStorage = this.session.modelRegistry.authStorage;
-		const options: AuthSelectorProvider[] = [];
-
-		for (const providerId of authStorage.list()) {
-			const credential = authStorage.get(providerId);
-			if (!credential) {
-				continue;
-			}
-			options.push({
-				id: providerId,
-				name: this.session.modelRegistry.getProviderDisplayName(providerId),
-				authType: credential.type,
-			});
-		}
-
-		return options.sort((a, b) => a.name.localeCompare(b.name));
+	private async getLogoutProviderOptions(): Promise<AuthSelectorProvider[]> {
+		return this.getLoginProviderOptions().filter((provider) => provider.status);
 	}
 
 	private showLoginAuthTypeSelector(): void {
@@ -5604,12 +5611,13 @@ export class InteractiveMode {
 		this.showSelector((done) => {
 			const selector = new OAuthSelectorComponent(
 				"login",
-				this.session.modelRegistry.authStorage,
 				providerOptions,
-				async (providerId: string) => {
+				async (providerId: string, selectedAuthType: AuthSelectorProvider["authType"]) => {
 					done();
 
-					const providerOption = providerOptions.find((provider) => provider.id === providerId);
+					const providerOption = providerOptions.find(
+						(provider) => provider.id === providerId && provider.authType === selectedAuthType,
+					);
 					if (!providerOption) {
 						return;
 					}
@@ -5626,7 +5634,6 @@ export class InteractiveMode {
 					done();
 					this.showLoginAuthTypeSelector();
 				},
-				(providerId) => this.session.modelRegistry.getProviderAuthStatus(providerId),
 			);
 			return { component: selector, focus: selector };
 		});
@@ -5638,7 +5645,7 @@ export class InteractiveMode {
 			return;
 		}
 
-		const providerOptions = this.getLogoutProviderOptions();
+		const providerOptions = await this.getLogoutProviderOptions();
 		if (providerOptions.length === 0) {
 			this.showStatus(
 				"No stored credentials to remove. /logout only removes credentials saved by /login; environment variables and models.json config are unchanged.",
@@ -5649,7 +5656,6 @@ export class InteractiveMode {
 		this.showSelector((done) => {
 			const selector = new OAuthSelectorComponent(
 				mode,
-				this.session.modelRegistry.authStorage,
 				providerOptions,
 				async (providerId: string) => {
 					done();
@@ -5660,8 +5666,7 @@ export class InteractiveMode {
 					}
 
 					try {
-						this.session.modelRegistry.authStorage.logout(providerOption.id);
-						this.session.modelRegistry.refresh();
+						await this.session.modelRuntime.logout(providerOption.id);
 						await this.updateAvailableProviderCount();
 						const message =
 							providerOption.authType === "oauth"
@@ -5687,14 +5692,14 @@ export class InteractiveMode {
 		authType: "oauth" | "api_key",
 		previousModel: Model<any> | undefined,
 	): Promise<void> {
-		this.session.modelRegistry.refresh();
+		this.session.modelRuntime.refresh();
 
 		const actionLabel = authType === "oauth" ? `Logged in to ${providerName}` : `Saved API key for ${providerName}`;
 
 		let selectedModel: Model<any> | undefined;
 		let selectionError: string | undefined;
 		if (isUnknownModel(previousModel)) {
-			const availableModels = this.session.modelRegistry.getAvailable();
+			const availableModels = this.session.modelRuntime.getAvailableSnapshot();
 			const providerModels = availableModels.filter((model) => model.provider === providerId);
 			if (!hasDefaultModelProvider(providerId)) {
 				selectionError = `${actionLabel}, but no default model is configured for provider "${providerId}". Use /model to select a model.`;
@@ -5749,7 +5754,7 @@ export class InteractiveMode {
 			providerName,
 			"Amazon Bedrock setup",
 		);
-		dialog.showInfo([
+		dialog.showDetails([
 			theme.fg("text", "Amazon Bedrock uses AWS credentials instead of a single API key."),
 			theme.fg("text", "Configure an AWS profile, IAM keys, bearer token, or role-based credentials."),
 			theme.fg("muted", "See:"),
@@ -5774,6 +5779,14 @@ export class InteractiveMode {
 			providerName,
 		);
 
+		if (providerId === "amazon-bedrock") {
+			dialog.showDetails([
+				theme.fg("text", "You can also use an AWS profile, IAM keys, or role-based credentials."),
+				theme.fg("muted", "See:"),
+				theme.fg("accent", `  ${path.join(getDocsPath(), "providers.md")}`),
+			]);
+		}
+
 		this.editorContainer.clear();
 		this.editorContainer.addChild(dialog);
 		this.ui.setFocus(dialog);
@@ -5787,13 +5800,7 @@ export class InteractiveMode {
 		};
 
 		try {
-			const apiKey = (await dialog.showPrompt("Enter API key:")).trim();
-			if (!apiKey) {
-				throw new Error("API key cannot be empty.");
-			}
-
-			this.session.modelRegistry.authStorage.set(providerId, { type: "api_key", key: apiKey });
-
+			await this.loginProvider(dialog, providerId, "api_key");
 			restoreEditor();
 			await this.completeProviderAuthentication(providerId, providerName, "api_key", previousModel);
 		} catch (error: unknown) {
@@ -5805,8 +5812,11 @@ export class InteractiveMode {
 		}
 	}
 
-	private showOAuthLoginSelect(dialog: LoginDialogComponent, prompt: OAuthSelectPrompt): Promise<string | undefined> {
-		return new Promise((resolve) => {
+	private showAuthSelect(
+		dialog: LoginDialogComponent,
+		prompt: Extract<AuthPrompt, { type: "select" }>,
+	): Promise<string> {
+		return new Promise((resolve, reject) => {
 			const restoreDialog = () => {
 				this.editorContainer.clear();
 				this.editorContainer.addChild(dialog);
@@ -5819,11 +5829,13 @@ export class InteractiveMode {
 				labels,
 				(optionLabel) => {
 					restoreDialog();
-					resolve(prompt.options.find((option) => option.label === optionLabel)?.id);
+					const id = prompt.options.find((option) => option.label === optionLabel)?.id;
+					if (id) resolve(id);
+					else reject(new Error("Login cancelled"));
 				},
 				() => {
 					restoreDialog();
-					resolve(undefined);
+					reject(new Error("Login cancelled"));
 				},
 			);
 			this.editorContainer.clear();
@@ -5833,40 +5845,63 @@ export class InteractiveMode {
 		});
 	}
 
+	private async showAuthPrompt(dialog: LoginDialogComponent, prompt: AuthPrompt): Promise<string> {
+		let response: Promise<string>;
+		if (prompt.type === "select") {
+			response = this.showAuthSelect(dialog, prompt);
+		} else if (prompt.type === "manual_code") {
+			response = dialog.showManualInput(prompt.message);
+		} else {
+			response = dialog.showPrompt(prompt.message, prompt.placeholder);
+		}
+		if (!prompt.signal) return response;
+		if (prompt.signal.aborted) throw new Error("Login cancelled");
+		const signal = prompt.signal;
+		let onAbort: (() => void) | undefined;
+		const aborted = new Promise<string>((_resolve, reject) => {
+			onAbort = () => reject(new Error("Login cancelled"));
+			signal.addEventListener("abort", onAbort, { once: true });
+		});
+		try {
+			return await Promise.race([response, aborted]);
+		} finally {
+			if (onAbort) signal.removeEventListener("abort", onAbort);
+		}
+	}
+
+	private notifyAuthDialog(dialog: LoginDialogComponent, event: AuthEvent): void {
+		if (event.type === "auth_url") {
+			dialog.showAuth(event.url, event.instructions);
+		} else if (event.type === "device_code") {
+			dialog.showDeviceCode(event);
+			dialog.showWaiting("Waiting for authentication...");
+		} else if (event.type === "info") {
+			dialog.showInfo(event.message, event.links);
+		} else {
+			dialog.showProgress(event.message);
+		}
+	}
+
+	private async loginProvider(
+		dialog: LoginDialogComponent,
+		providerId: string,
+		method: "api_key" | "oauth",
+	): Promise<void> {
+		await this.session.modelRuntime.login(providerId, method, {
+			signal: dialog.signal,
+			prompt: (prompt) => this.showAuthPrompt(dialog, prompt),
+			notify: (event) => this.notifyAuthDialog(dialog, event),
+		});
+	}
+
 	private async showLoginDialog(providerId: string, providerName: string): Promise<void> {
-		const providerInfo = this.session.modelRegistry.authStorage
-			.getOAuthProviders()
-			.find((provider) => provider.id === providerId);
 		const previousModel = this.session.model;
-
-		// Providers that use callback servers (can paste redirect URL)
-		const usesCallbackServer = providerInfo?.usesCallbackServer ?? false;
-
-		// Create login dialog component
-		const dialog = new LoginDialogComponent(
-			this.ui,
-			providerId,
-			(_success, _message) => {
-				// Completion handled below
-			},
-			providerName,
-		);
-
-		// Show dialog in editor container
+		const dialog = new LoginDialogComponent(this.ui, providerId, (_success, _message) => {}, providerName);
 		this.editorContainer.clear();
 		this.editorContainer.addChild(dialog);
 		this.ui.setFocus(dialog);
 		this.ui.requestRender();
 
-		// Promise for manual code input (racing with callback server)
-		let manualCodeResolve: ((code: string) => void) | undefined;
-		let manualCodeReject: ((err: Error) => void) | undefined;
-		const manualCodePromise = new Promise<string>((resolve, reject) => {
-			manualCodeResolve = resolve;
-			manualCodeReject = reject;
-		});
-
-		// Restore editor helper
 		const restoreEditor = () => {
 			this.editorContainer.clear();
 			this.editorContainer.addChild(this.editor);
@@ -5875,51 +5910,7 @@ export class InteractiveMode {
 		};
 
 		try {
-			await this.session.modelRegistry.authStorage.login(providerId as OAuthProviderId, {
-				onAuth: (info: { url: string; instructions?: string }) => {
-					dialog.showAuth(info.url, info.instructions);
-
-					if (usesCallbackServer) {
-						// Show input for manual paste, racing with callback
-						dialog
-							.showManualInput("Paste redirect URL below, or complete login in browser:")
-							.then((value) => {
-								if (value && manualCodeResolve) {
-									manualCodeResolve(value);
-									manualCodeResolve = undefined;
-								}
-							})
-							.catch(() => {
-								if (manualCodeReject) {
-									manualCodeReject(new Error("Login cancelled"));
-									manualCodeReject = undefined;
-								}
-							});
-					}
-					// For Anthropic: onPrompt is called immediately after
-				},
-
-				onDeviceCode: (info) => {
-					dialog.showDeviceCode(info);
-					dialog.showWaiting("Waiting for authentication...");
-				},
-
-				onPrompt: async (prompt: { message: string; placeholder?: string }) => {
-					return dialog.showPrompt(prompt.message, prompt.placeholder);
-				},
-
-				onProgress: (message: string) => {
-					dialog.showProgress(message);
-				},
-
-				onSelect: (prompt: OAuthSelectPrompt) => this.showOAuthLoginSelect(dialog, prompt),
-
-				onManualCodeInput: () => manualCodePromise,
-
-				signal: dialog.signal,
-			});
-
-			// Success
+			await this.loginProvider(dialog, providerId, "oauth");
 			restoreEditor();
 			await this.completeProviderAuthentication(providerId, providerName, "oauth", previousModel);
 		} catch (error: unknown) {
@@ -6016,7 +6007,7 @@ export class InteractiveMode {
 				showDiagnosticsWhenQuiet: true,
 			});
 			const savedImplicitProjectTrust = this.maybeSaveImplicitProjectTrustAfterReload();
-			const modelsJsonError = this.session.modelRegistry.getError();
+			const modelsJsonError = this.session.modelRuntime.getError();
 			if (modelsJsonError) {
 				this.showError(`models.json error: ${modelsJsonError}`);
 			}
@@ -6450,6 +6441,7 @@ export class InteractiveMode {
 		const expandTools = this.getAppKeyDisplay("app.tools.expand");
 		const toggleThinking = this.getAppKeyDisplay("app.thinking.toggle");
 		const externalEditor = this.getAppKeyDisplay("app.editor.external");
+		const copyMessage = this.getAppKeyDisplay("app.message.copy");
 		const cycleModelBackward = this.getAppKeyDisplay("app.model.cycleBackward");
 		const followUp = this.getAppKeyDisplay("app.message.followUp");
 		const dequeue = this.getAppKeyDisplay("app.message.dequeue");
@@ -6495,9 +6487,10 @@ export class InteractiveMode {
 | \`${expandTools}\` | Toggle tool output expansion |
 | \`${toggleThinking}\` | Toggle thinking block visibility |
 | \`${externalEditor}\` | Edit message in external editor |
+| \`${copyMessage}\` | Copy last assistant message |
 | \`${followUp}\` | Queue follow-up message |
 | \`${dequeue}\` | Restore queued messages |
-| \`${pasteImage}\` | Paste image from clipboard |
+| \`${pasteImage}\` | Paste image or text from clipboard |
 | \`/\` | Slash commands |
 | \`!\` | Run bash command |
 | \`!!\` | Run bash command (excluded from context) |

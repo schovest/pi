@@ -11,7 +11,10 @@ import { mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import process from "node:process";
-import { getOpenAICodexWebSocketDebugStats, streamSimple } from "@earendil-works/pi-ai/api/openai-codex-responses";
+import {
+	getOpenAICodexWebSocketDebugStats,
+	streamSimple as streamSimpleOpenAICodexResponses,
+} from "@earendil-works/pi-ai/api/openai-codex-responses";
 import {
 	type Api,
 	type AssistantMessage,
@@ -25,11 +28,11 @@ import {
 import { AuthStorage } from "../src/core/auth-storage.ts";
 import { createExtensionRuntime } from "../src/core/extensions/loader.ts";
 import type { ToolDefinition } from "../src/core/extensions/types.ts";
-import { ModelRegistry } from "../src/core/model-registry.ts";
 import type { ResourceLoader } from "../src/core/resource-loader.ts";
 import { createAgentSession } from "../src/core/sdk.ts";
 import { SessionManager } from "../src/core/session-manager.ts";
 import { SettingsManager } from "../src/core/settings-manager.ts";
+import { createModelRegistry, getModelRuntime } from "./model-runtime-test-utils.ts";
 
 type Transport = "sse" | "websocket" | "websocket-cached" | "auto";
 
@@ -272,26 +275,28 @@ async function main(): Promise<void> {
 	mkdirSync(dirname(args.sessionPath), { recursive: true });
 
 	const authStorage = AuthStorage.create();
-	const modelRegistry = ModelRegistry.create(authStorage);
+	const modelRegistry = await createModelRegistry(authStorage);
 
 	const model = getModel("openai-codex", "gpt-5.5");
 	if (!model) {
 		throw new Error("Model openai-codex/gpt-5.5 not found");
 	}
 	const baseModel = { ...model, maxTokens: args.maxTokens };
-	const streamSimpleForRegistry = (
+	const streamSimpleOpenAICodexResponsesForRegistry = (
 		registryModel: Model<Api>,
 		context: Context,
 		options?: SimpleStreamOptions,
-	): AssistantMessageEventStream => streamSimple(registryModel as Model<"openai-codex-responses">, context, options);
+	): AssistantMessageEventStream =>
+		streamSimpleOpenAICodexResponses(registryModel as Model<"openai-codex-responses">, context, options);
 	modelRegistry.registerProvider("openai-codex", {
 		api: "openai-codex-responses",
 		baseUrl: baseModel.baseUrl,
 		apiKey: "!echo source-provider-override-uses-auth-storage",
-		streamSimple: streamSimpleForRegistry,
+		streamSimple: streamSimpleOpenAICodexResponsesForRegistry,
 		models: [baseModel],
 	});
 
+	const modelRuntime = getModelRuntime(modelRegistry);
 	const settingsManager = SettingsManager.inMemory({
 		compaction: { enabled: false },
 		retry: { enabled: false },
@@ -311,8 +316,7 @@ async function main(): Promise<void> {
 		resourceLoader,
 		sessionManager: SessionManager.open(args.sessionPath),
 		settingsManager,
-		authStorage,
-		modelRegistry,
+		modelRuntime,
 	});
 
 	session.setActiveToolsByName(["deterministic_probe"]);

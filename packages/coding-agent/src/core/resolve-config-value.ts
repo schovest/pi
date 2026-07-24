@@ -271,11 +271,12 @@ export function resolveHeaders(headers: Record<string, string> | undefined): Rec
 export function resolveHeadersOrThrow(
 	headers: Record<string, string> | undefined,
 	description: string,
+	env?: Record<string, string>,
 ): Record<string, string> | undefined {
 	if (!headers) return undefined;
 	const resolved: Record<string, string> = {};
 	for (const [key, value] of Object.entries(headers)) {
-		resolved[key] = resolveConfigValueOrThrow(value, `${description} header "${key}"`);
+		resolved[key] = resolveConfigValueOrThrow(value, `${description} header "${key}"`, env);
 	}
 	return Object.keys(resolved).length > 0 ? resolved : undefined;
 }

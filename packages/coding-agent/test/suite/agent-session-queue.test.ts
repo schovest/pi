@@ -1,8 +1,8 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
-import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
-import type { ExtensionAPI } from "@schovest/pi-coding-agent";
+import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
+import type { ExtensionAPI } from "../../src/index.ts";
 import { createHarness, getAssistantTexts, getMessageText, getUserTexts, type Harness } from "./harness.ts";
 
 async function createWaitingHarness(
@@ -70,7 +70,7 @@ describe("AgentSession queue characterization", () => {
 		const commandRuns: string[] = [];
 		const harness = await createHarness({
 			extensionFactories: [
-				(pi) => {
+				(pi: ExtensionAPI) => {
 					pi.registerCommand("testcmd", {
 						description: "Test command",
 						handler: async (args) => {
@@ -93,7 +93,7 @@ describe("AgentSession queue characterization", () => {
 		let extensionApi: ExtensionAPI | undefined;
 		const waiting = await createWaitingHarness({
 			extensionFactories: [
-				(pi) => {
+				(pi: ExtensionAPI) => {
 					extensionApi = pi;
 				},
 			],
@@ -387,7 +387,7 @@ describe("AgentSession queue characterization", () => {
 	it("throws when queueing an extension command with steer", async () => {
 		const harness = await createHarness({
 			extensionFactories: [
-				(pi) => {
+				(pi: ExtensionAPI) => {
 					pi.registerCommand("testcmd", {
 						description: "Test command",
 						handler: async () => {},
@@ -405,7 +405,7 @@ describe("AgentSession queue characterization", () => {
 	it("throws when queueing an extension command with followUp", async () => {
 		const harness = await createHarness({
 			extensionFactories: [
-				(pi) => {
+				(pi: ExtensionAPI) => {
 					pi.registerCommand("testcmd", {
 						description: "Test command",
 						handler: async () => {},
