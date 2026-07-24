@@ -85,6 +85,31 @@ function persistGoal(pi: ExtensionAPI): void {
 }
 
 // ============================================================================
+// 配置持久化（CustomEntry，跨 reload / session 切换存活）
+// ============================================================================
+
+interface GoalConfig {
+	maxTurns: number | null; // null = 使用默认值
+}
+
+/** 从 session branch 读取最新的 goal 配置并恢复到内存 */
+function loadConfigFromSession(ctx: ExtensionContext): void {
+	const branch = ctx.sessionManager.getBranch();
+	for (let i = branch.length - 1; i >= 0; i--) {
+		const entry = branch[i] as { type?: string; customType?: string; data?: GoalConfig };
+		if (entry.type === "custom" && entry.customType === "goal:config" && entry.data) {
+			configMaxTurns = entry.data.maxTurns ?? undefined;
+			return;
+		}
+	}
+}
+
+/** 持久化当前配置到 session */
+function persistConfig(pi: ExtensionAPI): void {
+	pi.appendEntry("goal:config", { maxTurns: configMaxTurns ?? null });
+}
+
+// ============================================================================
 // 编排逻辑
 // ============================================================================
 
@@ -205,10 +230,17 @@ function formatFooter(state: GoalState): string {
 // ============================================================================
 
 export default function goalExtension(pi: ExtensionAPI): void {
-	/** 同步 footer 进度显示（goal 无活动时清除） */
-	function syncFooter(ctx: ExtensionContext): void {
-		ctx.ui.setStatus("goal", activeGoal ? formatFooter(activeGoal) : undefined);
-	}
+/** 同步 footer 进度显示（goal 无活动时清除） */
+function syncFooter(ctx: ExtensionContext): void {
+ctx.ui.setStatus("goal", activeGoal ? formatFooter(activeGoal) : undefined);
+}
+
+// ========================================================================
+// 事件: session_start（恢复持久化的配置）
+// ========================================================================
+pi.on("session_start", (_event, ctx) => {
+loadConfigFromSession(ctx);
+});
 	// ========================================================================
 	// 命令: /goal <target>
 	// ========================================================================
@@ -338,6 +370,7 @@ export default function goalExtension(pi: ExtensionAPI): void {
 
 			if (value === "reset" || value === undefined) {
 				configMaxTurns = undefined;
+				persistConfig(pi);
 				ctx.ui.notify(`maxTurns 已恢复默认值 (${DEFAULT_MAX_TURNS})`, "info");
 				return;
 			}
@@ -349,6 +382,7 @@ export default function goalExtension(pi: ExtensionAPI): void {
 			}
 
 			configMaxTurns = n;
+			persistConfig(pi);
 			ctx.ui.notify(`maxTurns 已设为 ${n}（下次 /goal 生效）`, "info");
 		},
 	});
