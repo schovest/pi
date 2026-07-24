@@ -2,6 +2,7 @@ import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
+import type { ExtensionAPI, MessageEndEvent } from "../../../src/index.ts";
 import { createHarness, type Harness } from "../harness.ts";
 
 function createEchoTool(): AgentTool {
@@ -30,8 +31,8 @@ describe("regressions #1717/#2113: agent session event settlement", () => {
 		const harness = await createHarness({
 			tools: [createEchoTool()],
 			extensionFactories: [
-				(pi) => {
-					pi.on("message_end", async (event) => {
+				(pi: ExtensionAPI) => {
+					pi.on("message_end", async (event: MessageEndEvent) => {
 						if (event.message.role === "assistant") {
 							await new Promise((resolve) => setTimeout(resolve, 20));
 						}
@@ -70,7 +71,7 @@ describe("regressions #1717/#2113: agent session event settlement", () => {
 		harness = await createHarness({
 			tools: [createEchoTool()],
 			extensionFactories: [
-				(pi) => {
+				(pi: ExtensionAPI) => {
 					pi.on("tool_call", () => {
 						branchRolesAtToolCall.push(
 							harness.sessionManager

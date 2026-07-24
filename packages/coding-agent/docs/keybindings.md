@@ -25,7 +25,7 @@ Modifier combinations: `ctrl+shift+x`, `alt+ctrl+x`, `ctrl+shift+alt+x`, `ctrl+1
 ### TUI Editor Cursor Movement
 
 | Keybinding id | Default | Description |
-|--------|---------|-------------|
+| -------- | --------- | ------------- |
 | `tui.editor.cursorUp` | `up` | Move cursor up |
 | `tui.editor.cursorDown` | `down` | Move cursor down |
 | `tui.editor.cursorLeft` | `left`, `ctrl+b` | Move cursor left |
@@ -42,7 +42,7 @@ Modifier combinations: `ctrl+shift+x`, `alt+ctrl+x`, `ctrl+shift+alt+x`, `ctrl+1
 ### TUI Editor Deletion
 
 | Keybinding id | Default | Description |
-|--------|---------|-------------|
+| -------- | --------- | ------------- |
 | `tui.editor.deleteCharBackward` | `backspace` | Delete character backward |
 | `tui.editor.deleteCharForward` | `delete`, `ctrl+d` | Delete character forward |
 | `tui.editor.deleteWordBackward` | `ctrl+w`, `alt+backspace` | Delete word backward |
@@ -53,7 +53,7 @@ Modifier combinations: `ctrl+shift+x`, `alt+ctrl+x`, `ctrl+shift+alt+x`, `ctrl+1
 ### TUI Input
 
 | Keybinding id | Default | Description |
-|--------|---------|-------------|
+| -------- | --------- | ------------- |
 | `tui.input.newLine` | `ctrl+j`, `alt+enter` | Insert new line |
 | `tui.input.submit` | `enter` | Submit input |
 | `tui.input.tab` | `tab` | Tab / autocomplete |
@@ -61,7 +61,7 @@ Modifier combinations: `ctrl+shift+x`, `alt+ctrl+x`, `ctrl+shift+alt+x`, `ctrl+1
 ### TUI Kill Ring
 
 | Keybinding id | Default | Description |
-|--------|---------|-------------|
+| -------- | --------- | ------------- |
 | `tui.editor.yank` | `ctrl+y` | Paste most recently deleted text |
 | `tui.editor.yankPop` | `alt+y` | Cycle through deleted text after yank |
 | `tui.editor.undo` | `ctrl+-` | Undo last edit |
@@ -69,7 +69,7 @@ Modifier combinations: `ctrl+shift+x`, `alt+ctrl+x`, `ctrl+shift+alt+x`, `ctrl+1
 ### TUI Clipboard and Selection
 
 | Keybinding id | Default | Description |
-|--------|---------|-------------|
+| -------- | --------- | ------------- |
 | `tui.input.copy` | `ctrl+c` | Copy selection |
 | `tui.select.up` | `up` | Move selection up |
 | `tui.select.down` | `down` | Move selection down |
@@ -81,18 +81,19 @@ Modifier combinations: `ctrl+shift+x`, `alt+ctrl+x`, `ctrl+shift+alt+x`, `ctrl+1
 ### Application
 
 | Keybinding id | Default | Description |
-|--------|---------|-------------|
+| -------- | --------- | ------------- |
 | `app.interrupt` | `escape` | Cancel / abort |
 | `app.clear` | `ctrl+c` | Clear editor |
 | `app.exit` | `ctrl+d` | Exit (when editor empty) |
 | `app.suspend` | `ctrl+z` (none on Windows) | Suspend to background |
 | `app.editor.external` | `ctrl+g` | Open in external editor (`$VISUAL` or `$EDITOR`) |
-| `app.clipboard.pasteImage` | `ctrl+v` (`alt+v` on Windows) | Paste image from clipboard |
+| `app.message.copy` | `ctrl+x` | Copy message to clipboard |
+| `app.clipboard.pasteImage` | `ctrl+v` (`alt+v` on Windows) | Paste image from clipboard (text fallback) |
 
 ### Sessions
 
 | Keybinding id | Default | Description |
-|--------|---------|-------------|
+| -------- | --------- | ------------- |
 | `app.session.new` | *(none)* | Start a new session (`/new`) |
 | `app.session.tree` | *(none)* | Open session tree navigator (`/tree`) |
 | `app.session.fork` | *(none)* | Fork current session (`/fork`) |
@@ -107,18 +108,18 @@ Modifier combinations: `ctrl+shift+x`, `alt+ctrl+x`, `ctrl+shift+alt+x`, `ctrl+1
 ### Models and Thinking
 
 | Keybinding id | Default | Description |
-|--------|---------|-------------|
+| -------- | --------- | ------------- |
 | `app.model.select` | `ctrl+l` | Open model selector |
 | `app.model.cycleForward` | `ctrl+p` | Cycle to next model |
 | `app.model.cycleBackward` | `shift+ctrl+p` | Cycle to previous model |
-| `app.thinking.cycle` | _(none)_ | Cycle thinking level |
+| `app.thinking.cycle` | *(none)* | Cycle thinking level |
 | `app.agent.cycle` | `shift+tab` | Cycle primary agent |
 | `app.thinking.toggle` | `ctrl+t` | Collapse or expand thinking blocks |
 
 ### Display and Message Queue
 
 | Keybinding id | Default | Description |
-|--------|---------|-------------|
+| -------- | --------- | ------------- |
 | `app.tools.expand` | `ctrl+o` | Collapse or expand tool output |
 | `app.commandPalette` | `ctrl+p` | Open command palette |
 | `app.backgroundProcesses` | `ctrl+down` | Manage background processes |
@@ -128,7 +129,7 @@ Modifier combinations: `ctrl+shift+x`, `alt+ctrl+x`, `ctrl+shift+alt+x`, `ctrl+1
 ### Tree Navigation
 
 | Keybinding id | Default | Description |
-|--------|---------|-------------|
+| -------- | --------- | ------------- |
 | `app.tree.foldOrUp` | `ctrl+left`, `alt+left` | Fold current branch segment, or jump to the previous segment start |
 | `app.tree.unfoldOrDown` | `ctrl+right`, `alt+right` | Unfold current branch segment, or jump to the next segment start or branch end |
 | `app.tree.editLabel` | `shift+l` | Edit the label on the selected tree node |
@@ -146,7 +147,7 @@ Modifier combinations: `ctrl+shift+x`, `alt+ctrl+x`, `ctrl+shift+alt+x`, `ctrl+1
 Used inside the scoped models selector (opened via `/scoped-models`).
 
 | Keybinding id | Default | Description |
-|--------|---------|-------------|
+| -------- | --------- | ------------- |
 | `app.models.save` | `ctrl+s` | Save current model selection to settings |
 | `app.models.enableAll` | `ctrl+a` | Enable all models (or all matching the current search) |
 | `app.models.clearAll` | `ctrl+x` | Clear all models (or all matching the current search) |

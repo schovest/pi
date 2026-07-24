@@ -66,6 +66,7 @@ class TreeList implements Component {
 
 	public onSelect?: (entryId: string) => void;
 	public onCancel?: () => void;
+	public onCopy?: (text: string | undefined) => void;
 	public onLabelEdit?: (entryId: string, currentLabel: string | undefined) => void;
 
 	constructor(
@@ -567,6 +568,11 @@ class TreeList implements Component {
 		return this.filteredNodes[this.selectedIndex]?.node;
 	}
 
+	copySelected(): void {
+		const node = this.getSelectedNode();
+		this.onCopy?.(node ? this.getEntryCopyText(node) : undefined);
+	}
+
 	updateNodeLabel(entryId: string, label: string | undefined, labelTimestamp?: string): void {
 		for (const flatNode of this.flatNodes) {
 			if (flatNode.node.entry.id === entryId) {
@@ -810,19 +816,49 @@ class TreeList implements Component {
 	}
 
 	private extractContent(content: unknown): string {
-		const maxLen = 200;
-		if (typeof content === "string") return content.slice(0, maxLen);
-		if (Array.isArray(content)) {
-			let result = "";
-			for (const c of content) {
-				if (typeof c === "object" && c !== null && "type" in c && c.type === "text") {
-					result += (c as { text: string }).text;
-					if (result.length >= maxLen) return result.slice(0, maxLen);
-				}
+		return this.extractFullContent(content).slice(0, 200);
+	}
+
+	private extractFullContent(content: unknown): string {
+		if (typeof content === "string") return content;
+		if (!Array.isArray(content)) return "";
+
+		let result = "";
+		for (const block of content) {
+			if (typeof block === "object" && block !== null && "type" in block && block.type === "text") {
+				result += (block as { text: string }).text;
 			}
-			return result;
 		}
-		return "";
+		return result;
+	}
+
+	private getEntryCopyText(node: SessionTreeNode): string | undefined {
+		const entry = node.entry;
+		let text: string | undefined;
+
+		switch (entry.type) {
+			case "message":
+				if (entry.message.role === "bashExecution") {
+					text = entry.message.command;
+				} else if ("content" in entry.message) {
+					text = this.extractFullContent(entry.message.content);
+					if (!text && entry.message.role === "assistant") {
+						text = entry.message.errorMessage;
+					}
+				}
+				break;
+			case "custom_message":
+				text = this.extractFullContent(entry.content);
+				break;
+			case "compaction":
+				text = entry.summary;
+				break;
+			case "branch_summary":
+				text = entry.summary;
+				break;
+		}
+
+		return text?.trim() ? text : undefined;
 	}
 
 	private hasTextContent(content: unknown): boolean {
@@ -924,6 +960,8 @@ class TreeList implements Component {
 		} else if (kb.matches(keyData, "tui.editor.cursorRight") || kb.matches(keyData, "tui.select.pageDown")) {
 			// Page down
 			this.selectedIndex = Math.min(this.filteredNodes.length - 1, this.selectedIndex + this.maxVisibleLines);
+		} else if (kb.matches(keyData, "app.message.copy")) {
+			this.copySelected();
 		} else if (kb.matches(keyData, "tui.select.confirm")) {
 			const selected = this.filteredNodes[this.selectedIndex];
 			if (selected && this.onSelect) {
@@ -1139,6 +1177,7 @@ export class TreeSelectorComponent extends Container implements Focusable {
 	private labelInputContainer: Container;
 	private treeContainer: Container;
 	private onLabelChangeCallback?: (entryId: string, label: string | undefined) => void;
+	public onCopy?: (text: string | undefined) => void;
 
 	// Focusable implementation - propagate to labelInput when active for IME cursor positioning
 	private _focused = false;
@@ -1171,6 +1210,7 @@ export class TreeSelectorComponent extends Container implements Focusable {
 		this.treeList = new TreeList(tree, currentLeafId, maxVisibleLines, initialSelectedId, initialFilterMode);
 		this.treeList.onSelect = onSelect;
 		this.treeList.onCancel = onCancel;
+		this.treeList.onCopy = (text) => this.onCopy?.(text);
 		this.treeList.onLabelEdit = (entryId, currentLabel) => this.showLabelInput(entryId, currentLabel);
 
 		this.treeContainer = new Container();
@@ -1194,7 +1234,7 @@ export class TreeSelectorComponent extends Container implements Focusable {
 			new TruncatedText(
 				theme.fg(
 					"muted",
-					`  ↑/↓: move. ←/→: page. ${branchKeys}: fold/branch. ${keyText("app.tree.editLabel")}: label. ${filterKeys}: filters (${cycleKeys} cycle). ${keyText("app.tree.toggleLabelTimestamp")}: label time`,
+					`  ↑/↓: move. ←/→: page. ${branchKeys}: fold/branch. ${keyText("app.message.copy")}: copy. ${keyText("app.tree.editLabel")}: label. ${filterKeys}: filters (${cycleKeys} cycle). ${keyText("app.tree.toggleLabelTimestamp")}: label time`,
 				),
 				0,
 				0,

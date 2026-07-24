@@ -26,7 +26,7 @@
 | 核心数据流 | `docs/architecture.md#核心数据流` | 一次 prompt 的完整调用链：Mode → AgentSession → Agent → runAgentLoop → streamSimple → Provider → EventStream |
 | Agent 抽象层 | `docs/architecture.md#agent-抽象层` | 低层 agentLoop → 中层 Agent → 应用层 AgentSession；AgentHarness 为独立抽象，不在主调用链 |
 | 扩展点与能力归属 | `docs/architecture.md#扩展点与能力归属` | 16 类能力的归属位置、配置方式和关键约束 |
-| 关键路径入口 | `docs/architecture.md#关键路径入口` | 13 个功能模块的入口文件和调用链 |
+| 关键路径入口 | `docs/architecture.md#关键路径入口` | 14 个功能模块的入口文件和调用链（含 ModelRuntime 认证运行时） |
 
 ## 交流风格
 

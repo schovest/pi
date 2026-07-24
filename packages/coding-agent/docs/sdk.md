@@ -5,6 +5,7 @@
 The SDK provides programmatic access to pi's agent capabilities. Use it to embed pi in other applications, build custom interfaces, or integrate with automated workflows.
 
 **Example use cases:**
+
 - Build a custom UI (web, desktop, mobile)
 - Integrate agent capabilities into existing applications
 - Create automated pipelines with agent reasoning
@@ -16,16 +17,12 @@ See [examples/sdk/](../examples/sdk/) for working examples from minimal to full 
 ## Quick Start
 
 ```typescript
-import { AuthStorage, createAgentSession, ModelRegistry, SessionManager } from "@schovest/pi-coding-agent";
+import { createAgentSession, ModelRuntime, SessionManager } from "@schovest/pi-coding-agent";
 
-// Set up credential storage and model registry
-const authStorage = AuthStorage.create();
-const modelRegistry = ModelRegistry.create(authStorage);
-
+const modelRuntime = await ModelRuntime.create();
 const { session } = await createAgentSession({
   sessionManager: SessionManager.inMemory(),
-  authStorage,
-  modelRegistry,
+  modelRuntime,
 });
 
 session.subscribe((event) => {
@@ -100,10 +97,6 @@ interface AgentSession {
   messages: AgentMessage[];
   isStreaming: boolean;
 
-  // In-memory subagents
-  listSubagents(scope?: SubagentScope): Promise<SubagentDefinition[]>;
-  runSubagents(request: SubagentRunRequest, options?: { signal?: AbortSignal }): Promise<SubagentRunResult>;
-
   // In-place tree navigation within the current session file
   navigateTree(targetId: string, options?: { summarize?: boolean; customInstructions?: string; replaceInstructions?: boolean; label?: string }): Promise<{ editorText?: string; cancelled: boolean }>;
 
@@ -120,21 +113,6 @@ interface AgentSession {
 ```
 
 Session replacement APIs such as new-session, resume, fork, and import live on `AgentSessionRuntime`, not on `AgentSession`.
-
-### Subagents
-
-Subagents run focused child `AgentSession` instances in memory and return ordered results.
-
-```typescript
-const result = await session.runSubagents({
-  tasks: [
-    { agent: "explorer", task: "Find settings-related code", includedTools: ["read", "grep", "find"] },
-    { agent: "worker", task: "Review the current diff", thinking: "high" },
-  ],
-});
-```
-
-`createAgentSession()` registers the built-in `subagent` tool by default. Pass `enableSubagents: false` to omit the tool while keeping `listSubagents()` and `runSubagents()` available.
 
 ### createAgentSessionRuntime() and AgentSessionRuntime
 
@@ -238,6 +216,7 @@ await session.prompt("After you're done, also check X", { streamingBehavior: "fo
 ```
 
 **Behavior:**
+
 - **Extension commands** (e.g., `/mycommand`): Execute immediately, even during streaming. They manage their own LLM interaction via `pi.sendMessage()`.
 - **File-based prompt templates** (from `.md` files): Expanded to their content before sending or queueing.
 - **During streaming without `streamingBehavior`**: Throws an error. Use `steer()` or `followUp()` directly, or specify the option.
@@ -258,7 +237,7 @@ Both `steer()` and `followUp()` expand file-based prompt templates but error on 
 
 ### Agent and AgentState
 
-The `Agent` class (from `@schovest/pi-agent-core`) handles the core LLM interaction. Access it via `session.agent`.
+The `Agent` class (from `@earendil-works/pi-agent-core`) handles the core LLM interaction. Access it via `session.agent`.
 
 ```typescript
 // Access current state
@@ -342,6 +321,9 @@ session.subscribe((event) => {
     case "compaction_end":
     case "auto_retry_start":
     case "auto_retry_end":
+    case "summarization_retry_scheduled":
+    case "summarization_retry_attempt_start":
+    case "summarization_retry_finished":
       break;
   }
 });
@@ -362,6 +344,7 @@ const { session } = await createAgentSession({
 ```
 
 `cwd` is used by `DefaultResourceLoader` for:
+
 - Project extensions (`.pi/extensions/`)
 - Project skills:
   - `.pi/skills/`
@@ -371,6 +354,7 @@ const { session } = await createAgentSession({
 - Session directory naming
 
 `agentDir` is used by `DefaultResourceLoader` for:
+
 - Global extensions (`extensions/`)
 - Global skills:
   - `skills/` under `agentDir` (for example `~/.pi/agent/skills/`)
@@ -387,11 +371,10 @@ When you pass a custom `ResourceLoader`, `cwd` and `agentDir` no longer control 
 ### Model
 
 ```typescript
-import { getModel } from "@schovest/pi-ai";
-import { AuthStorage, ModelRegistry } from "@schovest/pi-coding-agent";
+import { getModel } from "@earendil-works/pi-ai";
+import { ModelRuntime } from "@schovest/pi-coding-agent";
 
-const authStorage = AuthStorage.create();
-const modelRegistry = ModelRegistry.create(authStorage);
+const modelRuntime = await ModelRuntime.create();
 
 // Find specific built-in model (doesn't check if API key exists)
 const opus = getModel("anthropic", "claude-opus-4-5");
@@ -399,14 +382,14 @@ if (!opus) throw new Error("Model not found");
 
 // Find any model by provider/id, including custom models from models.json
 // (doesn't check if API key exists)
-const customModel = modelRegistry.find("my-provider", "my-model");
+const customModel = modelRuntime.getModel("my-provider", "my-model");
 
-// Get only models that have valid API keys configured
-const available = await modelRegistry.getAvailable();
+// Get only models that have valid authentication configured
+const available = await modelRuntime.getAvailable();
 
 const { session } = await createAgentSession({
   model: opus,
-  thinkingLevel: "medium", // off, minimal, low, medium, high, xhigh
+  thinkingLevel: "medium", // off, minimal, low, medium, high, xhigh, max
   
   // Models for cycling (Ctrl+P in interactive mode)
   scopedModels: [
@@ -414,54 +397,82 @@ const { session } = await createAgentSession({
     { model: haiku, thinkingLevel: "off" },
   ],
   
-  authStorage,
-  modelRegistry,
+  modelRuntime,
 });
 ```
 
 If no model is provided:
+
 1. Tries to restore from session (if continuing)
 2. Uses default from settings
 3. Falls back to first available model
+
+To match CLI model parsing, use the exported resolver helpers:
+
+```typescript
+import {
+  resolveCliModel,
+  resolveModelScopeWithDiagnostics,
+} from "@schovest/pi-coding-agent";
+
+const cliModel = resolveCliModel({
+  cliModel: "anthropic/claude-opus-4-5:high",
+  modelRuntime,
+});
+if (cliModel.error) throw new Error(cliModel.error);
+if (cliModel.warning) console.warn(cliModel.warning);
+
+const { scopedModels, diagnostics } = await resolveModelScopeWithDiagnostics(
+  ["anthropic/*:high", "gpt-5"],
+  modelRuntime,
+);
+for (const diagnostic of diagnostics) {
+  console.warn(diagnostic.message);
+}
+```
+
+`resolveCliModel()` uses all registered models so `--api-key` style first-time setup can resolve a model before stored auth exists. `resolveModelScopeWithDiagnostics()` matches `--models` and `enabledModels` semantics while returning warnings instead of printing them.
 
 > See [examples/sdk/02-custom-model.ts](../examples/sdk/02-custom-model.ts)
 
 ### API Keys and OAuth
 
-API key resolution priority (handled by AuthStorage):
+Authentication resolution priority (handled by `ModelRuntime`):
+
 1. Runtime overrides (via `setRuntimeApiKey`, not persisted)
 2. Stored credentials in `auth.json` (API keys or OAuth tokens)
 3. Environment variables (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, etc.)
 4. Fallback resolver (for custom provider keys from `models.json`)
 
 ```typescript
-import { AuthStorage, ModelRegistry } from "@schovest/pi-coding-agent";
+import { InMemoryCredentialStore } from "@earendil-works/pi-ai";
+import { createAgentSession, ModelRuntime } from "@schovest/pi-coding-agent";
 
 // Default: uses ~/.pi/agent/auth.json and ~/.pi/agent/models.json
-const authStorage = AuthStorage.create();
-const modelRegistry = ModelRegistry.create(authStorage);
+const modelRuntime = await ModelRuntime.create();
 
-const { session } = await createAgentSession({
-  sessionManager: SessionManager.inMemory(),
-  authStorage,
-  modelRegistry,
-});
+// Provider-owned auth methods and current status
+for (const provider of modelRuntime.getProviders()) {
+  const status = await modelRuntime.checkAuth(provider.id);
+  console.log(provider.name, provider.auth, status);
+}
 
 // Runtime API key override (not persisted to disk)
-authStorage.setRuntimeApiKey("anthropic", "sk-my-temp-key");
+modelRuntime.setRuntimeApiKey("anthropic", "sk-my-temp-key");
 
-// Custom auth storage location
-const customAuth = AuthStorage.create("/my/app/auth.json");
-const customRegistry = ModelRegistry.create(customAuth, "/my/app/models.json");
-
-const { session } = await createAgentSession({
-  sessionManager: SessionManager.inMemory(),
-  authStorage: customAuth,
-  modelRegistry: customRegistry,
+// Custom credential and model locations
+const customRuntime = await ModelRuntime.create({
+  authPath: "/my/app/auth.json",
+  modelsPath: "/my/app/models.json",
 });
 
-// No custom models.json (built-in models only)
-const simpleRegistry = ModelRegistry.inMemory(authStorage);
+// Or inject any pi-ai CredentialStore
+const credentials = new InMemoryCredentialStore();
+const inMemoryRuntime = await ModelRuntime.create({ credentials });
+
+const { session } = await createAgentSession({
+  modelRuntime: customRuntime,
+});
 ```
 
 > See [examples/sdk/09-api-keys-and-oauth.ts](../examples/sdk/09-api-keys-and-oauth.ts)
@@ -596,6 +607,27 @@ const { session } = await createAgentSession({ resourceLoader: loader });
 ```
 
 Extensions can register tools, subscribe to events, add commands, and more. See [extensions.md](extensions.md) for the full API.
+
+**Named inline extensions:** By default, inline factories display as `<inline:1>`, `<inline:2>`, etc. in the startup Extensions list. To show a descriptive name instead, wrap the factory:
+
+```typescript
+import type { InlineExtension } from "@schovest/pi-coding-agent";
+
+const myProvider: InlineExtension = {
+  name: "my-provider",
+  factory: (pi) => {
+    pi.on("agent_start", () => {
+      console.log("[my-provider] Agent starting");
+    });
+  },
+};
+
+const loader = new DefaultResourceLoader({
+  extensionFactories: [myProvider],
+});
+```
+
+This displays as `<inline:my-provider>` instead of `<inline:1>`. Bare factory functions are still accepted for backward compatibility.
 
 **Event Bus:** Extensions can communicate via `pi.events`. Pass a shared `eventBus` to `DefaultResourceLoader` if you need to emit or listen from outside:
 
@@ -827,12 +859,14 @@ const { session } = await createAgentSession({
 ```
 
 **Static factories:**
+
 - `SettingsManager.create(cwd?, agentDir?)` - Load from files
 - `SettingsManager.inMemory(settings?)` - No file I/O
 
 **Project-specific settings:**
 
 Settings load from two locations and merge:
+
 1. Global: `~/.pi/agent/settings.json`
 2. Project: `<cwd>/.pi/settings.json`
 
@@ -896,28 +930,24 @@ interface LoadExtensionsResult {
 ## Complete Example
 
 ```typescript
-import { getModel } from "@schovest/pi-ai";
+import { getModel } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import {
-  AuthStorage,
   createAgentSession,
   DefaultResourceLoader,
   defineTool,
-  ModelRegistry,
+  ModelRuntime,
   SessionManager,
   SettingsManager,
 } from "@schovest/pi-coding-agent";
 
-// Set up auth storage (custom location)
-const authStorage = AuthStorage.create("/custom/agent/auth.json");
-
-// Runtime API key override (not persisted)
+const modelRuntime = await ModelRuntime.create({
+  authPath: "/custom/agent/auth.json",
+  modelsPath: "/custom/agent/models.json",
+});
 if (process.env.MY_KEY) {
-  authStorage.setRuntimeApiKey("anthropic", process.env.MY_KEY);
+  modelRuntime.setRuntimeApiKey("anthropic", process.env.MY_KEY);
 }
-
-// Model registry (no custom models.json)
-const modelRegistry = ModelRegistry.create(authStorage);
 
 // Inline tool
 const statusTool = defineTool({
@@ -954,8 +984,7 @@ const { session } = await createAgentSession({
 
   model,
   thinkingLevel: "off",
-  authStorage,
-  modelRegistry,
+  modelRuntime,
 
   tools: ["read", "bash", "status"],
   customTools: [statusTool],
@@ -1100,12 +1129,14 @@ pi --mode rpc --no-session
 See [RPC documentation](rpc.md) for the JSON protocol.
 
 The SDK is preferred when:
+
 - You want type safety
 - You're in the same Node.js process
 - You need direct access to agent state
 - You want to customize tools/extensions programmatically
 
 RPC mode is preferred when:
+
 - You're integrating from another language
 - You want process isolation
 - You're building a language-agnostic client
@@ -1121,15 +1152,18 @@ createAgentSessionRuntime
 AgentSessionRuntime
 
 // Auth and Models
-AuthStorage
-ModelRegistry
+ModelRuntime // implements pi-ai Models and owns credential storage
+ModelRegistry // synchronous extension compatibility facade
+resolveCliModel
+resolveModelScopeWithDiagnostics
 
 // Resource loading
 DefaultResourceLoader
 type ResourceLoader
 createEventBus
 
-// Helpers
+// Constants and helpers
+CONFIG_DIR_NAME
 defineTool
 getAgentDir
 getPackageDir
@@ -1151,6 +1185,7 @@ createGrepTool, createFindTool, createLsTool
 type CreateAgentSessionOptions
 type CreateAgentSessionResult
 type ExtensionFactory
+type InlineExtension
 type ExtensionAPI
 type ToolDefinition
 type Skill
