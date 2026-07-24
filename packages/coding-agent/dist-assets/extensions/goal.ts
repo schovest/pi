@@ -316,6 +316,17 @@ export default function goalExtension(pi: ExtensionAPI): void {
 	pi.registerCommand("goal:config", {
 		description: "配置 goal 参数（当前支持: maxTurns）",
 		handler: async (args: string, ctx: ExtensionCommandContext) => {
+			// 不带参数：交互式面板
+			if (args.trim() === "") {
+				const current = configMaxTurns ?? DEFAULT_MAX_TURNS;
+				const input = await ctx.ui.input(
+					`maxTurns 配置`,
+					`当前 ${current}（默认 ${DEFAULT_MAX_TURNS}）。输入新值，留空取消，输入 reset 恢复默认`,
+				);
+				if (input === undefined || input.trim() === "") return; // 用户取消
+				args = `maxTurns ${input.trim()}`;
+			}
+
 			const parts = args.trim().split(/\s+/);
 			const key = parts[0];
 			const value = parts[1];
