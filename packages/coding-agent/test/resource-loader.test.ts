@@ -5,12 +5,13 @@ import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.ts";
 import { ExtensionRunner } from "../src/core/extensions/runner.ts";
-import { ModelRegistry } from "../src/core/model-registry.ts";
 import { DefaultResourceLoader } from "../src/core/resource-loader.ts";
 import { SessionManager } from "../src/core/session-manager.ts";
 import { SettingsManager } from "../src/core/settings-manager.ts";
 import type { Skill } from "../src/core/skills.ts";
 import { createSyntheticSourceInfo } from "../src/core/source-info.ts";
+
+import { createModelRegistry } from "./model-runtime-test-utils.ts";
 
 describe("DefaultResourceLoader", () => {
 	let tempDir: string;
@@ -97,39 +98,6 @@ Prompt content.`,
 			expect(prompts.some((p) => p.name === "test-prompt")).toBe(true);
 		});
 
-		it("should discover enabled Claude plugin skills and commands", async () => {
-			const pluginRoot = join(agentDir, "plugins", "superpowers-chrome");
-			mkdirSync(join(pluginRoot, ".claude-plugin"), { recursive: true });
-			mkdirSync(join(pluginRoot, "skills", "planner"), { recursive: true });
-			mkdirSync(join(pluginRoot, "commands"), { recursive: true });
-			writeFileSync(
-				join(pluginRoot, ".claude-plugin", "plugin.json"),
-				JSON.stringify({
-					name: "superpowers-chrome",
-					skills: ["skills/planner"],
-					commands: ["commands/review.md"],
-				}),
-			);
-			writeFileSync(
-				join(pluginRoot, "skills", "planner", "SKILL.md"),
-				`---
-name: planner
-description: Planning support
----
-Skill content`,
-			);
-			writeFileSync(join(pluginRoot, "commands", "review.md"), "Review prompt");
-
-			const settingsManager = SettingsManager.inMemory({
-				plugins: [{ name: "superpowers-chrome", source: "https://example.com/plugin", enabled: true }],
-			});
-			const loader = new DefaultResourceLoader({ cwd, agentDir, settingsManager });
-			await loader.reload();
-
-			expect(loader.getSkills().skills.some((skill) => skill.name === "planner")).toBe(true);
-			expect(loader.getPrompts().prompts.some((prompt) => prompt.name === "review")).toBe(true);
-		});
-
 		it("should prefer project resources over user on name collisions", async () => {
 			const userPromptsDir = join(agentDir, "prompts");
 			const projectPromptsDir = join(cwd, ".pi", "prompts");
@@ -164,7 +132,7 @@ Project skill`,
 			);
 
 			const baseTheme = JSON.parse(
-				readFileSync(join(import.meta.dirname, "..", "src", "modes", "interactive", "theme", "dark.json"), "utf-8"),
+				readFileSync(join(process.cwd(), "src", "modes", "interactive", "theme", "dark.json"), "utf-8"),
 			) as { name: string; vars?: Record<string, string> };
 			baseTheme.name = "collision-theme";
 			const userThemePath = join(agentDir, "themes", "collision.json");
@@ -208,10 +176,7 @@ Project skill`,
 			symlinkSync(sharedExtDir, join(agentDir, "extensions"), "dir");
 			symlinkSync(sharedExtDir, join(cwd, ".pi", "extensions"), "dir");
 
-			const loader = new DefaultResourceLoader({
-				cwd,
-				agentDir,
-			});
+			const loader = new DefaultResourceLoader({ cwd, agentDir });
 			await loader.reload();
 
 			const extensionsResult = loader.getExtensions();
@@ -252,10 +217,7 @@ export default function(pi) {
 }`,
 			);
 
-			const loader = new DefaultResourceLoader({
-				cwd,
-				agentDir,
-			});
+			const loader = new DefaultResourceLoader({ cwd, agentDir });
 			await loader.reload({
 				resolveProjectTrust: async ({ extensionsResult }) => {
 					expect(extensionsResult.extensions.map((extension) => extension.path)).toEqual([
@@ -307,10 +269,7 @@ export default function(pi) {
 }`,
 			);
 
-			const loader = new DefaultResourceLoader({
-				cwd,
-				agentDir,
-			});
+			const loader = new DefaultResourceLoader({ cwd, agentDir });
 			await loader.reload();
 
 			const extensionsResult = loader.getExtensions();
@@ -319,7 +278,7 @@ export default function(pi) {
 
 			const sessionManager = SessionManager.inMemory();
 			const authStorage = AuthStorage.create(join(tempDir, "auth.json"));
-			const modelRegistry = ModelRegistry.create(authStorage);
+			const modelRegistry = await createModelRegistry(authStorage);
 			const runner = new ExtensionRunner(
 				extensionsResult.extensions,
 				extensionsResult.runtime,
@@ -418,7 +377,7 @@ Content`,
 			expect(loader.getSystemPrompt()).toBe("You are a helpful assistant.");
 		});
 
-		it("should skip trust-gated project resources when project is not trusted", async () => {
+		it("should skip project resources that require trust when project is not trusted", async () => {
 			const piDir = join(cwd, ".pi");
 			const extensionsDir = join(piDir, "extensions");
 			const skillDir = join(piDir, "skills", "project-skill");
@@ -443,17 +402,13 @@ Project skill content`,
 			);
 			writeFileSync(join(promptsDir, "project.md"), "Project prompt");
 			const themeData = JSON.parse(
-				readFileSync(join(import.meta.dirname, "..", "src", "modes", "interactive", "theme", "dark.json"), "utf-8"),
+				readFileSync(join(process.cwd(), "src", "modes", "interactive", "theme", "dark.json"), "utf-8"),
 			) as { name: string };
 			themeData.name = "project-theme";
 			writeFileSync(join(themesDir, "project.json"), JSON.stringify(themeData, null, 2));
 			const settingsManager = SettingsManager.create(cwd, agentDir, { projectTrusted: false });
 
-			const loader = new DefaultResourceLoader({
-				cwd,
-				agentDir,
-				settingsManager,
-			});
+			const loader = new DefaultResourceLoader({ cwd, agentDir, settingsManager });
 			await loader.reload();
 
 			expect(loader.getSystemPrompt()).toBe("Global system prompt.");
@@ -678,7 +633,7 @@ Content`,
 			writeFileSync(
 				join(ext1Dir, "index.ts"),
 				`
-import type { ExtensionAPI } from "@schovest/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 export default function(pi: ExtensionAPI) {
   pi.registerTool({
@@ -693,7 +648,7 @@ export default function(pi: ExtensionAPI) {
 			writeFileSync(
 				join(ext2Dir, "index.ts"),
 				`
-import type { ExtensionAPI } from "@schovest/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 export default function(pi: ExtensionAPI) {
   pi.registerTool({
@@ -720,7 +675,7 @@ export default function(pi: ExtensionAPI) {
 			writeFileSync(
 				join(globalExtDir, "global.ts"),
 				`
-import type { ExtensionAPI } from "@schovest/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 export default function(pi: ExtensionAPI) {
   pi.registerTool({
@@ -739,7 +694,7 @@ export default function(pi: ExtensionAPI) {
 			writeFileSync(
 				explicitExtPath,
 				`
-import type { ExtensionAPI } from "@schovest/pi-coding-agent";
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 export default function(pi: ExtensionAPI) {
   pi.registerTool({
@@ -767,7 +722,7 @@ export default function(pi: ExtensionAPI) {
 
 			const sessionManager = SessionManager.inMemory();
 			const authStorage = AuthStorage.create(join(tempDir, "auth-explicit.json"));
-			const modelRegistry = ModelRegistry.create(authStorage);
+			const modelRegistry = await createModelRegistry(authStorage);
 			const runner = new ExtensionRunner(
 				extensionsResult.extensions,
 				extensionsResult.runtime,

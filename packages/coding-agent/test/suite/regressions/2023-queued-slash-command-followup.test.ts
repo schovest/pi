@@ -37,7 +37,7 @@ describe("issue #2023 queued slash-command follow-up", () => {
 		const harness = await createHarness({
 			tools: [waitTool],
 			extensionFactories: [
-				(pi) => {
+				(pi: ExtensionAPI) => {
 					extensionApi = pi;
 					pi.registerCommand("testcmd", {
 						description: "Test command",

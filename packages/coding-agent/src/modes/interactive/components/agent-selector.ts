@@ -82,6 +82,12 @@ export class AgentSelectorComponent extends Container {
 					? `all except: ${selected.excludedTools.join(", ")}`
 					: "all tools";
 			this.addChild(new Text(`${theme.bold("Tools")} ${tools}`, 1, 0));
+			const skills = selected.skills
+				? selected.skills.length > 0
+					? `only: ${selected.skills.join(", ")}`
+					: "none"
+				: "all skills";
+			this.addChild(new Text(`${theme.bold("Skills")} ${skills}`, 1, 0));
 			this.addChild(new Text(`${theme.bold("Model")} ${selected.model ?? "default"}`, 1, 0));
 			this.addChild(new Text(`${theme.bold("Thinking")} ${selected.thinking ?? "default"}`, 1, 0));
 			this.addChild(new Spacer(1));

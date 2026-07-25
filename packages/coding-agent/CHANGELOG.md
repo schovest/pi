@@ -2,6 +2,40 @@
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-07-25
+
+### Added
+
+- 同步上游 v0.80.6 → v0.81.1：Model Runtime 架构重构（model-runtime.ts + 9 个新核心文件），provider 注册/认证流程统一到 ModelRuntime，model-registry.ts 降级为兼容 facade
+- llama.cpp router 扩展：支持本地 llama.cpp 服务和 Hugging Face 模型搜索（src/extensions/llama/）
+- Radius gateway 支持（radius.ts）
+- Qwen Token Plan 内置 provider
+- message copy 快捷键（`app.message.copy`）：tree selector 中复制选中消息到剪贴板
+- `get_available_thinking_levels` RPC 命令：查询当前模型可用的 thinking 等级
+- message-anchored tool loading：工具定义动态加载到 tool result 位置，改善 Anthropic/OpenAI cache 命中率
+- 剪贴板文本 fallback：图片粘贴失败时自动回退到纯文本粘贴
+- Primary agent 支持 `skills` 字段：通过 glob 模式按需过滤可用 skills。不配置则使用全部 skills（默认行为），显式空数组则禁用 skills，配置模式则只启用匹配的 skills。Primary agent 的 skills 过滤仅影响主会话系统提示词，不影响 subagent
+- Goal 自主编排扩展：`/goal <target>` 启动全自动编排（分解→调度→追踪→循环完成），通过 `before_agent_start`/`agent_end` 事件 hooks 实现无人值守的多 turn 自动驱动
+- `updateGoal` LLM 工具：结构化进度更新（set_tasks / update_task / complete），含子任务重试逻辑（最多 2 次）
+- `/goal:status` 和 `/goal:abort` 命令：查看编排进度、中止当前编排
+- install.sh 扩展候选新增 goal（file:goal.ts，默认不勾选）
+
+### Changed
+
+- npm 依赖升级：`@earendil-works/pi-ai` 和 `@earendil-works/pi-agent-core` 从 0.80.6 升级到 0.81.1
+- 认证流程重构：`authStorage.login/get/set` → `modelRuntime.login/logout/checkAuth/getAuth/setRuntimeApiKey`，统一 AuthInteraction 接口（prompt + notify）
+- `agent-session.ts`：`getApiKeyAndHeaders` → `getAuth`，`streamFn` → `streamFunction`，`AuthResult` + `withoutDeletedHeaders` 辅助
+- `session-manager.ts`：`CompactionEntry` 和 `BranchSummaryEntry` 新增 `usage` 字段，`appendCompaction`/`branchWithSummary` 接受 `usage` 参数
+- `resolve-config-value.ts`：`resolveHeadersOrThrow` 新增 `env` 参数
+- 系统提示词移除 `Current date` 行
+- `provider-attribution.ts`：header 类型从 `Record<string, string>` 升级为 `ProviderHeaders`
+
+### Fixed
+
+- clone 未保存会话时给出清晰错误提示（"This session has not been saved yet"）
+- read 工具错误内容不再语法高亮（避免错误着色）
+- 扩展加载修复：jiti alias 前缀匹配导致 `@earendil-works/pi-ai/<subpath>` 被错误重写为 `compat.js/<subpath>`（Node/tsx 模式）；VIRTUAL_MODULES 缺少 `@earendil-works/pi-ai` 裸包名映射导致 Bun 二进制模式扩展找不到 `@earendil-works/pi-ai`（optional peerDependency 未安装时）
+
 ## [0.11.3] - 2026-07-17
 
 ### Added

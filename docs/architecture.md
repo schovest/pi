@@ -142,7 +142,8 @@ AssistantMessageEventStream              ← ai/utils/event-stream.ts
 | --- | --- | --- |
 | **工具注册** | `coding-agent/core/sdk.ts:createAgentSession()` | → `createXxxTool()` → `AgentTool` 接口 → `Agent` 注册 |
 | **工具匹配** | `coding-agent/core/tool-matcher.ts:resolveActiveTools()` | glob 模式 → `includedTools`/`excludedTools` → 最终工具集 |
-| **模型解析** | `coding-agent/core/model-resolver.ts:findInitialModel()` | → `ModelRegistry.getModel()` → `ai/models.ts` → provider 匹配 |
+| **模型解析** | `coding-agent/core/model-resolver.ts:findInitialModel()` | → `ModelRuntime.getModel()` → `model-runtime.ts` → provider 匹配 |
+| **模型/认证运行时** | `coding-agent/core/model-runtime.ts:ModelRuntime` | → `getModels()`/`getAvailable()`/`getAuth()`/`login()`/`logout()` → provider-composer → auth-storage |
 | **会话持久化** | `coding-agent/core/session-manager.ts:SessionManager` | → `SessionManager.appendMessage()` → `Session.appendMessage()` → `JsonlSessionStorage.appendEntry()` |
 | **扩展加载** | `coding-agent/core/extensions/loader.ts:discoverAndLoadExtensions()` | → `ExtensionRunner` → 事件分发 → 扩展 handler |
 | **技能加载** | `coding-agent/core/skills.ts:loadSkills()` | → `loadSkillsFromDir()` → SKILL.md 解析 → `formatSkillsForPrompt()` |

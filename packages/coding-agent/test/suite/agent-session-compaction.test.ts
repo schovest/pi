@@ -3,9 +3,10 @@ import {
 	createAssistantMessageEventStream,
 	fauxAssistantMessage,
 	type Model,
-} from "@earendil-works/pi-ai/compat";
+} from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { estimateTokens } from "../../src/core/compaction/index.ts";
+import type { ExtensionAPI } from "../../src/index.ts";
 import { createHarness, type Harness } from "./harness.ts";
 
 type SessionWithCompactionInternals = {
@@ -49,7 +50,7 @@ function createAssistant(
 
 function useSummaryStreamFn(harness: Harness, summary: string): () => number {
 	let callCount = 0;
-	harness.session.agent.streamFn = (model) => {
+	harness.session.agent.streamFunction = (model) => {
 		callCount++;
 		const stream = createAssistantMessageEventStream();
 		queueMicrotask(() => {
@@ -97,15 +98,24 @@ describe("AgentSession compaction characterization", () => {
 	});
 
 	it("manually compacts using an extension-provided summary", async () => {
+		const summaryUsage = {
+			input: 10,
+			output: 20,
+			cacheRead: 30,
+			cacheWrite: 40,
+			totalTokens: 100,
+			cost: { input: 0.1, output: 0.2, cacheRead: 0.3, cacheWrite: 0.4, total: 1 },
+		};
 		const harness = await createHarness({
 			settings: { compaction: { keepRecentTokens: 1 } },
 			extensionFactories: [
-				(pi) => {
+				(pi: ExtensionAPI) => {
 					pi.on("session_before_compact", async (event) => ({
 						compaction: {
 							summary: "summary from extension",
 							firstKeptEntryId: event.preparation.firstKeptEntryId,
 							tokensBefore: event.preparation.tokensBefore,
+							usage: summaryUsage,
 							details: { source: "extension" },
 						},
 					}));
@@ -116,14 +126,26 @@ describe("AgentSession compaction characterization", () => {
 
 		await harness.session.prompt("one");
 		await harness.session.prompt("two");
+		const statsBefore = harness.session.getSessionStats();
 
 		const result = await harness.session.compact();
 		const compactionEntries = harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction");
 		const estimatedTokensAfter = harness.session.messages.reduce((sum, message) => sum + estimateTokens(message), 0);
 
 		expect(result.summary).toBe("summary from extension");
+		expect(result.usage).toEqual(summaryUsage);
 		expect(result.estimatedTokensAfter).toBe(estimatedTokensAfter);
 		expect(compactionEntries).toHaveLength(1);
+		const compactionEntry = compactionEntries[0];
+		if (compactionEntry?.type === "compaction") {
+			expect(compactionEntry.usage).toEqual(summaryUsage);
+		}
+		const statsAfter = harness.session.getSessionStats();
+		expect(statsAfter.tokens.input).toBe(statsBefore.tokens.input + summaryUsage.input);
+		expect(statsAfter.tokens.output).toBe(statsBefore.tokens.output + summaryUsage.output);
+		expect(statsAfter.tokens.cacheRead).toBe(statsBefore.tokens.cacheRead + summaryUsage.cacheRead);
+		expect(statsAfter.tokens.cacheWrite).toBe(statsBefore.tokens.cacheWrite + summaryUsage.cacheWrite);
+		expect(statsAfter.cost).toBe(statsBefore.cost + summaryUsage.cost.total);
 		expect(harness.session.messages[0]?.role).toBe("compactionSummary");
 	});
 
@@ -154,6 +176,22 @@ describe("AgentSession compaction characterization", () => {
 		expect(getStreamCallCount()).toBe(1);
 	});
 
+	it("persists usage from pi-generated manual compaction", async () => {
+		const harness = await createHarness({ withConfiguredAuth: false });
+		harnesses.push(harness);
+		seedCompactableSession(harness);
+		useSummaryStreamFn(harness, "summary from custom stream");
+
+		const result = await harness.session.compact();
+
+		const compactionEntries = harness.sessionManager.getEntries().filter((entry) => entry.type === "compaction");
+		expect(result.usage).toEqual(createUsage(10));
+		expect(compactionEntries).toHaveLength(1);
+		expect(compactionEntries[0]?.type === "compaction" ? compactionEntries[0].usage : undefined).toEqual(
+			createUsage(10),
+		);
+	});
+
 	it("auto-compacts with a custom streamFn when registry auth is absent", async () => {
 		const harness = await createHarness({ withConfiguredAuth: false });
 		harnesses.push(harness);
@@ -174,7 +212,7 @@ describe("AgentSession compaction characterization", () => {
 		const harness = await createHarness({
 			settings: { compaction: { keepRecentTokens: 1 } },
 			extensionFactories: [
-				(pi) => {
+				(pi: ExtensionAPI) => {
 					pi.on("session_before_compact", async (event) => {
 						return await new Promise<{ cancel: true }>((resolve) => {
 							event.signal.addEventListener("abort", () => resolve({ cancel: true }), { once: true });
@@ -200,7 +238,7 @@ describe("AgentSession compaction characterization", () => {
 		const harness = await createHarness({
 			settings: { compaction: { keepRecentTokens: 1 } },
 			extensionFactories: [
-				(pi) => {
+				(pi: ExtensionAPI) => {
 					pi.on("session_before_compact", async (event) => ({
 						compaction: {
 							summary: "auto compacted",
@@ -261,7 +299,7 @@ describe("AgentSession compaction characterization", () => {
 			settings: { compaction: { enabled: true, keepRecentTokens: 1, reserveTokens: 0 } },
 			models: [{ id: "faux-1", contextWindow: 1, maxTokens: 100 }],
 			extensionFactories: [
-				(pi) => {
+				(pi: ExtensionAPI) => {
 					pi.on("session_before_compact", async (event) => ({
 						compaction: {
 							summary: "successful overflow compacted",

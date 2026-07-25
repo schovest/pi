@@ -1,5 +1,5 @@
 import type { AgentTool, ThinkingLevel } from "@earendil-works/pi-agent-core";
-import { fauxAssistantMessage, fauxToolCall, type Model } from "@earendil-works/pi-ai/compat";
+import { fauxAssistantMessage, fauxToolCall, type Model, type Usage } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
 import type { BuildSystemPromptOptions, ExtensionAPI } from "../../src/index.ts";
@@ -22,7 +22,7 @@ describe("AgentSession model and extension characterization", () => {
 				{ id: "faux-2", name: "Two", reasoning: true },
 			],
 			extensionFactories: [
-				(pi) => {
+				(pi: ExtensionAPI) => {
 					pi.on("model_select", async (event) => {
 						modelEvents.push(`${event.previousModel?.id ?? "none"}->${event.model.id}:${event.source}`);
 					});
@@ -78,6 +78,26 @@ describe("AgentSession model and extension characterization", () => {
 		expect(harness.session.cycleThinkingLevel()).toBeUndefined();
 	});
 
+	it("cycles xhigh before max when both are supported", async () => {
+		const harness = await createHarness({ models: [{ id: "faux-1", reasoning: true }] });
+		harnesses.push(harness);
+		harness.getModel().thinkingLevelMap = { xhigh: "xhigh", max: "max" };
+
+		expect(harness.session.getAvailableThinkingLevels()).toEqual([
+			"off",
+			"minimal",
+			"low",
+			"medium",
+			"high",
+			"xhigh",
+			"max",
+		]);
+		harness.session.setThinkingLevel("high");
+		expect(harness.session.cycleThinkingLevel()).toBe("xhigh");
+		expect(harness.session.cycleThinkingLevel()).toBe("max");
+		expect(harness.session.cycleThinkingLevel()).toBe("off");
+	});
+
 	it("throws when setModel is called without configured auth", async () => {
 		const harness = await createHarness({
 			models: [
@@ -106,7 +126,7 @@ describe("AgentSession model and extension characterization", () => {
 		const harness = await createHarness({
 			tools: [echoTool],
 			extensionFactories: [
-				(pi) => {
+				(pi: ExtensionAPI) => {
 					pi.on("tool_call", async () => ({ block: true, reason: "Blocked by test" }));
 				},
 			],
@@ -136,6 +156,23 @@ describe("AgentSession model and extension characterization", () => {
 	});
 
 	it("allows extension tool_result handlers to modify tool results", async () => {
+		const toolUsage: Usage = {
+			input: 1,
+			output: 2,
+			cacheRead: 3,
+			cacheWrite: 4,
+			totalTokens: 10,
+			cost: { input: 0.1, output: 0.2, cacheRead: 0.3, cacheWrite: 0.4, total: 1 },
+		};
+		const patchedToolUsage: Usage = {
+			input: 5,
+			output: 6,
+			cacheRead: 7,
+			cacheWrite: 8,
+			totalTokens: 26,
+			cost: { input: 0.5, output: 0.6, cacheRead: 0.7, cacheWrite: 0.8, total: 2.6 },
+		};
+		let observedToolUsage: Usage | undefined;
 		const echoTool: AgentTool = {
 			name: "echo",
 			label: "Echo",
@@ -143,17 +180,21 @@ describe("AgentSession model and extension characterization", () => {
 			parameters: Type.Object({ text: Type.String() }),
 			execute: async (_toolCallId, params) => {
 				const text = typeof params === "object" && params !== null && "text" in params ? String(params.text) : "";
-				return { content: [{ type: "text", text }], details: { text } };
+				return { content: [{ type: "text", text }], details: { text }, usage: toolUsage };
 			},
 		};
 		const harness = await createHarness({
 			tools: [echoTool],
 			extensionFactories: [
-				(pi) => {
-					pi.on("tool_result", async () => ({
-						content: [{ type: "text", text: "patched result" }],
-						details: { patched: true },
-					}));
+				(pi: ExtensionAPI) => {
+					pi.on("tool_result", async (event) => {
+						observedToolUsage = event.usage;
+						return {
+							content: [{ type: "text", text: "patched result" }],
+							details: { patched: true },
+							usage: patchedToolUsage,
+						};
+					});
 				},
 			],
 		});
@@ -176,15 +217,18 @@ describe("AgentSession model and extension characterization", () => {
 		await harness.session.prompt("hi");
 
 		expect(getAssistantTexts(harness)).toContain("patched result");
-		expect(
-			harness.session.messages.find((message) => message.role === "toolResult" && message.details?.patched === true),
-		).toBeDefined();
+		const toolResult = harness.session.messages.find(
+			(message) => message.role === "toolResult" && message.details?.patched === true,
+		);
+		expect(observedToolUsage).toEqual(toolUsage);
+		expect(toolResult).toBeDefined();
+		expect(toolResult?.role === "toolResult" ? toolResult.usage : undefined).toEqual(patchedToolUsage);
 	});
 
 	it("allows extension context handlers to modify messages before the LLM call", async () => {
 		const harness = await createHarness({
 			extensionFactories: [
-				(pi) => {
+				(pi: ExtensionAPI) => {
 					pi.on("context", async (event) => ({
 						messages: event.messages.map((message) =>
 							message.role === "user"
@@ -225,7 +269,7 @@ describe("AgentSession model and extension characterization", () => {
 		let extensionApi: ExtensionAPI | undefined;
 		const transformedHarness = await createHarness({
 			extensionFactories: [
-				(pi) => {
+				(pi: ExtensionAPI) => {
 					extensionApi = pi;
 					pi.on("input", async (event) => {
 						if (event.text === "ping") {
@@ -264,7 +308,7 @@ describe("AgentSession model and extension characterization", () => {
 		const seenOptions: BuildSystemPromptOptions[] = [];
 		const harness = await createHarness({
 			extensionFactories: [
-				(pi) => {
+				(pi: ExtensionAPI) => {
 					pi.registerCommand("inspect-options", {
 						description: "Inspect system prompt options",
 						handler: async (_args, ctx) => {
@@ -291,7 +335,7 @@ describe("AgentSession model and extension characterization", () => {
 	it("allows before_agent_start handlers to inject custom messages and modify the system prompt", async () => {
 		const harness = await createHarness({
 			extensionFactories: [
-				(pi) => {
+				(pi: ExtensionAPI) => {
 					pi.on("before_agent_start", async (event) => ({
 						message: {
 							customType: "before-start",
@@ -333,7 +377,7 @@ describe("AgentSession model and extension characterization", () => {
 		const lifecycleEvents: string[] = [];
 		const harness = await createHarness({
 			extensionFactories: [
-				(pi) => {
+				(pi: ExtensionAPI) => {
 					pi.on("session_start", async (event) => {
 						lifecycleEvents.push(`start:${event.reason}`);
 					});

@@ -12,6 +12,7 @@ export interface PrimaryAgentDefinition {
 	excludedTools?: string[];
 	model?: string;
 	thinking?: ThinkingLevel;
+	skills?: string[];
 }
 
 export interface DiscoverPrimaryAgentsOptions {

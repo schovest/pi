@@ -11,6 +11,7 @@ interface PrimaryAgentFrontmatter extends Record<string, unknown> {
 	model?: unknown;
 	thinking?: unknown;
 	tools?: unknown;
+	skills?: unknown;
 }
 
 const VALID_THINKING = new Set<ThinkingLevel>(["off", "minimal", "low", "medium", "high", "xhigh"]);
@@ -60,6 +61,7 @@ function readPrimaryAgentFile(path: string, scope: PrimaryAgentDefinitionScope):
 		excludedTools: stringArray(parsed.frontmatter.excludedTools),
 		model: typeof parsed.frontmatter.model === "string" ? parsed.frontmatter.model : undefined,
 		thinking: isThinkingLevel(parsed.frontmatter.thinking) ? parsed.frontmatter.thinking : undefined,
+		skills: stringArray(parsed.frontmatter.skills),
 	};
 }
 

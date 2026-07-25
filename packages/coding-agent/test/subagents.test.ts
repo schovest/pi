@@ -5,7 +5,7 @@ import { fauxAssistantMessage, fauxToolCall } from "@earendil-works/pi-ai/compat
 import { Type } from "typebox";
 import { afterEach, describe, expect, it } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.ts";
-import { ModelRegistry } from "../src/core/model-registry.ts";
+import { ModelRuntime } from "../src/core/model-runtime.ts";
 import { createAgentSession } from "../src/core/sdk.ts";
 import { SessionManager } from "../src/core/session-manager.ts";
 import { SettingsManager } from "../src/core/settings-manager.ts";
@@ -13,7 +13,7 @@ import type { Skill } from "../src/core/skills.ts";
 import { createSyntheticSourceInfo } from "../src/core/source-info.ts";
 import { discoverSubagents } from "../src/core/subagents/discovery.ts";
 import type { SubagentRunEvent, SubagentRunRequest } from "../src/core/subagents/types.ts";
-import { resolveActiveSkills } from "../src/core/tool-matcher.ts";
+import { resolveActiveSkills, resolvePrimaryAgentSkills } from "../src/core/tool-matcher.ts";
 import { createHarness, getMessageText } from "./suite/harness.ts";
 
 describe("subagents discovery", () => {
@@ -220,9 +220,9 @@ describe("AgentSession subagents", () => {
 		try {
 			const model = harness.getModel();
 			const authStorage = AuthStorage.inMemory();
-			authStorage.setRuntimeApiKey(model.provider, "faux-key");
-			const modelRegistry = ModelRegistry.inMemory(authStorage);
-			modelRegistry.registerProvider(model.provider, {
+			const modelRuntime = await ModelRuntime.create({ credentials: authStorage, modelsPath: null });
+			await modelRuntime.setRuntimeApiKey(model.provider, "faux-key");
+			modelRuntime.registerProvider(model.provider, {
 				api: harness.faux.api,
 				baseUrl: model.baseUrl,
 				apiKey: "faux-key",
@@ -250,8 +250,7 @@ describe("AgentSession subagents", () => {
 				cwd: harness.tempDir,
 				agentDir: harness.tempDir,
 				model,
-				authStorage,
-				modelRegistry,
+				modelRuntime,
 				sessionManager: SessionManager.inMemory(),
 				settingsManager: SettingsManager.inMemory(),
 			};
@@ -413,6 +412,48 @@ describe("resolveActiveSkills", () => {
 	it("matches all skills with wildcard", () => {
 		const result = resolveActiveSkills(allSkills, ["*"]);
 		expect(result.map((s) => s.name)).toEqual(["search-files", "search-code", "inspect", "build"]);
+	});
+});
+
+describe("resolvePrimaryAgentSkills", () => {
+	const allSkills = [
+		createTestSkill("search-files"),
+		createTestSkill("search-code"),
+		createTestSkill("inspect"),
+		createTestSkill("build"),
+	];
+
+	it("returns undefined when patterns is undefined (use all skills)", () => {
+		expect(resolvePrimaryAgentSkills(allSkills, undefined)).toBeUndefined();
+	});
+
+	it("returns empty array when patterns is explicitly empty", () => {
+		expect(resolvePrimaryAgentSkills(allSkills, [])).toEqual([]);
+	});
+
+	it("matches exact skill names", () => {
+		const result = resolvePrimaryAgentSkills(allSkills, ["inspect"]);
+		expect(result?.map((s) => s.name)).toEqual(["inspect"]);
+	});
+
+	it("matches glob patterns", () => {
+		const result = resolvePrimaryAgentSkills(allSkills, ["search-*"]);
+		expect(result?.map((s) => s.name)).toEqual(["search-files", "search-code"]);
+	});
+
+	it("matches multiple patterns", () => {
+		const result = resolvePrimaryAgentSkills(allSkills, ["search-*", "build"]);
+		expect(result?.map((s) => s.name)).toEqual(["search-files", "search-code", "build"]);
+	});
+
+	it("returns empty when no skills match patterns", () => {
+		const result = resolvePrimaryAgentSkills(allSkills, ["nonexistent-*"]);
+		expect(result).toEqual([]);
+	});
+
+	it("matches all skills with wildcard", () => {
+		const result = resolvePrimaryAgentSkills(allSkills, ["*"]);
+		expect(result?.map((s) => s.name)).toEqual(["search-files", "search-code", "inspect", "build"]);
 	});
 });
 

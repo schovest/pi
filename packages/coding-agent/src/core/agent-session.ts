@@ -24,7 +24,15 @@ import {
 	type PrepareNextTurnContext,
 	type ThinkingLevel,
 } from "@earendil-works/pi-agent-core";
-import type { AssistantMessage, ImageContent, Message, Model, TextContent } from "@earendil-works/pi-ai/compat";
+import type {
+	AssistantMessage,
+	AuthResult,
+	ImageContent,
+	Message,
+	Model,
+	ProviderHeaders,
+	TextContent,
+} from "@earendil-works/pi-ai/compat";
 import {
 	clampThinkingLevel,
 	cleanupSessionResources,
@@ -83,7 +91,8 @@ import {
 } from "./extensions/index.ts";
 import { emitSessionShutdownEvent } from "./extensions/runner.ts";
 import type { BashExecutionMessage, CustomMessage } from "./messages.ts";
-import type { ModelRegistry } from "./model-registry.ts";
+import { ModelRegistry } from "./model-registry.ts";
+import type { ModelRuntime } from "./model-runtime.ts";
 import type { PrimaryAgentDefinition } from "./primary-agents/index.ts";
 import { discoverPrimaryAgents } from "./primary-agents/index.ts";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.ts";
@@ -109,7 +118,7 @@ import type {
 } from "./subagents/index.ts";
 import { createSubagentToolDefinition, discoverSubagents, runSubagents } from "./subagents/index.ts";
 import { type BuildSystemPromptOptions, buildSystemPrompt } from "./system-prompt.ts";
-import { matchesAnyToolPattern, resolveActiveTools } from "./tool-matcher.ts";
+import { matchesAnyToolPattern, resolveActiveTools, resolvePrimaryAgentSkills } from "./tool-matcher.ts";
 import { type BashOperations, createLocalBashOperations } from "./tools/bash.ts";
 import { createAllToolDefinitions } from "./tools/index.ts";
 import { createToolDefinitionFromAgentTool } from "./tools/tool-definition-wrapper.ts";
@@ -177,6 +186,12 @@ export type AgentSessionEventListener = (event: AgentSessionEvent) => void;
 // Types
 // ============================================================================
 
+function withoutDeletedHeaders(headers: ProviderHeaders | undefined): Record<string, string> | undefined {
+	return headers
+		? Object.fromEntries(Object.entries(headers).filter((entry): entry is [string, string] => entry[1] !== null))
+		: undefined;
+}
+
 export interface AgentSessionConfig {
 	agent: Agent;
 	sessionManager: SessionManager;
@@ -193,7 +208,7 @@ export interface AgentSessionConfig {
 	/** Register the built-in subagent tool. Default: true. */
 	enableSubagents?: boolean;
 	/** Model registry for API key resolution and model discovery */
-	modelRegistry: ModelRegistry;
+	modelRuntime: ModelRuntime;
 	/** Initial active built-in tool names. Default: [read, bash, edit, write] */
 	initialActiveToolNames?: string[];
 	/** Optional allowlist of tool names. When provided, only these tool names are exposed. */
@@ -327,6 +342,7 @@ export class AgentSession {
 	// Primary agent state
 	private _currentPrimaryAgent = "build";
 	private _primaryAgentPrompt = "";
+	private _primaryAgentSkills?: Skill[];
 
 	// Bash execution state
 	private _bashAbortController: AbortController | undefined = undefined;
@@ -360,7 +376,7 @@ export class AgentSession {
 	private _extensionErrorUnsubscriber?: () => void;
 
 	// Model registry for API key resolution
-	private _modelRegistry: ModelRegistry;
+	private _modelRuntime: ModelRuntime;
 
 	// Tool registry for extension getTools/setTools
 	private _toolRegistry: Map<string, AgentTool> = new Map();
@@ -385,7 +401,7 @@ export class AgentSession {
 			config.enableSubagents === false
 				? (config.customTools ?? [])
 				: [createSubagentToolDefinition(this), ...(config.customTools ?? [])];
-		this._modelRegistry = config.modelRegistry;
+		this._modelRuntime = config.modelRuntime;
 		this._extensionRunnerRef = config.extensionRunnerRef;
 		this._initialActiveToolNames = config.initialActiveToolNames;
 		this._allowedToolNames = config.allowedToolNames;
@@ -412,8 +428,8 @@ export class AgentSession {
 	}
 
 	/** Model registry for API key resolution and model discovery */
-	get modelRegistry(): ModelRegistry {
-		return this._modelRegistry;
+	get modelRuntime(): ModelRuntime {
+		return this._modelRuntime;
 	}
 
 	/** Background process manager for timed-out bash commands */
@@ -426,18 +442,25 @@ export class AgentSession {
 		headers?: Record<string, string>;
 		env?: Record<string, string>;
 	}> {
-		const result = await this._modelRegistry.getApiKeyAndHeaders(model);
-		if (!result.ok) {
-			if (result.error.startsWith("No API key found")) {
+		let result: AuthResult | undefined;
+		try {
+			result = await this._modelRuntime.getAuth(model);
+		} catch (error) {
+			const cause = error instanceof Error ? error.cause : undefined;
+			if (cause instanceof Error && cause.message === "authHeader requires a resolved API key") {
 				throw new Error(formatNoApiKeyFoundMessage(model.provider));
 			}
-			throw new Error(result.error);
+			throw error;
 		}
-		if (result.apiKey) {
-			return { apiKey: result.apiKey, headers: result.headers, env: result.env };
+		if (result?.auth.apiKey) {
+			return {
+				apiKey: result.auth.apiKey,
+				headers: withoutDeletedHeaders(result.auth.headers),
+				env: result.env,
+			};
 		}
 
-		const isOAuth = this._modelRegistry.isUsingOAuth(model);
+		const isOAuth = this._modelRuntime.isUsingOAuth(model.provider);
 		if (isOAuth) {
 			throw new Error(
 				`Authentication failed for "${model.provider}". ` +
@@ -448,17 +471,23 @@ export class AgentSession {
 		throw new Error(formatNoApiKeyFoundMessage(model.provider));
 	}
 
-	private async _getCompactionRequestAuth(model: Model<any>): Promise<{
+	private async _getSummarizationRequestAuth(model: Model<any>): Promise<{
 		apiKey?: string;
 		headers?: Record<string, string>;
 		env?: Record<string, string>;
 	}> {
-		if (this.agent.streamFn === streamSimple) {
+		if (this.agent.streamFunction === streamSimple) {
 			return this._getRequiredRequestAuth(model);
 		}
 
-		const result = await this._modelRegistry.getApiKeyAndHeaders(model);
-		return result.ok ? { apiKey: result.apiKey, headers: result.headers, env: result.env } : {};
+		try {
+			const result = await this._modelRuntime.getAuth(model);
+			return result
+				? { apiKey: result.auth.apiKey, headers: withoutDeletedHeaders(result.auth.headers), env: result.env }
+				: {};
+		} catch {
+			return {};
+		}
 	}
 
 	/**
@@ -937,6 +966,10 @@ export class AgentSession {
 		this._currentPrimaryAgent = name;
 		this._primaryAgentPrompt = definition.systemPrompt;
 
+		// Resolve skills filter for this primary agent
+		const allSkills = this._resourceLoader.getSkills().skills;
+		this._primaryAgentSkills = resolvePrimaryAgentSkills(allSkills, definition.skills);
+
 		// Compute new active tool set
 		const allToolNames = Array.from(this._toolRegistry.keys());
 		const newActiveTools = resolveActiveTools(allToolNames, definition.includedTools, definition.excludedTools);
@@ -944,8 +977,8 @@ export class AgentSession {
 
 		// Optionally update model and thinking level
 		if (definition.model && this.model) {
-			const targetModel = this._modelRegistry.find(this.model.provider, definition.model);
-			if (targetModel && this._modelRegistry.hasConfiguredAuth(targetModel)) {
+			const targetModel = this._modelRuntime.getModel(this.model.provider, definition.model);
+			if (targetModel && this._modelRuntime.hasConfiguredAuth(targetModel.provider)) {
 				await this.setModel(targetModel);
 			}
 		}
@@ -1086,7 +1119,7 @@ export class AgentSession {
 				tools: [],
 			},
 			convertToLlm: this.agent.convertToLlm,
-			streamFn: this.agent.streamFn,
+			streamFn: this.agent.streamFunction,
 			onPayload: this.agent.onPayload,
 			onResponse: this.agent.onResponse,
 			transformContext: this.agent.transformContext,
@@ -1109,7 +1142,7 @@ export class AgentSession {
 			resourceLoader: this._resourceLoader,
 			skillsOverride: options.skills,
 			customTools: this._customTools.filter((tool) => tool.name !== "subagent"),
-			modelRegistry: this._modelRegistry,
+			modelRuntime: this._modelRuntime,
 			initialActiveToolNames: options.tools,
 			allowedToolNames: options.tools,
 			baseToolsOverride: this._baseToolsOverride,
@@ -1161,7 +1194,7 @@ export class AgentSession {
 		const loaderAppendSystemPrompt = this._resourceLoader.getAppendSystemPrompt();
 		const appendSystemPrompt =
 			loaderAppendSystemPrompt.length > 0 ? loaderAppendSystemPrompt.join("\n\n") : undefined;
-		const loadedSkills = this._skillsOverride ?? this._resourceLoader.getSkills().skills;
+		const loadedSkills = this._skillsOverride ?? this._primaryAgentSkills ?? this._resourceLoader.getSkills().skills;
 		const loadedContextFiles = this._resourceLoader.getAgentsFiles().agentsFiles;
 
 		this._baseSystemPromptOptions = {
@@ -1303,8 +1336,8 @@ export class AgentSession {
 				throw new Error(formatNoModelSelectedMessage());
 			}
 
-			if (!this._modelRegistry.hasConfiguredAuth(this.model)) {
-				const isOAuth = this._modelRegistry.isUsingOAuth(this.model);
+			if (!this._modelRuntime.hasConfiguredAuth(this.model.provider)) {
+				const isOAuth = this._modelRuntime.isUsingOAuth(this.model.provider);
 				if (isOAuth) {
 					throw new Error(
 						`Authentication failed for "${this.model.provider}". ` +
@@ -1724,7 +1757,7 @@ export class AgentSession {
 	 * @throws Error if no auth is configured for the model
 	 */
 	async setModel(model: Model<any>): Promise<void> {
-		if (!this._modelRegistry.hasConfiguredAuth(model)) {
+		if (!this._modelRuntime.hasConfiguredAuth(model.provider)) {
 			throw new Error(`No API key for ${model.provider}/${model.id}`);
 		}
 
@@ -1754,7 +1787,9 @@ export class AgentSession {
 	}
 
 	private async _cycleScopedModel(direction: "forward" | "backward"): Promise<ModelCycleResult | undefined> {
-		const scopedModels = this._scopedModels.filter((scoped) => this._modelRegistry.hasConfiguredAuth(scoped.model));
+		const scopedModels = this._scopedModels.filter((scoped) =>
+			this._modelRuntime.hasConfiguredAuth(scoped.model.provider),
+		);
 		if (scopedModels.length <= 1) return undefined;
 
 		const currentModel = this.model;
@@ -1783,7 +1818,7 @@ export class AgentSession {
 	}
 
 	private async _cycleAvailableModel(direction: "forward" | "backward"): Promise<ModelCycleResult | undefined> {
-		const availableModels = await this._modelRegistry.getAvailable();
+		const availableModels = await this._modelRuntime.getAvailable();
 		if (availableModels.length <= 1) return undefined;
 
 		const currentModel = this.model;
@@ -1933,7 +1968,7 @@ export class AgentSession {
 				throw new Error(formatNoModelSelectedMessage());
 			}
 
-			const { apiKey, headers, env } = await this._getCompactionRequestAuth(this.model);
+			const { apiKey, headers, env } = await this._getSummarizationRequestAuth(this.model);
 
 			const pathEntries = this.sessionManager.getBranch();
 			const settings = this.settingsManager.getCompactionSettings();
@@ -1993,7 +2028,7 @@ export class AgentSession {
 					customInstructions,
 					this._compactionAbortController.signal,
 					this.thinkingLevel,
-					this.agent.streamFn,
+					this.agent.streamFunction,
 					env,
 				);
 				summary = result.summary;
@@ -2201,9 +2236,9 @@ export class AgentSession {
 			let apiKey: string | undefined;
 			let headers: Record<string, string> | undefined;
 			let env: Record<string, string> | undefined;
-			if (this.agent.streamFn === streamSimple) {
-				const authResult = await this._modelRegistry.getApiKeyAndHeaders(this.model);
-				if (!authResult.ok || !authResult.apiKey) {
+			if (this.agent.streamFunction === streamSimple) {
+				const authResult = await this._modelRuntime.getAuth(this.model);
+				if (!authResult?.auth.apiKey) {
 					this._emit({
 						type: "compaction_end",
 						reason,
@@ -2213,10 +2248,11 @@ export class AgentSession {
 					});
 					return false;
 				}
-				apiKey = authResult.apiKey;
-				headers = authResult.headers;
+				apiKey = authResult.auth.apiKey;
+				headers = withoutDeletedHeaders(authResult.auth.headers);
+				env = authResult.env;
 			} else {
-				({ apiKey, headers, env } = await this._getCompactionRequestAuth(this.model));
+				({ apiKey, headers, env } = await this._getSummarizationRequestAuth(this.model));
 			}
 
 			const pathEntries = this.sessionManager.getBranch();
@@ -2285,7 +2321,7 @@ export class AgentSession {
 					undefined,
 					this._autoCompactionAbortController.signal,
 					this.thinkingLevel,
-					this.agent.streamFn,
+					this.agent.streamFunction,
 					env,
 				);
 				summary = compactResult.summary;
@@ -2472,7 +2508,7 @@ export class AgentSession {
 			return;
 		}
 
-		const refreshedModel = this._modelRegistry.find(currentModel.provider, currentModel.id);
+		const refreshedModel = this._modelRuntime.getModel(currentModel.provider, currentModel.id);
 		if (!refreshedModel || refreshedModel === currentModel) {
 			return;
 		}
@@ -2544,7 +2580,7 @@ export class AgentSession {
 				refreshTools: () => this._refreshToolRegistry(),
 				getCommands,
 				setModel: async (model) => {
-					if (!this.modelRegistry.hasConfiguredAuth(model)) return false;
+					if (!this.modelRuntime.hasConfiguredAuth(model.provider)) return false;
 					await this.setModel(model);
 					return true;
 				},
@@ -2584,11 +2620,11 @@ export class AgentSession {
 			},
 			{
 				registerProvider: (name, config) => {
-					this._modelRegistry.registerProvider(name, config);
+					this._modelRuntime.registerProvider(name, config);
 					this._refreshCurrentModelFromRegistry();
 				},
 				unregisterProvider: (name) => {
-					this._modelRegistry.unregisterProvider(name);
+					this._modelRuntime.unregisterProvider(name);
 					this._refreshCurrentModelFromRegistry();
 				},
 			},
@@ -2737,7 +2773,7 @@ export class AgentSession {
 			extensionsResult.runtime,
 			this._cwd,
 			this.sessionManager,
-			this._modelRegistry,
+			new ModelRegistry(this._modelRuntime),
 		);
 		if (this._extensionRunnerRef) {
 			this._extensionRunnerRef.current = this._extensionRunner;
@@ -3167,7 +3203,7 @@ export class AgentSession {
 					customInstructions,
 					replaceInstructions,
 					reserveTokens: branchSummarySettings.reserveTokens,
-					streamFn: this.agent.streamFn,
+					streamFn: this.agent.streamFunction,
 				});
 				if (result.aborted) {
 					return { cancelled: true, aborted: true };

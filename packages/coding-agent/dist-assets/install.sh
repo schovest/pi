@@ -80,6 +80,7 @@ EXT_NAMES=(
 	"@juicesharp/rpiv-ask-user-question"
 	"tps"
 	"sudo-helper"
+	"goal"
 	"context-mode"
 	"@juicesharp/rpiv-btw"
 	"superpowers"
@@ -94,6 +95,7 @@ EXT_DESCS=(
 	"用户交互问答"
 	"Tokens-per-second 监控"
 	"sudo 密码安全注入"
+	"目标自主编排"
 	"智能上下文模式切换"
 	"侧边栏问答命令"
 	"Superpowers 技能集"
@@ -102,7 +104,7 @@ EXT_DESCS=(
 	"持久记忆与学习循环"
 )
 # shellcheck disable=SC2034 # used via nameref in run_menu
-EXT_DEFAULTS=(1 1 1 0 0 0 0 0 1 0 0)
+EXT_DEFAULTS=(1 1 1 0 0 0 0 0 0 1 0 0)
 # shellcheck disable=SC2034 # used via nameref in run_menu
 EXT_INSTALLS=(
 	"npm:pi-mcp-adapter"
@@ -110,6 +112,7 @@ EXT_INSTALLS=(
 	"npm:@juicesharp/rpiv-ask-user-question"
 	"file:tps.ts"
 	"file:sudo-helper.ts"
+	"file:goal.ts"
 	"npm:context-mode"
 	"npm:@juicesharp/rpiv-btw"
 	"git:github.com/obra/superpowers"
