@@ -224,7 +224,11 @@ export class SubagentOverlayComponent extends Container {
 				const tools = theme.fg("muted", ` tools=${item.toolCount}`);
 				const lastTool = item.recentTools.length > 0 ? theme.fg("muted", ` -> ${item.recentTools.at(-1)}`) : "";
 				this.leftPanel.addChild(
-					new Text(`${pointer}${i + 1}. ${displayTitle(item)} ${status}${usage}${tools}${lastTool}`, 1, 0),
+					new Text(
+						`${pointer}${i + 1}.${theme.fg("accent", `(${item.agent})`)} ${displayTitle(item)} ${status}${usage}${tools}${lastTool}`,
+						1,
+						0,
+					),
 				);
 			}
 		}
@@ -254,12 +258,10 @@ export class SubagentOverlayComponent extends Container {
 		this.rightPanel.addChild(new DynamicBorder());
 		this.rightPanel.addChild(
 			new Text(
-				theme.bold(`${displayTitle(item)}`) +
+				theme.fg("accent", `(${item.agent}) `) +
+					theme.bold(`${displayTitle(item)}`) +
 					` ${status}` +
-					theme.fg(
-						"muted",
-						`${usage} model=${item.model ?? "default"} thinking=${item.thinking ?? "default"} agent=${item.agent}`,
-					),
+					theme.fg("muted", `${usage} model=${item.model ?? "default"} thinking=${item.thinking ?? "default"}`),
 				1,
 				0,
 			),
