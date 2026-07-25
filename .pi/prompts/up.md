@@ -51,7 +51,7 @@ npm run build:tgz
 用显式路径 stage 变更文件（禁止 git add -A）：
 
 ```bash
-git add package.json package-lock.json packages/*/package.json packages/coding-agent/npm-shrinkwrap.json packages/coding-agent/CHANGELOG.md
+git add package.json package-lock.json packages/*/package.json packages/coding-agent/examples/extensions/*/package.json packages/coding-agent/examples/extensions/*/package-lock.json packages/coding-agent/npm-shrinkwrap.json packages/coding-agent/CHANGELOG.md
 PI_ALLOW_LOCKFILE_CHANGE=1 git commit -m "chore: bump version to <VER>"
 ```
 
