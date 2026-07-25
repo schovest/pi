@@ -54,15 +54,18 @@ const VIRTUAL_MODULES: Record<string, unknown> = {
 	"@earendil-works/pi-tui": _bundledPiTui,
 	"@earendil-works/pi-ai/compat": _bundledPiAi,
 	"@earendil-works/pi-ai/oauth": _bundledPiAiOauth,
+	"@earendil-works/pi-ai": _bundledPiAi,
 	"@earendil-works/pi-coding-agent": _bundledPiCodingAgent,
 	// Legacy scope aliases — extensions may import from any of these scopes
 	"@schovest/pi-agent-core": _bundledPiAgentCore,
 	"@schovest/pi-tui": _bundledPiTui,
+	"@schovest/pi-ai/compat": _bundledPiAi,
 	"@schovest/pi-ai": _bundledPiAi,
 	"@schovest/pi-ai/oauth": _bundledPiAiOauth,
 	"@schovest/pi-coding-agent": _bundledPiCodingAgent,
 	"@mariozechner/pi-agent-core": _bundledPiAgentCore,
 	"@mariozechner/pi-tui": _bundledPiTui,
+	"@mariozechner/pi-ai/compat": _bundledPiAi,
 	"@mariozechner/pi-ai": _bundledPiAi,
 	"@mariozechner/pi-ai/oauth": _bundledPiAiOauth,
 	"@mariozechner/pi-coding-agent": _bundledPiCodingAgent,
@@ -105,6 +108,85 @@ function resolveModuleEntry(specifier: string, fromDir: string): string {
  */
 let _aliases: Record<string, string> | null = null;
 
+/** Extract the `import` target from a package.json exports entry. */
+function extractExportImport(target: unknown): string | undefined {
+	if (typeof target === "string") return target;
+	if (target && typeof target === "object") {
+		const t = target as { import?: string; default?: string };
+		return t.import ?? t.default;
+	}
+	return undefined;
+}
+
+/** Recursively list `.js` files under `dir`, returning paths relative to `dir`. */
+function listJsFiles(dir: string): string[] {
+	const results: string[] = [];
+	const walk = (d: string, base: string) => {
+		for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
+			const rel = base ? `${base}/${entry.name}` : entry.name;
+			if (entry.isDirectory()) {
+				walk(path.join(d, entry.name), rel);
+			} else if (entry.isFile() && entry.name.endsWith(".js")) {
+				results.push(rel);
+			}
+		}
+	};
+	walk(dir, "");
+	return results;
+}
+
+/**
+ * Generate jiti aliases for every pi-ai export subpath.
+ *
+ * jiti applies aliases via prefix matching, so a bare alias for
+ * `@earendil-works/pi-ai` (pointing at the compat entry — a superset of the
+ * main index that legacy extensions depend on via `import "@earendil-works/pi-ai"`)
+ * also captures `@earendil-works/pi-ai/<subpath>` and rewrites it to
+ * `<compat.js>/<subpath>`, breaking resolution. Generating explicit aliases
+ * for every export subpath (providers/all, compat, oauth, ...) ensures subpath
+ * imports resolve correctly while keeping the bare alias for legacy imports.
+ * jiti's normalizeAliases sorts longer keys first, so subpath aliases take
+ * precedence over the bare-package alias.
+ */
+function collectPiAiSubpathAliases(piAiPkgRoot: string, scopes: string[]): Record<string, string> {
+	const result: Record<string, string> = {};
+	let pkg: { exports?: Record<string, unknown> };
+	try {
+		pkg = JSON.parse(fs.readFileSync(path.join(piAiPkgRoot, "package.json"), "utf-8"));
+	} catch {
+		return result;
+	}
+	if (!pkg.exports) return result;
+
+	for (const [exportKey, target] of Object.entries(pkg.exports)) {
+		if (exportKey === ".") continue;
+		const importTarget = extractExportImport(target);
+		if (!importTarget) continue;
+
+		if (exportKey.endsWith("/*")) {
+			// "./providers/*" -> subPathPrefix "providers", scan dist/providers
+			const subPathPrefix = exportKey.slice(2, -2);
+			const targetDir = importTarget
+				.slice(2)
+				.replace(/\*[^/]*$/, "")
+				.replace(/\/$/, "");
+			const scanDir = path.join(piAiPkgRoot, targetDir);
+			if (!fs.existsSync(scanDir)) continue;
+			for (const relFile of listJsFiles(scanDir)) {
+				const subPath = `${subPathPrefix}/${relFile.replace(/\\/g, "/").replace(/\.js$/, "")}`;
+				const abs = path.join(scanDir, relFile);
+				for (const scope of scopes) result[`${scope}/${subPath}`] = abs;
+			}
+		} else {
+			// "./compat" -> subPath "/compat"
+			const subPath = exportKey.slice(1);
+			const abs = path.resolve(piAiPkgRoot, importTarget.slice(2));
+			for (const scope of scopes) result[`${scope}${subPath}`] = abs;
+		}
+	}
+	return result;
+}
+
 function getAliases(): Record<string, string> {
 	if (_aliases) return _aliases;
 
@@ -128,26 +210,32 @@ function getAliases(): Record<string, string> {
 	const piAgentCoreEntry = resolveWorkspaceOrImport("agent/dist/index.js", "@earendil-works/pi-agent-core");
 	const piTuiEntry = resolveWorkspaceOrImport("tui/dist/index.js", "@schovest/pi-tui");
 	const piAiEntry = resolveWorkspaceOrImport("ai/dist/compat.js", "@earendil-works/pi-ai/compat");
-	const piAiOauthEntry = resolveWorkspaceOrImport("ai/dist/oauth.js", "@earendil-works/pi-ai/oauth");
+	// piAiPkgRoot: derive package root from the compat entry (workspace or node_modules).
+	const piAiPkgRoot = path.dirname(path.dirname(piAiEntry));
+	const piAiScopes = ["@earendil-works/pi-ai", "@schovest/pi-ai", "@mariozechner/pi-ai"];
 
 	_aliases = {
+		// pi-ai subpath aliases (compat, oauth, providers/*, api/*, ...) — must
+		// be present so jiti prefix matching doesn't rewrite `@earendil-works/pi-ai/<subpath>`
+		// through the bare `@earendil-works/pi-ai` alias below.
+		...collectPiAiSubpathAliases(piAiPkgRoot, piAiScopes),
 		"@schovest/pi-coding-agent": piCodingAgentEntry,
 		"@earendil-works/pi-agent-core": piAgentCoreEntry,
 		"@schovest/pi-tui": piTuiEntry,
-		"@earendil-works/pi-ai/compat": piAiEntry,
-		"@earendil-works/pi-ai/oauth": piAiOauthEntry,
-		// Legacy scope aliases
+		// Legacy scope aliases — extensions may import from any of these scopes
 		"@schovest/pi-agent-core": piAgentCoreEntry,
-		"@schovest/pi-ai": piAiEntry,
-		"@schovest/pi-ai/oauth": piAiOauthEntry,
 		"@mariozechner/pi-coding-agent": piCodingAgentEntry,
 		"@mariozechner/pi-agent-core": piAgentCoreEntry,
 		"@mariozechner/pi-tui": piTuiEntry,
-		"@mariozechner/pi-ai": piAiEntry,
-		"@mariozechner/pi-ai/oauth": piAiOauthEntry,
 		"@earendil-works/pi-coding-agent": piCodingAgentEntry,
 		"@earendil-works/pi-tui": piTuiEntry,
+		// Bare-package aliases for pi-ai: legacy extensions import
+		// `@earendil-works/pi-ai` (or legacy scopes) expecting the compat entry,
+		// which is a superset of the main index. Subpath imports are handled by
+		// the explicit aliases above.
 		"@earendil-works/pi-ai": piAiEntry,
+		"@schovest/pi-ai": piAiEntry,
+		"@mariozechner/pi-ai": piAiEntry,
 		typebox: typeboxEntry,
 		"typebox/compile": typeboxCompileEntry,
 		"typebox/value": typeboxValueEntry,

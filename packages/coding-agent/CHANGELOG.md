@@ -32,6 +32,7 @@
 
 - clone 未保存会话时给出清晰错误提示（"This session has not been saved yet"）
 - read 工具错误内容不再语法高亮（避免错误着色）
+- 扩展加载修复：jiti alias 前缀匹配导致 `@earendil-works/pi-ai/<subpath>` 被错误重写为 `compat.js/<subpath>`（Node/tsx 模式）；VIRTUAL_MODULES 缺少 `@earendil-works/pi-ai` 裸包名映射导致 Bun 二进制模式扩展找不到 `@earendil-works/pi-ai`（optional peerDependency 未安装时）
 
 ## [0.11.3] - 2026-07-17
 
