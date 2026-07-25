@@ -218,7 +218,15 @@ function cmdTheme(themeName: string): void {
 	["toolDiffAdded", "toolDiffRemoved", "toolDiffContext"].forEach(logColor);
 
 	console.log("\n--- Thinking ---");
-	["thinkingOff", "thinkingMinimal", "thinkingLow", "thinkingMedium", "thinkingHigh"].forEach(logColor);
+	[
+		"thinkingOff",
+		"thinkingMinimal",
+		"thinkingLow",
+		"thinkingMedium",
+		"thinkingHigh",
+		"thinkingXhigh",
+		"thinkingMax",
+	].forEach(logColor);
 
 	console.log("\n--- Backgrounds ---");
 	console.log("userMessageBg:", theme.bg("userMessageBg", " Sample "));

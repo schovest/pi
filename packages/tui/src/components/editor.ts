@@ -272,6 +272,12 @@ export class Editor implements Component, Focusable {
 	// Border color (can be changed dynamically)
 	public borderColor: (str: string) => string;
 
+	// Title text embedded in the top border line (updated externally)
+	public borderTitle?: string;
+
+	// Right-aligned title text embedded in the top border line
+	public borderTitleRight?: string;
+
 	// Autocomplete support
 	private autocompleteProvider?: AutocompleteProvider;
 	private autocompleteTriggerCharacters = [...DEFAULT_AUTOCOMPLETE_TRIGGER_CHARACTERS];
@@ -500,7 +506,7 @@ export class Editor implements Component, Focusable {
 		const leftPadding = " ".repeat(paddingX);
 		const rightPadding = leftPadding;
 
-		// Render top border (with scroll indicator if scrolled down)
+		// Render top border (with scroll indicator if scrolled down, or title if set)
 		if (this.scrollOffset > 0) {
 			const indicator = `─── ↑ ${this.scrollOffset} more `;
 			const remaining = width - visibleWidth(indicator);
@@ -508,6 +514,74 @@ export class Editor implements Component, Focusable {
 				result.push(this.borderColor(indicator + "─".repeat(remaining)));
 			} else {
 				result.push(this.borderColor(truncateToWidth(indicator, width)));
+			}
+		} else if (this.borderTitle || this.borderTitleRight) {
+			// Embed title text in the top border with visual spacing:
+			// ── leftTitle ────── rightTitle ──
+			const prefix = "── ";
+			// Pad titles with spaces for visual separation from border dashes
+			const leftContent = this.borderTitle ? `${this.borderTitle} ` : "";
+			const rightContent = this.borderTitleRight ? ` ${this.borderTitleRight} ` : "";
+			const leftWidth = visibleWidth(leftContent);
+			const rightWidth = visibleWidth(rightContent);
+			const hasRight = rightWidth > 0;
+
+			if (hasRight) {
+				// Two-sided: ── leftContent ─── rightContent ──
+				const minTrailing = 2; // "──" minimum after rightContent
+				const minMiddle = 3; // "───" minimum between titles
+				const totalNeeded = prefix.length + leftWidth + minMiddle + rightWidth + minTrailing;
+
+				if (totalNeeded > width) {
+					// Not enough room for both — truncate left, keep right
+					const availableForLeft = Math.max(0, width - prefix.length - minMiddle - rightWidth - minTrailing);
+					if (availableForLeft > 0) {
+						const truncatedLeft = truncateToWidth(leftContent, availableForLeft, "");
+						result.push(
+							this.borderColor(prefix) +
+								truncatedLeft +
+								this.borderColor("─".repeat(minMiddle)) +
+								rightContent +
+								this.borderColor("─".repeat(minTrailing)),
+						);
+					} else {
+						// Very narrow — fall back to left-only truncation
+						const availableForTitle = Math.max(0, width - prefix.length);
+						const truncatedTitle = truncateToWidth(leftContent, availableForTitle, "");
+						const used = visibleWidth(truncatedTitle);
+						result.push(
+							this.borderColor(prefix) +
+								truncatedTitle +
+								this.borderColor("─".repeat(Math.max(0, width - prefix.length - used))),
+						);
+					}
+				} else {
+					const middleDashes = width - prefix.length - leftWidth - rightWidth - minTrailing;
+					result.push(
+						this.borderColor(prefix) +
+							leftContent +
+							this.borderColor("─".repeat(middleDashes)) +
+							rightContent +
+							this.borderColor("─".repeat(minTrailing)),
+					);
+				}
+			} else {
+				// Left-only: ── title ──────
+				const minTrailing = 2; // "──" minimum after title (space already in content)
+				if (prefix.length + leftWidth + minTrailing > width) {
+					// Title too long - truncate to fit
+					const availableForTitle = Math.max(0, width - prefix.length);
+					const truncatedTitle = truncateToWidth(leftContent, availableForTitle, "");
+					const used = visibleWidth(truncatedTitle);
+					result.push(
+						this.borderColor(prefix) +
+							truncatedTitle +
+							this.borderColor("─".repeat(Math.max(0, width - prefix.length - used))),
+					);
+				} else {
+					const trailingDashes = width - prefix.length - leftWidth;
+					result.push(this.borderColor(prefix) + leftContent + this.borderColor("─".repeat(trailingDashes)));
+				}
 			}
 		} else {
 			result.push(horizontal.repeat(width));

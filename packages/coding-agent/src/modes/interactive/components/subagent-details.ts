@@ -319,7 +319,7 @@ export class SubagentPickerComponent extends Container {
 				const lastTool = item.recentTools.length > 0 ? theme.fg("muted", ` → ${item.recentTools.at(-1)}`) : "";
 				this.addChild(
 					new Text(
-						`${pointer}${item.index + 1}. ${displayTitle(item)} ${status}${usage}${tools}${lastTool}`,
+						`${pointer}${item.index + 1}.${theme.fg("accent", `(${item.agent})`)} ${displayTitle(item)} ${status}${usage}${tools}${lastTool}`,
 						1,
 						0,
 					),

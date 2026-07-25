@@ -1,46 +1,7 @@
-import { complete, resetApiProviders } from "@earendil-works/pi-ai/compat";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.ts";
 import { ModelRegistry } from "../src/core/model-registry.ts";
 import { ModelRuntime } from "../src/core/model-runtime.ts";
-
-const openAIState = vi.hoisted(() => ({ clientOptions: undefined as unknown }));
-
-vi.mock("openai", () => {
-	class FakeOpenAI {
-		constructor(options: unknown) {
-			openAIState.clientOptions = options;
-		}
-
-		chat = {
-			completions: {
-				create: () => {
-					const stream = {
-						async *[Symbol.asyncIterator]() {
-							yield {
-								choices: [{ delta: {}, finish_reason: "stop" }],
-								usage: { prompt_tokens: 1, completion_tokens: 1 },
-							};
-						},
-					};
-					const promise = Promise.resolve(stream) as Promise<typeof stream> & {
-						withResponse(): Promise<{
-							data: typeof stream;
-							response: { status: number; headers: Headers };
-						}>;
-					};
-					promise.withResponse = async () => ({
-						data: stream,
-						response: { status: 200, headers: new Headers() },
-					});
-					return promise;
-				},
-			},
-		};
-	}
-
-	return { default: FakeOpenAI };
-});
 
 async function createCloudflareRuntime(): Promise<{ modelRuntime: ModelRuntime; modelRegistry: ModelRegistry }> {
 	const authStorage = AuthStorage.inMemory();
@@ -56,40 +17,38 @@ async function createCloudflareRuntime(): Promise<{ modelRuntime: ModelRuntime; 
 	return { modelRuntime, modelRegistry: new ModelRegistry(modelRuntime) };
 }
 
-describe("ModelRegistry Cloudflare compat streaming", () => {
-	it("materializes the Cloudflare endpoint through ModelRuntime streaming", async () => {
+describe("ModelRegistry Cloudflare native streaming", () => {
+	it("resolves Cloudflare AI Gateway auth through ModelRuntime", async () => {
 		const { modelRuntime } = await createCloudflareRuntime();
 		const model = modelRuntime.getModel("cloudflare-ai-gateway", "workers-ai/@cf/moonshotai/kimi-k2.5");
 		expect(model).toBeDefined();
 
-		resetApiProviders();
-		await modelRuntime.completeSimple(model!, { messages: [] });
-
-		const clientOptions = openAIState.clientOptions as {
-			baseURL?: string;
-			defaultHeaders?: Record<string, unknown>;
-		};
-		expect(clientOptions.baseURL).toBe("https://gateway.ai.cloudflare.com/v1/test-account/test-gateway/compat");
-		expect(clientOptions.defaultHeaders?.["cf-aig-authorization"]).toBe("Bearer test-token");
+		const auth = await modelRuntime.getAuth(model!);
+		expect(auth).toBeDefined();
+		// Cloudflare AI Gateway uses cf-aig-authorization header, not standard apiKey
+		expect(auth!.auth.headers!["cf-aig-authorization"]).toBe("Bearer test-token");
+		// Standard auth headers are suppressed
+		expect(auth!.auth.headers!.Authorization).toBeNull();
+		expect(auth!.auth.headers!["x-api-key"]).toBeNull();
+		// Env contains the account and gateway IDs for base URL resolution
+		expect(auth!.env?.CLOUDFLARE_ACCOUNT_ID).toBe("test-account");
+		expect(auth!.env?.CLOUDFLARE_GATEWAY_ID).toBe("test-gateway");
+		expect(auth!.source).toBe("stored credential");
 	});
 
-	it("materializes the Cloudflare endpoint after extension-style auth resolution", async () => {
+	it("resolves Cloudflare AI Gateway auth after extension-style auth resolution", async () => {
 		const { modelRegistry } = await createCloudflareRuntime();
 		const model = modelRegistry.find("cloudflare-ai-gateway", "workers-ai/@cf/moonshotai/kimi-k2.5");
 		expect(model).toBeDefined();
 
-		resetApiProviders();
 		const auth = await modelRegistry.getApiKeyAndHeaders(model!);
 		expect(auth.ok).toBe(true);
 		if (!auth.ok) throw new Error(auth.error);
 
-		await complete(model!, { messages: [] }, auth);
-
-		const clientOptions = openAIState.clientOptions as {
-			baseURL?: string;
-			defaultHeaders?: Record<string, unknown>;
-		};
-		expect(clientOptions.baseURL).toBe("https://gateway.ai.cloudflare.com/v1/test-account/test-gateway/compat");
-		expect(clientOptions.defaultHeaders?.["cf-aig-authorization"]).toBe("Bearer test-token");
+		// Cloudflare uses custom headers instead of apiKey
+		expect(auth.apiKey).toBeUndefined();
+		expect(auth.headers?.["cf-aig-authorization"]).toBe("Bearer test-token");
+		expect(auth.env?.CLOUDFLARE_ACCOUNT_ID).toBe("test-account");
+		expect(auth.env?.CLOUDFLARE_GATEWAY_ID).toBe("test-gateway");
 	});
 });

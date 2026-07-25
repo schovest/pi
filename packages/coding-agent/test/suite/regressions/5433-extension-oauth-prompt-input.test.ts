@@ -42,7 +42,7 @@ describe("LoginDialogComponent OAuth prompts", () => {
 
 		const firstPrompt = dialog.showPrompt("First prompt:", "first-value");
 		dialog.handleInput("first-value");
-		dialog.handleInput("\n");
+		dialog.handleInput("\r");
 		await expect(firstPrompt).resolves.toBe("first-value");
 
 		const secondPrompt = dialog.showPrompt("Second prompt:");
@@ -54,7 +54,7 @@ describe("LoginDialogComponent OAuth prompts", () => {
 		expect(countRenderedValue(lines, "first-value")).toBe(1);
 		expect(countRenderedValue(lines, "second-secret-demo")).toBe(1);
 
-		dialog.handleInput("\n");
+		dialog.handleInput("\r");
 		await expect(secondPrompt).resolves.toBe("second-secret-demo");
 	});
 
@@ -101,7 +101,7 @@ describe("LoginDialogComponent OAuth prompts", () => {
 
 		const manualInput = dialog.showManualInput("Paste callback URL:");
 		dialog.handleInput("callback-value");
-		dialog.handleInput("\n");
+		dialog.handleInput("\r");
 		await expect(manualInput).resolves.toBe("callback-value");
 
 		const prompt = dialog.showPrompt("Second prompt:");
@@ -113,7 +113,7 @@ describe("LoginDialogComponent OAuth prompts", () => {
 		expect(countRenderedValue(lines, "callback-value")).toBe(1);
 		expect(countRenderedValue(lines, "second-secret-demo")).toBe(1);
 
-		dialog.handleInput("\n");
+		dialog.handleInput("\r");
 		await expect(prompt).resolves.toBe("second-secret-demo");
 	});
 });

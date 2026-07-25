@@ -102,13 +102,13 @@ describe("resolveConfigValue", () => {
 		expect(readFileSync(counterFile, "utf-8").trim()).toBe("2");
 	});
 
-	test("uses stdin when the configured Windows shell requires it", () => {
+	test("uses the configured shell on Windows", () => {
 		if (process.platform === "win32") return;
 		const platformDescriptor = Object.getOwnPropertyDescriptor(process, "platform");
 		vi.spyOn(shellModule, "getShellConfig").mockReturnValue({
 			shell: "/bin/bash",
-			args: ["-s"],
-			commandTransport: "stdin",
+			args: ["-c"],
+			commandTransport: "argv",
 		});
 		try {
 			Object.defineProperty(process, "platform", { configurable: true, value: "win32" });

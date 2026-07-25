@@ -88,7 +88,7 @@ describe("issue #3217 scoped model ordering", () => {
 		await vi.waitFor(() => {
 			const rendered = stripAnsi(selector.render(120).join("\n"));
 			expect(rendered).toContain(`[${modelOne.provider}]`);
-			expect(rendered).toContain("Model catalogs refreshed.");
+			expect(rendered).toContain("Scope:");
 		});
 
 		const renderedLines = stripAnsi(selector.render(120).join("\n"))

@@ -107,16 +107,28 @@ function deriveExportColors(baseColor: string): { pageBg: string; cardBg: string
 
 /**
  * Generate CSS custom property declarations from theme colors.
+ * Falls back to the active theme if the specified theme doesn't exist.
  */
 function generateThemeVars(themeName?: string): string {
-	const colors = getResolvedThemeColors(themeName);
+	let colors: Record<string, string>;
+	try {
+		colors = getResolvedThemeColors(themeName);
+	} catch {
+		// Theme not found: fall back to active/default theme
+		colors = getResolvedThemeColors();
+	}
 	const lines: string[] = [];
 	for (const [key, value] of Object.entries(colors)) {
 		lines.push(`--${key}: ${value};`);
 	}
 
 	// Use explicit theme export colors if available, otherwise derive from userMessageBg
-	const themeExport = getThemeExportColors(themeName);
+	let themeExport: { pageBg?: string; cardBg?: string; infoBg?: string };
+	try {
+		themeExport = getThemeExportColors(themeName);
+	} catch {
+		themeExport = getThemeExportColors();
+	}
 	const userMessageBg = colors.userMessageBg || "#343541";
 	const derivedColors = deriveExportColors(userMessageBg);
 
@@ -149,8 +161,18 @@ function generateHtml(sessionData: SessionData, themeName?: string): string {
 	const hljsJs = readFileSync(join(templateDir, "vendor", "highlight.min.js"), "utf-8");
 
 	const themeVars = generateThemeVars(themeName);
-	const colors = getResolvedThemeColors(themeName);
-	const themeExport = getThemeExportColors(themeName);
+	let colors: Record<string, string>;
+	try {
+		colors = getResolvedThemeColors(themeName);
+	} catch {
+		colors = getResolvedThemeColors();
+	}
+	let themeExport: { pageBg?: string; cardBg?: string; infoBg?: string };
+	try {
+		themeExport = getThemeExportColors(themeName);
+	} catch {
+		themeExport = getThemeExportColors();
+	}
 	const derivedExportColors = deriveExportColors(colors.userMessageBg || "#343541");
 	const bodyBg = themeExport.pageBg ?? derivedExportColors.pageBg;
 	const containerBg = themeExport.cardBg ?? derivedExportColors.cardBg;

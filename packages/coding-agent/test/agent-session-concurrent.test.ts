@@ -114,6 +114,7 @@ describe("AgentSession concurrent prompt guard", () => {
 		const modelRegistry = await createModelRegistry(authStorage, tempDir);
 		// Set a runtime API key so validation passes
 		await authStorage.modify("anthropic", async () => ({ type: "api_key", key: "test-key" }));
+		await modelRegistry.refresh();
 
 		session = new AgentSession({
 			agent,
@@ -238,6 +239,7 @@ describe("AgentSession concurrent prompt guard", () => {
 		const authStorage = AuthStorage.create(join(tempDir, "auth.json"));
 		const modelRegistry = await createModelRegistry(authStorage, tempDir);
 		await authStorage.modify("anthropic", async () => ({ type: "api_key", key: "test-key" }));
+		await modelRegistry.refresh();
 
 		const extensionsResult = await createTestExtensionsResult([
 			(pi) => {
@@ -316,6 +318,7 @@ describe("AgentSession concurrent prompt guard", () => {
 		const authStorage = AuthStorage.create(join(tempDir, "auth.json"));
 		const modelRegistry = await createModelRegistry(authStorage, tempDir);
 		await authStorage.modify("anthropic", async () => ({ type: "api_key", key: "test-key" }));
+		await modelRegistry.refresh();
 
 		session = new AgentSession({
 			agent,
@@ -422,6 +425,7 @@ describe("AgentSession concurrent prompt guard", () => {
 		const authStorage = AuthStorage.create(join(tempDir, "auth.json"));
 		const modelRegistry = await createModelRegistry(authStorage, tempDir);
 		await authStorage.modify("anthropic", async () => ({ type: "api_key", key: "test-key" }));
+		await modelRegistry.refresh();
 
 		session = new AgentSession({
 			agent,
@@ -569,6 +573,7 @@ describe("AgentSession concurrent prompt guard", () => {
 		const authStorage = AuthStorage.create(join(tempDir, "auth.json"));
 		const modelRegistry = await createModelRegistry(authStorage, tempDir);
 		await authStorage.modify("anthropic", async () => ({ type: "api_key", key: "test-key" }));
+		await modelRegistry.refresh();
 
 		session = new AgentSession({
 			agent,

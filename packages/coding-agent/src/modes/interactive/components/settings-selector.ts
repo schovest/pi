@@ -65,6 +65,7 @@ export interface SettingsConfig {
 	showHardwareCursor: boolean;
 	editorPaddingX: number;
 	autocompleteMaxVisible: number;
+	editorBorderStyle: "plain" | "emoji";
 	quietStartup: boolean;
 	defaultProjectTrust: DefaultProjectTrust;
 	clearOnShrink: boolean;
@@ -94,6 +95,7 @@ export interface SettingsCallbacks {
 	onShowHardwareCursorChange: (enabled: boolean) => void;
 	onEditorPaddingXChange: (padding: number) => void;
 	onAutocompleteMaxVisibleChange: (maxVisible: number) => void;
+	onEditorBorderStyleChange: (style: "plain" | "emoji") => void;
 	onQuietStartupChange: (enabled: boolean) => void;
 	onDefaultProjectTrustChange: (defaultProjectTrust: DefaultProjectTrust) => void;
 	onClearOnShrinkChange: (enabled: boolean) => void;
@@ -457,9 +459,19 @@ export class SettingsSelectorComponent extends Container {
 			values: ["3", "5", "7", "10", "15", "20"],
 		});
 
-		// Clear on shrink toggle (insert after autocomplete-max-visible)
-		const autocompleteIndex = items.findIndex((item) => item.id === "autocomplete-max-visible");
-		items.splice(autocompleteIndex + 1, 0, {
+		// Editor border style toggle (insert after autocomplete-max-visible)
+		const borderStyleIndex = items.findIndex((item) => item.id === "autocomplete-max-visible");
+		items.splice(borderStyleIndex + 1, 0, {
+			id: "editor-border-style",
+			label: "Editor border style",
+			description: "Path/branch info display style in the input editor top border",
+			currentValue: config.editorBorderStyle,
+			values: ["plain", "emoji"],
+		});
+
+		// Clear on shrink toggle (insert after editor-border-style)
+		const clearOnShrinkInsertIndex = items.findIndex((item) => item.id === "editor-border-style");
+		items.splice(clearOnShrinkInsertIndex + 1, 0, {
 			id: "clear-on-shrink",
 			label: "Clear on shrink",
 			description: "Clear empty rows when content shrinks (may cause flicker)",
@@ -555,6 +567,9 @@ export class SettingsSelectorComponent extends Container {
 						break;
 					case "autocomplete-max-visible":
 						callbacks.onAutocompleteMaxVisibleChange(parseInt(newValue, 10));
+						break;
+					case "editor-border-style":
+						callbacks.onEditorBorderStyleChange(newValue as "plain" | "emoji");
 						break;
 					case "clear-on-shrink":
 						callbacks.onClearOnShrinkChange(newValue === "true");

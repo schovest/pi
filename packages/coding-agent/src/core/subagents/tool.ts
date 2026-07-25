@@ -1,6 +1,7 @@
 import { Text } from "@schovest/pi-tui";
 import { minimatch } from "minimatch";
 import { Type } from "typebox";
+import { statusColor } from "../../modes/interactive/components/subagent-details.ts";
 import { theme } from "../../modes/interactive/theme/theme.ts";
 import type { AgentSession } from "../agent-session.ts";
 import { defineTool } from "../extensions/types.ts";
@@ -143,12 +144,39 @@ function recentToolCalls(events: SubagentRunEvent[], max: number): string {
 		.join("\n");
 }
 
+/**
+ * Build a colored heading line for TUI display.
+ * Format: `{index}.({agent}) {title}: {status} {model} thinking=… tokens=… tools=…`
+ * Status uses statusColor, agent tag uses accent, metadata uses muted.
+ */
+function coloredHeading(parts: {
+	index: number;
+	agent: string;
+	title: string;
+	status: string;
+	model?: string;
+	thinking?: string;
+	totalTokens?: number;
+	toolCount: number;
+}): string {
+	const metaBits: string[] = [];
+	if (parts.model) metaBits.push(parts.model);
+	metaBits.push(`thinking=${parts.thinking ?? "default"}`);
+	if (parts.totalTokens !== undefined) metaBits.push(`tokens=${parts.totalTokens}`);
+	metaBits.push(`tools=${parts.toolCount}`);
+	return (
+		`${parts.index + 1}.` +
+		theme.fg("accent", `(${parts.agent})`) +
+		` ${parts.title}: ` +
+		theme.fg(statusColor(parts.status), parts.status) +
+		theme.fg("muted", ` ${metaBits.join(" ")}`)
+	);
+}
+
 function resultText(result: SubagentRunResult): string {
 	return result.results
 		.map((item) => {
-			const tokens = item.usage ? ` tokens=${item.usage.totalTokens}` : "";
-			const tools = ` tools=${toolCallCount(item.events)}`;
-			const heading = `${item.index + 1}. ${displayTitle(item)}: ${item.status} ${item.model ?? ""} thinking=${item.thinking ?? "default"}${tokens}${tools}`;
+			const heading = `${item.index + 1}.(${item.agent}) ${displayTitle(item)}: ${item.status} ${item.model ?? ""} thinking=${item.thinking ?? "default"}${item.usage ? ` tokens=${item.usage.totalTokens}` : ""} tools=${toolCallCount(item.events)}`;
 			const recent = recentToolCalls(item.events, 3);
 			const body = item.error ? `Error: ${item.error}` : item.output;
 			const parts = [heading];
@@ -165,11 +193,27 @@ function renderDetails(details: SubagentToolDetails | undefined, _expanded: bool
 	}
 	if (details.result) {
 		const lines = details.result.results.map((result) => {
-			const usage = result.usage ? ` tokens=${result.usage.totalTokens}` : "";
-			const tools = ` tools=${toolCallCount(result.events)}`;
-			const base = `${result.index + 1}. ${displayTitle(result)}: ${result.status} ${result.model ?? ""} thinking=${result.thinking ?? "default"}${usage}${tools}`;
+			const base = coloredHeading({
+				index: result.index,
+				agent: result.agent,
+				title: displayTitle(result),
+				status: result.status,
+				model: result.model,
+				thinking: result.thinking,
+				totalTokens: result.usage?.totalTokens,
+				toolCount: toolCallCount(result.events),
+			});
 			const recent = recentToolCalls(result.events, 3);
-			return recent ? `${base}\n${recent}` : base;
+			const coloredRecent = recent ? theme.fg("muted", recent) : "";
+			const body = result.error
+				? theme.fg("error", `Error: ${result.error}`)
+				: result.output
+					? theme.fg("toolOutput", result.output)
+					: "";
+			const parts = [base];
+			if (coloredRecent) parts.push(coloredRecent);
+			if (body) parts.push(body);
+			return parts.join("\n");
 		});
 		return lines.join("\n\n");
 	}
@@ -181,10 +225,20 @@ function renderDetails(details: SubagentToolDetails | undefined, _expanded: bool
 		.sort((a, b) => a.index - b.index)
 		.map((event) => {
 			const itemEvents = details.events.filter((e) => e.index === event.index);
-			const tools = ` tools=${toolCallCount(itemEvents)}`;
-			const base = `${event.index + 1}. ${displayTitle(event)}: ${event.status} ${event.model ?? ""} thinking=${event.thinking ?? "default"}${tools}`;
+			const base = coloredHeading({
+				index: event.index,
+				agent: event.agent,
+				title: displayTitle(event),
+				status: event.status,
+				model: event.model,
+				thinking: event.thinking,
+				toolCount: toolCallCount(itemEvents),
+			});
 			const recent = recentToolCalls(itemEvents, 3);
-			return recent ? `${base}\n${recent}` : base;
+			const coloredRecent = recent ? theme.fg("muted", recent) : "";
+			const parts = [base];
+			if (coloredRecent) parts.push(coloredRecent);
+			return parts.join("\n");
 		})
 		.join("\n\n");
 }
@@ -257,7 +311,7 @@ export function createSubagentToolDefinition(session: AgentSession) {
 				.filter((part) => part.type === "text")
 				.map((part) => part.text)
 				.join("\n");
-			return new Text(theme.fg("toolOutput", lines || fallback), 0, 0);
+			return new Text(lines || theme.fg("toolOutput", fallback), 0, 0);
 		},
 	});
 }

@@ -2,6 +2,33 @@
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-07-26
+
+### Changed
+
+- Subagent 运行状态显示优化：TUI heading 中序号后新增 `(agent)` 标签（accent 色），status 使用状态色（success 绿/failed 红/running 黄），model/thinking/tokens/tools 统一 muted 色，方便用户一眼定位 subagent 类型与运行情况
+- Footer 优化：路径、分支、session 名从 footer 底部移到输入框顶部横线，减少底部占用行数
+- 输入框顶部横线美化：新增 `editorBorderStyle` 设置项（`plain` | `emoji`），默认 `plain` 用颜色+Unicode 分隔符，`emoji` 用 emoji 图标+颜色区分
+- 输入框顶部横线新增 `Π` 前缀标识 Pi 品牌
+- Model/thinking 信息从 footer 底部移到顶部横线右侧（`borderTitleRight`），footer 底部仅保留 token 统计与 context 用量
+- Footer 统计项分隔符从空格改为 ` · `，提升视觉清晰度
+- Footer 成本统计修复：现在包含 branch summary、compaction、toolResult 的 usage 成本（之前仅统计 assistant message）
+
+### Fixed
+
+- 修复 subagent 运行后父 session extension runtime 被污染问题：`createSubagentChildSession` 现在创建独立的 `ExtensionRuntime`，子 session dispose 时不再在共享 runtime 上设置 stale 标记（根因：子 session 通过共享 `resourceLoader` 获得同一个 `ExtensionRuntime` 对象，dispose → invalidate 污染父 session）
+- Thinking level `max` 在 TUI 中缺少专属颜色：新增 `thinkingMax` 主题 token，`getThinkingBorderColor` 正确映射 `max` 级别
+- 修复 54 个预存测试失败（ModelRuntime 重构后测试 mock 过时）：
+  - `getSessionStats()` 现在包含 toolResult/branch_summary/compaction 的 usage（之前仅统计 assistant message）
+  - `compact()` 返回值恢复 `usage` 字段，`generateSummary`/`generateTurnPrefixSummary` 返回 usage
+  - `afterToolCall` 现在传递 tool execution 和 extension handler 的 usage
+  - `getContextUsage()` 跳过 0-usage 的 assistant message 继续搜索有效 usage
+  - auth snapshot 刷新：`authStorage.modify()` 后调用 `modelRegistry.refresh()` 更新快照
+  - HTML 导出主题回退：缺失主题时回退到当前活动主题而非抛出异常
+  - LoginDialog 提交键从 `\n` 修正为 `\r`（keybinding 系统将 LF 映射为 Ctrl+J）
+  - interactive-mode-status mock 补充 `modelRuntime.getAvailableSnapshot` 等方法
+  - 各测试文件修复 mock 过时问题（env var 迁移期望值、extension runner 消息格式、model selector 渲染等）
+
 ## [0.12.0] - 2026-07-25
 
 ### Added

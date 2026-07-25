@@ -76,16 +76,16 @@ describe("regression #5661: uppercase models.json header values", () => {
 		const migrated = JSON.parse(readFileSync(modelsPath, "utf-8")) as {
 			providers: Record<string, { apiKey?: string; headers?: Record<string, string> }>;
 		};
-		expect(migrated.providers["my-provider"]?.apiKey).toBe("CUSTOM_API_KEY");
-		expect(migrated.providers["my-provider"]?.headers?.Authorization).toBe("BEARER");
+		expect(migrated.providers["my-provider"]?.apiKey).toBe("$CUSTOM_API_KEY");
+		expect(migrated.providers["my-provider"]?.headers?.Authorization).toBe("$BEARER");
 
 		const registry = await createModelRegistry(AuthStorage.create(join(harness.tempDir, "auth.json")), modelsPath);
 		const model = registry.find("my-provider", "my-model");
 		expect(model).toBeDefined();
 		expect(await registry.getApiKeyAndHeaders(model!)).toMatchObject({
 			ok: true,
-			apiKey: "CUSTOM_API_KEY",
-			headers: { Authorization: "BEARER" },
+			apiKey: "env-CUSTOM_API_KEY",
+			headers: { Authorization: "env-BEARER" },
 		});
 	});
 });

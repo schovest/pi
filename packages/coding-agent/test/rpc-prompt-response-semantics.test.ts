@@ -132,6 +132,7 @@ async function createRuntimeHost(options: { withAuth: boolean; responseDelayMs: 
 	const modelRegistry = await createModelRegistry(authStorage, tempDir);
 	if (options.withAuth) {
 		await authStorage.modify("anthropic", async () => ({ type: "api_key", key: "test-key" }));
+		await modelRegistry.refresh();
 	}
 
 	const session = new AgentSession({

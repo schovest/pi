@@ -127,6 +127,8 @@ function getAssistantUsage(msg: AgentMessage): Usage | undefined {
 	if (msg.role === "assistant" && "usage" in msg) {
 		const assistantMsg = msg as AssistantMessage;
 		if (assistantMsg.stopReason !== "aborted" && assistantMsg.stopReason !== "error" && assistantMsg.usage) {
+			// Skip zero-usage messages (e.g., partial/empty responses)
+			if (calculateContextTokens(assistantMsg.usage) === 0) return undefined;
 			return assistantMsg.usage;
 		}
 	}
@@ -553,7 +555,7 @@ export async function generateSummary(
 	previousSummary?: string,
 	thinkingLevel?: ThinkingLevel,
 	streamFn?: StreamFn,
-): Promise<string> {
+): Promise<{ summary: string; usage: Usage }> {
 	const maxTokens = Math.min(
 		Math.floor(0.8 * reserveTokens),
 		model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY,
@@ -603,7 +605,7 @@ export async function generateSummary(
 		.map((c) => c.text)
 		.join("\n");
 
-	return textContent;
+	return { summary: textContent, usage: response.usage };
 }
 
 // ============================================================================
@@ -759,6 +761,7 @@ export async function compact(
 
 	// Generate summaries (can be parallel if both needed) and merge into one
 	let summary: string;
+	let compactionUsage: Usage | undefined;
 
 	if (isSplitTurn && turnPrefixMessages.length > 0) {
 		// Generate both summaries in parallel
@@ -776,7 +779,7 @@ export async function compact(
 						thinkingLevel,
 						streamFn,
 					)
-				: Promise.resolve("No prior history."),
+				: Promise.resolve({ summary: "No prior history.", usage: undefined as Usage | undefined }),
 			generateTurnPrefixSummary(
 				turnPrefixMessages,
 				model,
@@ -789,10 +792,11 @@ export async function compact(
 			),
 		]);
 		// Merge into single summary
-		summary = `${historyResult}\n\n---\n\n**Turn Context (split turn):**\n\n${turnPrefixResult}`;
+		summary = `${historyResult.summary}\n\n---\n\n**Turn Context (split turn):**\n\n${turnPrefixResult.summary}`;
+		compactionUsage = historyResult.usage ?? turnPrefixResult.usage;
 	} else {
 		// Just generate history summary
-		summary = await generateSummary(
+		const result = await generateSummary(
 			messagesToSummarize,
 			model,
 			settings.reserveTokens,
@@ -804,6 +808,8 @@ export async function compact(
 			thinkingLevel,
 			streamFn,
 		);
+		summary = result.summary;
+		compactionUsage = result.usage;
 	}
 
 	// Compute file lists and append to summary
@@ -819,6 +825,7 @@ export async function compact(
 		firstKeptEntryId,
 		tokensBefore,
 		details: { readFiles, modifiedFiles } as CompactionDetails,
+		usage: compactionUsage,
 	};
 }
 
@@ -834,7 +841,7 @@ async function generateTurnPrefixSummary(
 	signal?: AbortSignal,
 	thinkingLevel?: ThinkingLevel,
 	streamFn?: StreamFn,
-): Promise<string> {
+): Promise<{ summary: string; usage: Usage }> {
 	const maxTokens = Math.min(
 		Math.floor(0.5 * reserveTokens),
 		model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY,
@@ -861,8 +868,11 @@ async function generateTurnPrefixSummary(
 		throw new Error(`Turn prefix summarization failed: ${response.errorMessage || "Unknown error"}`);
 	}
 
-	return response.content
-		.filter((c): c is { type: "text"; text: string } => c.type === "text")
-		.map((c) => c.text)
-		.join("\n");
+	return {
+		summary: response.content
+			.filter((c): c is { type: "text"; text: string } => c.type === "text")
+			.map((c) => c.text)
+			.join("\n"),
+		usage: response.usage,
+	};
 }

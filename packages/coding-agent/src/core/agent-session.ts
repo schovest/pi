@@ -32,6 +32,7 @@ import type {
 	Model,
 	ProviderHeaders,
 	TextContent,
+	Usage,
 } from "@earendil-works/pi-ai/compat";
 import {
 	clampThinkingLevel,
@@ -65,6 +66,7 @@ import { exportSessionToHtml, type ToolHtmlRenderer } from "./export-html/index.
 import { createToolHtmlRenderer } from "./export-html/tool-renderer.ts";
 import {
 	type ContextUsage,
+	createExtensionRuntime,
 	type ExtensionCommandContextActions,
 	type ExtensionErrorListener,
 	type ExtensionMode,
@@ -228,6 +230,8 @@ export interface AgentSessionConfig {
 	sessionStartEvent?: SessionStartEvent;
 	/** Override skills for subagent child sessions. When set, used instead of resourceLoader skills. */
 	skillsOverride?: Skill[];
+	/** Create an isolated ExtensionRuntime instead of sharing resourceLoader's runtime. */
+	isolatedExtensionRuntime?: boolean;
 }
 
 export interface ExtensionBindings {
@@ -366,6 +370,7 @@ export class AgentSession {
 	private _excludedToolNames?: string[];
 	private _baseToolsOverride?: Record<string, AgentTool>;
 	private _skillsOverride?: Skill[];
+	private _isolatedExtensionRuntime: boolean;
 	private _sessionStartEvent: SessionStartEvent;
 	private _extensionUIContext?: ExtensionUIContext;
 	private _extensionMode: ExtensionMode = "print";
@@ -408,6 +413,7 @@ export class AgentSession {
 		this._excludedToolNames = config.excludedToolNames;
 		this._baseToolsOverride = config.baseToolsOverride;
 		this._skillsOverride = config.skillsOverride;
+		this._isolatedExtensionRuntime = config.isolatedExtensionRuntime ?? false;
 		this._sessionStartEvent = config.sessionStartEvent ?? { type: "session_start", reason: "startup" };
 
 		// Always subscribe to agent events for internal handling
@@ -534,6 +540,7 @@ export class AgentSession {
 				content: result.content,
 				details: result.details,
 				isError,
+				usage: result.usage,
 			});
 
 			if (!hookResult) {
@@ -544,6 +551,7 @@ export class AgentSession {
 				content: hookResult.content,
 				details: hookResult.details,
 				isError: hookResult.isError ?? isError,
+				usage: hookResult.usage ?? result.usage,
 			};
 		};
 	}
@@ -1147,6 +1155,7 @@ export class AgentSession {
 			allowedToolNames: options.tools,
 			baseToolsOverride: this._baseToolsOverride,
 			enableSubagents: false,
+			isolatedExtensionRuntime: true,
 		});
 	}
 
@@ -2011,6 +2020,7 @@ export class AgentSession {
 			let firstKeptEntryId: string;
 			let tokensBefore: number;
 			let details: unknown;
+			let compactionUsage: Usage | undefined;
 
 			if (extensionCompaction) {
 				// Extension provided compaction content
@@ -2018,6 +2028,7 @@ export class AgentSession {
 				firstKeptEntryId = extensionCompaction.firstKeptEntryId;
 				tokensBefore = extensionCompaction.tokensBefore;
 				details = extensionCompaction.details;
+				compactionUsage = extensionCompaction.usage;
 			} else {
 				// Generate compaction result
 				const result = await compact(
@@ -2035,13 +2046,21 @@ export class AgentSession {
 				firstKeptEntryId = result.firstKeptEntryId;
 				tokensBefore = result.tokensBefore;
 				details = result.details;
+				compactionUsage = result.usage;
 			}
 
 			if (this._compactionAbortController.signal.aborted) {
 				throw new Error("Compaction cancelled");
 			}
 
-			this.sessionManager.appendCompaction(summary, firstKeptEntryId, tokensBefore, details, fromExtension);
+			this.sessionManager.appendCompaction(
+				summary,
+				firstKeptEntryId,
+				tokensBefore,
+				details,
+				fromExtension,
+				compactionUsage,
+			);
 			const newEntries = this.sessionManager.getEntries();
 			const sessionContext = this.sessionManager.buildSessionContext();
 			this.agent.state.messages = sessionContext.messages;
@@ -2062,12 +2081,13 @@ export class AgentSession {
 				});
 			}
 
-			const compactionResult = {
+			const compactionResult: CompactionResult = {
 				summary,
 				firstKeptEntryId,
 				tokensBefore,
 				estimatedTokensAfter,
 				details,
+				usage: compactionUsage,
 			};
 			this._emit({
 				type: "compaction_end",
@@ -2762,15 +2782,31 @@ export class AgentSession {
 		);
 
 		const extensionsResult = this._resourceLoader.getExtensions();
+
+		// Subagent child sessions share the resourceLoader (and thus the extensions list),
+		// but must NOT share the mutable ExtensionRuntime. A shared runtime means
+		// child.dispose() → invalidate() poisons the parent's assertActive, and
+		// child.bindCore() overwrites the parent's action methods.
+		// Creating a fresh runtime isolates assertActive/invalidate/bindCore state.
+		const runtime = this._isolatedExtensionRuntime
+			? (() => {
+					const child = createExtensionRuntime();
+					for (const [name, value] of extensionsResult.runtime.flagValues) {
+						child.flagValues.set(name, value);
+					}
+					return child;
+				})()
+			: extensionsResult.runtime;
+
 		if (options.flagValues) {
 			for (const [name, value] of options.flagValues) {
-				extensionsResult.runtime.flagValues.set(name, value);
+				runtime.flagValues.set(name, value);
 			}
 		}
 
 		this._extensionRunner = new ExtensionRunner(
 			extensionsResult.extensions,
-			extensionsResult.runtime,
+			runtime,
 			this._cwd,
 			this.sessionManager,
 			new ModelRegistry(this._modelRuntime),
@@ -3349,6 +3385,28 @@ export class AgentSession {
 				userMessages++;
 			} else if (message.role === "toolResult") {
 				toolResults++;
+				// Include toolResult usage if present
+				const usage =
+					"usage" in message
+						? (
+								message as {
+									usage?: {
+										input: number;
+										output: number;
+										cacheRead: number;
+										cacheWrite: number;
+										cost: { total: number };
+									};
+								}
+							).usage
+						: undefined;
+				if (usage) {
+					totalInput += usage.input;
+					totalOutput += usage.output;
+					totalCacheRead += usage.cacheRead;
+					totalCacheWrite += usage.cacheWrite;
+					totalCost += usage.cost.total;
+				}
 			} else if (message.role === "assistant") {
 				assistantMessages++;
 				const assistantMsg = message as AssistantMessage;
@@ -3361,6 +3419,20 @@ export class AgentSession {
 				totalCacheRead += usage.cacheRead;
 				totalCacheWrite += usage.cacheWrite;
 				totalCost += usage.cost.total;
+			}
+		}
+
+		// Include branch_summary and compaction usage (not type "message")
+		for (const entry of this.sessionManager.getEntries()) {
+			if (entry.type === "branch_summary" || entry.type === "compaction") {
+				const usage = entry.usage;
+				if (usage) {
+					totalInput += usage.input;
+					totalOutput += usage.output;
+					totalCacheRead += usage.cacheRead;
+					totalCacheWrite += usage.cacheWrite;
+					totalCost += usage.cost.total;
+				}
 			}
 		}
 
@@ -3409,8 +3481,9 @@ export class AgentSession {
 						const contextTokens = calculateContextTokens(assistant.usage);
 						if (contextTokens > 0) {
 							hasPostCompactionUsage = true;
+							break;
 						}
-						break;
+						// Skip zero-usage messages and continue searching
 					}
 				}
 			}

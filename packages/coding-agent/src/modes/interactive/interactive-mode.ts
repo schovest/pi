@@ -454,8 +454,9 @@ export class InteractiveMode {
 		this.editorContainer = new Container();
 		this.editorContainer.addChild(this.editor as Component);
 		this.footerDataProvider = new FooterDataProvider(this.sessionManager.getCwd());
-		this.footer = new FooterComponent(this.session, this.footerDataProvider);
+		this.footer = new FooterComponent(this.session, this.footerDataProvider, this.editor);
 		this.footer.setAutoCompactEnabled(this.session.autoCompactionEnabled);
+		this.footer.setBorderTitleStyle(this.settingsManager.getEditorBorderStyle());
 
 		// Load hide thinking block setting
 		this.hideThinkingBlock = this.settingsManager.getHideThinkingBlock();
@@ -1675,6 +1676,7 @@ export class InteractiveMode {
 		configureHttpDispatcher(this.settingsManager.getHttpIdleTimeoutMs());
 		this.footer.setSession(this.session);
 		this.footer.setAutoCompactEnabled(this.session.autoCompactionEnabled);
+		this.footer.setBorderTitleStyle(this.settingsManager.getEditorBorderStyle());
 		this.footerDataProvider.setCwd(this.sessionManager.getCwd());
 		this.hideThinkingBlock = this.settingsManager.getHideThinkingBlock();
 		this.ui.setShowHardwareCursor(this.settingsManager.getShowHardwareCursor());
@@ -1994,6 +1996,13 @@ export class InteractiveMode {
 			// Create and add custom footer, passing the data provider
 			this.customFooter = factory(this.ui, theme, this.footerDataProvider);
 			this.ui.addChild(this.customFooter);
+			// Clear editor border titles since built-in footer is no longer updating them
+			if (this.editor.borderTitle !== undefined) {
+				this.editor.borderTitle = undefined;
+			}
+			if (this.editor.borderTitleRight !== undefined) {
+				this.editor.borderTitleRight = undefined;
+			}
 		} else {
 			// Restore built-in footer
 			this.customFooter = undefined;
@@ -2374,6 +2383,7 @@ export class InteractiveMode {
 		}
 
 		this.editorContainer.addChild(this.editor as Component);
+		this.footer.setEditor(this.editor);
 		this.ui.setFocus(this.editor as Component);
 		this.ui.requestRender();
 	}
@@ -4735,6 +4745,7 @@ export class InteractiveMode {
 					defaultProjectTrust: this.settingsManager.getDefaultProjectTrust(),
 					editorPaddingX: this.settingsManager.getEditorPaddingX(),
 					autocompleteMaxVisible: this.settingsManager.getAutocompleteMaxVisible(),
+					editorBorderStyle: this.settingsManager.getEditorBorderStyle(),
 					quietStartup: this.settingsManager.getQuietStartup(),
 					clearOnShrink: this.settingsManager.getClearOnShrink(),
 					showTerminalProgress: this.settingsManager.getShowTerminalProgress(),
@@ -4852,6 +4863,10 @@ export class InteractiveMode {
 						if (this.editor !== this.defaultEditor && this.editor.setAutocompleteMaxVisible !== undefined) {
 							this.editor.setAutocompleteMaxVisible(maxVisible);
 						}
+					},
+					onEditorBorderStyleChange: (style) => {
+						this.settingsManager.setEditorBorderStyle(style);
+						this.footer.setBorderTitleStyle(style);
 					},
 					onClearOnShrinkChange: (enabled) => {
 						this.settingsManager.setClearOnShrink(enabled);
