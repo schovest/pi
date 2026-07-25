@@ -87,6 +87,31 @@ export class FooterComponent implements Component {
 	}
 
 	/**
+	 * Compute the agent role + model + thinking display string for the right side
+	 * of the editor border title.
+	 */
+	getModelDisplay(): string {
+		const state = this.session.state;
+		const modelName = state.model?.id || "no-model";
+		const agentRole = this.session.currentPrimaryAgent;
+		const dimSeparator = theme.fg("dim", " • ");
+
+		let rightSide = `${theme.fg("accent", agentRole)}${dimSeparator}${modelName}`;
+		if (state.model?.reasoning) {
+			const thinkingLevel = state.thinkingLevel || "off";
+			const thinkingStr = thinkingLevel === "off" ? "thinking off" : thinkingLevel;
+			rightSide = `${rightSide}${dimSeparator}${thinkingStr}`;
+		}
+
+		// Prepend the provider in parentheses if there are multiple providers
+		if (this.footerData.getAvailableProviderCount() > 1 && state.model) {
+			rightSide = `(${state.model!.provider}) ${rightSide}`;
+		}
+
+		return rightSide;
+	}
+
+	/**
 	 * Clean up resources.
 	 * Git watcher cleanup now handled by provider.
 	 */
@@ -106,6 +131,7 @@ export class FooterComponent implements Component {
 
 		if (this.borderTitleStyle === "emoji") {
 			const parts: string[] = [];
+			parts.push(theme.fg("accent", "Π"));
 			parts.push(`${theme.fg("accent", `📁 ${pwd}`)}`);
 			if (branch) {
 				parts.push(theme.fg("success", `🔀 ${branch}`));
@@ -113,11 +139,12 @@ export class FooterComponent implements Component {
 			if (sessionName) {
 				parts.push(theme.fg("muted", `✦ ${sessionName}`));
 			}
-			return parts.join("  ");
+			return parts.join(theme.fg("dim", " ⋅ "));
 		}
 
 		// plain style: color + unicode separators
 		const parts: string[] = [];
+		parts.push(theme.fg("accent", "Π"));
 		parts.push(theme.fg("accent", pwd));
 		if (branch) {
 			parts.push(theme.fg("success", branch));
@@ -131,9 +158,10 @@ export class FooterComponent implements Component {
 	render(width: number): string[] {
 		const state = this.session.state;
 
-		// Update editor border title with path display
+		// Update editor border titles
 		if (this.editor) {
 			this.editor.borderTitle = this.getPathDisplay();
+			this.editor.borderTitleRight = this.getModelDisplay();
 		}
 
 		// Calculate cumulative usage from ALL session entries (not just post-compaction messages)
@@ -221,73 +249,25 @@ export class FooterComponent implements Component {
 		}
 		statsParts.push(contextPercentStr);
 
-		let statsLeft = statsParts.join(" ");
+		let statsContent = statsParts.join(" · ");
 
-		// Add model name on the right side, plus thinking level if model supports it
-		const modelName = state.model?.id || "no-model";
+		let contentWidth = visibleWidth(statsContent);
 
-		let statsLeftWidth = visibleWidth(statsLeft);
-
-		// If statsLeft is too wide, truncate it
-		if (statsLeftWidth > width) {
-			statsLeft = truncateToWidth(statsLeft, width, "...");
-			statsLeftWidth = visibleWidth(statsLeft);
+		// If statsContent is too wide, truncate it
+		if (contentWidth > width) {
+			statsContent = truncateToWidth(statsContent, width, "...");
+			contentWidth = visibleWidth(statsContent);
 		}
 
-		// Calculate available space for padding (minimum 2 spaces between stats and model)
-		const minPadding = 2;
+		// Pad to full width
+		const padding = " ".repeat(Math.max(0, width - contentWidth));
 
-		// Add thinking level indicator if model supports reasoning
-		const agentRole = this.session.currentPrimaryAgent;
-		const accentAgent = theme.fg("accent", agentRole);
-		const dimSeparator = theme.fg("dim", " • ");
-		let rightSideWithoutProvider = `${accentAgent}${dimSeparator}${modelName}`;
-		if (state.model?.reasoning) {
-			const thinkingLevel = state.thinkingLevel || "off";
-			const thinkingStr = thinkingLevel === "off" ? "thinking off" : thinkingLevel;
-			rightSideWithoutProvider = `${accentAgent}${dimSeparator}${modelName}${dimSeparator}${thinkingStr}`;
-		}
+		// Apply dim. statsContent may contain color codes (for context %)
+		// that end with a reset, which would clear an outer dim wrapper.
+		const dimContent = theme.fg("dim", statsContent);
+		const dimPadding = theme.fg("dim", padding);
 
-		// Prepend the provider in parentheses if there are multiple providers and there's enough room
-		let rightSide = rightSideWithoutProvider;
-		if (this.footerData.getAvailableProviderCount() > 1 && state.model) {
-			rightSide = `(${state.model!.provider}) ${rightSideWithoutProvider}`;
-			if (statsLeftWidth + minPadding + visibleWidth(rightSide) > width) {
-				// Too wide, fall back
-				rightSide = rightSideWithoutProvider;
-			}
-		}
-
-		const rightSideWidth = visibleWidth(rightSide);
-		const totalNeeded = statsLeftWidth + minPadding + rightSideWidth;
-
-		let statsLine: string;
-		if (totalNeeded <= width) {
-			// Both fit - add padding to right-align model
-			const padding = " ".repeat(width - statsLeftWidth - rightSideWidth);
-			statsLine = statsLeft + padding + rightSide;
-		} else {
-			// Need to truncate right side
-			const availableForRight = width - statsLeftWidth - minPadding;
-			if (availableForRight > 0) {
-				const truncatedRight = truncateToWidth(rightSide, availableForRight, "");
-				const truncatedRightWidth = visibleWidth(truncatedRight);
-				const padding = " ".repeat(Math.max(0, width - statsLeftWidth - truncatedRightWidth));
-				statsLine = statsLeft + padding + truncatedRight;
-			} else {
-				// Not enough space for right side at all
-				statsLine = statsLeft;
-			}
-		}
-
-		// Apply dim to each part separately. statsLeft may contain color codes (for context %)
-		// that end with a reset, which would clear an outer dim wrapper. So we dim the parts
-		// before and after the colored section independently.
-		const dimStatsLeft = theme.fg("dim", statsLeft);
-		const remainder = statsLine.slice(statsLeft.length); // padding + rightSide
-		const dimRemainder = theme.fg("dim", remainder);
-
-		const lines = [dimStatsLeft + dimRemainder];
+		const lines = [dimContent + dimPadding];
 
 		// Add extension statuses on a single line, sorted by key alphabetically
 		const extensionStatuses = this.footerData.getExtensionStatuses();

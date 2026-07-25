@@ -7,6 +7,9 @@
 - Subagent 运行状态显示优化：TUI heading 中序号后新增 `(agent)` 标签（accent 色），status 使用状态色（success 绿/failed 红/running 黄），model/thinking/tokens/tools 统一 muted 色，方便用户一眼定位 subagent 类型与运行情况
 - Footer 优化：路径、分支、session 名从 footer 底部移到输入框顶部横线，减少底部占用行数
 - 输入框顶部横线美化：新增 `editorBorderStyle` 设置项（`plain` | `emoji`），默认 `plain` 用颜色+Unicode 分隔符，`emoji` 用 emoji 图标+颜色区分
+- 输入框顶部横线新增 `Π` 前缀标识 Pi 品牌
+- Model/thinking 信息从 footer 底部移到顶部横线右侧（`borderTitleRight`），footer 底部仅保留 token 统计与 context 用量
+- Footer 统计项分隔符从空格改为 ` · `，提升视觉清晰度
 - Footer 成本统计修复：现在包含 branch summary、compaction、toolResult 的 usage 成本（之前仅统计 assistant message）
 
 ### Fixed

@@ -209,8 +209,8 @@ If your command is slow, expensive, rate-limited, or should keep using a previou
 | `compat` | No | provider `compat` | Provider compatibility overrides. Merged with provider-level `compat` when both are set. |
 
 Current behavior:
-- `/model`, `--list-models`, and the interactive footer display entries by model `id`.
-- The configured `name` is used for model matching and secondary model detail text. It does not replace the footer/status-bar model id.
+- `/model`, `--list-models`, and the interactive status display entries by model `id`.
+- The configured `name` is used for model matching and secondary model detail text. It does not replace the status-bar model `id`.
 
 ### Thinking Level Map
 
@@ -320,7 +320,7 @@ Behavior notes:
 - `modelOverrides` are applied to built-in provider models.
 - Unknown model IDs are ignored.
 - You can combine provider-level `baseUrl`/`headers` with `modelOverrides`.
-- Overriding `name` changes model matching and secondary detail text only; the footer and primary model lists continue to show the model `id`.
+- Overriding `name` changes model matching and secondary detail text only; the status bar and primary model lists continue to show the model `id`.
 - If `models` is also defined for a provider, custom models are merged after built-in overrides. A custom model with the same `id` replaces the overridden built-in model entry.
 
 ## Anthropic Messages Compatibility

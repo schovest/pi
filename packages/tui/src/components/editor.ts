@@ -275,6 +275,9 @@ export class Editor implements Component, Focusable {
 	// Title text embedded in the top border line (updated externally)
 	public borderTitle?: string;
 
+	// Right-aligned title text embedded in the top border line
+	public borderTitleRight?: string;
+
 	// Autocomplete support
 	private autocompleteProvider?: AutocompleteProvider;
 	private autocompleteTriggerCharacters = [...DEFAULT_AUTOCOMPLETE_TRIGGER_CHARACTERS];
@@ -512,24 +515,73 @@ export class Editor implements Component, Focusable {
 			} else {
 				result.push(this.borderColor(truncateToWidth(indicator, width)));
 			}
-		} else if (this.borderTitle) {
-			// Embed title text in the top border: ── title ──────
+		} else if (this.borderTitle || this.borderTitleRight) {
+			// Embed title text in the top border with visual spacing:
+			// ── leftTitle ────── rightTitle ──
 			const prefix = "── ";
-			const titleWidth = visibleWidth(this.borderTitle);
-			const minTrailing = 3; // " ──" minimum after title
-			if (prefix.length + titleWidth + minTrailing > width) {
-				// Title too long - truncate to fit
-				const availableForTitle = Math.max(0, width - prefix.length);
-				const truncatedTitle = truncateToWidth(this.borderTitle, availableForTitle, "");
-				const used = visibleWidth(truncatedTitle);
-				result.push(
-					this.borderColor(prefix) +
-						truncatedTitle +
-						this.borderColor("─".repeat(Math.max(0, width - prefix.length - used))),
-				);
+			// Pad titles with spaces for visual separation from border dashes
+			const leftContent = this.borderTitle ? `${this.borderTitle} ` : "";
+			const rightContent = this.borderTitleRight ? ` ${this.borderTitleRight} ` : "";
+			const leftWidth = visibleWidth(leftContent);
+			const rightWidth = visibleWidth(rightContent);
+			const hasRight = rightWidth > 0;
+
+			if (hasRight) {
+				// Two-sided: ── leftContent ─── rightContent ──
+				const minTrailing = 2; // "──" minimum after rightContent
+				const minMiddle = 3; // "───" minimum between titles
+				const totalNeeded = prefix.length + leftWidth + minMiddle + rightWidth + minTrailing;
+
+				if (totalNeeded > width) {
+					// Not enough room for both — truncate left, keep right
+					const availableForLeft = Math.max(0, width - prefix.length - minMiddle - rightWidth - minTrailing);
+					if (availableForLeft > 0) {
+						const truncatedLeft = truncateToWidth(leftContent, availableForLeft, "");
+						result.push(
+							this.borderColor(prefix) +
+								truncatedLeft +
+								this.borderColor("─".repeat(minMiddle)) +
+								rightContent +
+								this.borderColor("─".repeat(minTrailing)),
+						);
+					} else {
+						// Very narrow — fall back to left-only truncation
+						const availableForTitle = Math.max(0, width - prefix.length);
+						const truncatedTitle = truncateToWidth(leftContent, availableForTitle, "");
+						const used = visibleWidth(truncatedTitle);
+						result.push(
+							this.borderColor(prefix) +
+								truncatedTitle +
+								this.borderColor("─".repeat(Math.max(0, width - prefix.length - used))),
+						);
+					}
+				} else {
+					const middleDashes = width - prefix.length - leftWidth - rightWidth - minTrailing;
+					result.push(
+						this.borderColor(prefix) +
+							leftContent +
+							this.borderColor("─".repeat(middleDashes)) +
+							rightContent +
+							this.borderColor("─".repeat(minTrailing)),
+					);
+				}
 			} else {
-				const trailingDashes = width - prefix.length - titleWidth;
-				result.push(this.borderColor(prefix) + this.borderTitle + this.borderColor("─".repeat(trailingDashes)));
+				// Left-only: ── title ──────
+				const minTrailing = 2; // "──" minimum after title (space already in content)
+				if (prefix.length + leftWidth + minTrailing > width) {
+					// Title too long - truncate to fit
+					const availableForTitle = Math.max(0, width - prefix.length);
+					const truncatedTitle = truncateToWidth(leftContent, availableForTitle, "");
+					const used = visibleWidth(truncatedTitle);
+					result.push(
+						this.borderColor(prefix) +
+							truncatedTitle +
+							this.borderColor("─".repeat(Math.max(0, width - prefix.length - used))),
+					);
+				} else {
+					const trailingDashes = width - prefix.length - leftWidth;
+					result.push(this.borderColor(prefix) + leftContent + this.borderColor("─".repeat(trailingDashes)));
+				}
 			}
 		} else {
 			result.push(horizontal.repeat(width));

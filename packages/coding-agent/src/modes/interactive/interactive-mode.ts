@@ -1996,9 +1996,12 @@ export class InteractiveMode {
 			// Create and add custom footer, passing the data provider
 			this.customFooter = factory(this.ui, theme, this.footerDataProvider);
 			this.ui.addChild(this.customFooter);
-			// Clear editor border title since built-in footer is no longer updating it
+			// Clear editor border titles since built-in footer is no longer updating them
 			if (this.editor.borderTitle !== undefined) {
 				this.editor.borderTitle = undefined;
+			}
+			if (this.editor.borderTitleRight !== undefined) {
+				this.editor.borderTitleRight = undefined;
 			}
 		} else {
 			// Restore built-in footer
