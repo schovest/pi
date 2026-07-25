@@ -32,6 +32,7 @@ import type {
 	Model,
 	ProviderHeaders,
 	TextContent,
+	Usage,
 } from "@earendil-works/pi-ai/compat";
 import {
 	clampThinkingLevel,
@@ -534,6 +535,7 @@ export class AgentSession {
 				content: result.content,
 				details: result.details,
 				isError,
+				usage: result.usage,
 			});
 
 			if (!hookResult) {
@@ -544,6 +546,7 @@ export class AgentSession {
 				content: hookResult.content,
 				details: hookResult.details,
 				isError: hookResult.isError ?? isError,
+				usage: hookResult.usage ?? result.usage,
 			};
 		};
 	}
@@ -2011,6 +2014,7 @@ export class AgentSession {
 			let firstKeptEntryId: string;
 			let tokensBefore: number;
 			let details: unknown;
+			let compactionUsage: Usage | undefined;
 
 			if (extensionCompaction) {
 				// Extension provided compaction content
@@ -2018,6 +2022,7 @@ export class AgentSession {
 				firstKeptEntryId = extensionCompaction.firstKeptEntryId;
 				tokensBefore = extensionCompaction.tokensBefore;
 				details = extensionCompaction.details;
+				compactionUsage = extensionCompaction.usage;
 			} else {
 				// Generate compaction result
 				const result = await compact(
@@ -2035,13 +2040,21 @@ export class AgentSession {
 				firstKeptEntryId = result.firstKeptEntryId;
 				tokensBefore = result.tokensBefore;
 				details = result.details;
+				compactionUsage = result.usage;
 			}
 
 			if (this._compactionAbortController.signal.aborted) {
 				throw new Error("Compaction cancelled");
 			}
 
-			this.sessionManager.appendCompaction(summary, firstKeptEntryId, tokensBefore, details, fromExtension);
+			this.sessionManager.appendCompaction(
+				summary,
+				firstKeptEntryId,
+				tokensBefore,
+				details,
+				fromExtension,
+				compactionUsage,
+			);
 			const newEntries = this.sessionManager.getEntries();
 			const sessionContext = this.sessionManager.buildSessionContext();
 			this.agent.state.messages = sessionContext.messages;
@@ -2062,12 +2075,13 @@ export class AgentSession {
 				});
 			}
 
-			const compactionResult = {
+			const compactionResult: CompactionResult = {
 				summary,
 				firstKeptEntryId,
 				tokensBefore,
 				estimatedTokensAfter,
 				details,
+				usage: compactionUsage,
 			};
 			this._emit({
 				type: "compaction_end",
@@ -3349,6 +3363,28 @@ export class AgentSession {
 				userMessages++;
 			} else if (message.role === "toolResult") {
 				toolResults++;
+				// Include toolResult usage if present
+				const usage =
+					"usage" in message
+						? (
+								message as {
+									usage?: {
+										input: number;
+										output: number;
+										cacheRead: number;
+										cacheWrite: number;
+										cost: { total: number };
+									};
+								}
+							).usage
+						: undefined;
+				if (usage) {
+					totalInput += usage.input;
+					totalOutput += usage.output;
+					totalCacheRead += usage.cacheRead;
+					totalCacheWrite += usage.cacheWrite;
+					totalCost += usage.cost.total;
+				}
 			} else if (message.role === "assistant") {
 				assistantMessages++;
 				const assistantMsg = message as AssistantMessage;
@@ -3361,6 +3397,20 @@ export class AgentSession {
 				totalCacheRead += usage.cacheRead;
 				totalCacheWrite += usage.cacheWrite;
 				totalCost += usage.cost.total;
+			}
+		}
+
+		// Include branch_summary and compaction usage (not type "message")
+		for (const entry of this.sessionManager.getEntries()) {
+			if (entry.type === "branch_summary" || entry.type === "compaction") {
+				const usage = entry.usage;
+				if (usage) {
+					totalInput += usage.input;
+					totalOutput += usage.output;
+					totalCacheRead += usage.cacheRead;
+					totalCacheWrite += usage.cacheWrite;
+					totalCost += usage.cost.total;
+				}
 			}
 		}
 
@@ -3409,8 +3459,9 @@ export class AgentSession {
 						const contextTokens = calculateContextTokens(assistant.usage);
 						if (contextTokens > 0) {
 							hasPostCompactionUsage = true;
+							break;
 						}
-						break;
+						// Skip zero-usage messages and continue searching
 					}
 				}
 			}

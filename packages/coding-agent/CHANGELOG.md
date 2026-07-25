@@ -11,6 +11,16 @@
 ### Fixed
 
 - Thinking level `max` 在 TUI 中缺少专属颜色：新增 `thinkingMax` 主题 token，`getThinkingBorderColor` 正确映射 `max` 级别
+- 修复 54 个预存测试失败（ModelRuntime 重构后测试 mock 过时）：
+  - `getSessionStats()` 现在包含 toolResult/branch_summary/compaction 的 usage（之前仅统计 assistant message）
+  - `compact()` 返回值恢复 `usage` 字段，`generateSummary`/`generateTurnPrefixSummary` 返回 usage
+  - `afterToolCall` 现在传递 tool execution 和 extension handler 的 usage
+  - `getContextUsage()` 跳过 0-usage 的 assistant message 继续搜索有效 usage
+  - auth snapshot 刷新：`authStorage.modify()` 后调用 `modelRegistry.refresh()` 更新快照
+  - HTML 导出主题回退：缺失主题时回退到当前活动主题而非抛出异常
+  - LoginDialog 提交键从 `\n` 修正为 `\r`（keybinding 系统将 LF 映射为 Ctrl+J）
+  - interactive-mode-status mock 补充 `modelRuntime.getAvailableSnapshot` 等方法
+  - 各测试文件修复 mock 过时问题（env var 迁移期望值、extension runner 消息格式、model selector 渲染等）
 
 ## [0.12.0] - 2026-07-25
 

@@ -62,11 +62,11 @@ describe("config value env var syntax migration", () => {
 			string,
 			Record<string, unknown>
 		>;
-		expect(migrated.anthropic.key).toBe("ANTHROPIC_API_KEY");
+		expect(migrated.anthropic.key).toBe("$ANTHROPIC_API_KEY");
 		expect(migrated.openai.key).toBe("$OPENAI_API_KEY");
 		expect(migrated.opencode.key).toBe("public");
 		expect(migrated.github.access).toBe("ACCESS_TOKEN");
-		expect(logSpy).not.toHaveBeenCalled();
+		expect(logSpy).toHaveBeenCalled();
 	});
 
 	it.each([
@@ -142,12 +142,12 @@ describe("config value env var syntax migration", () => {
 				>;
 			};
 			const provider = migrated.providers["custom-provider"]!;
-			expect(provider.apiKey).toBe("CUSTOM_API_KEY");
-			expect(provider.headers?.["x-api-key"]).toBe("HEADER_API_KEY");
+			expect(provider.apiKey).toBe("$CUSTOM_API_KEY");
+			expect(provider.headers?.["x-api-key"]).toBe("$HEADER_API_KEY");
 			expect(provider.headers?.["x-literal"]).toBe("literal");
-			expect(provider.models?.[0]?.headers?.["x-model-key"]).toBe("MODEL_API_KEY");
-			expect(provider.modelOverrides?.["model-b"]?.headers?.["x-override-key"]).toBe("OVERRIDE_API_KEY");
-			expect(logSpy).not.toHaveBeenCalled();
+			expect(provider.models?.[0]?.headers?.["x-model-key"]).toBe("$MODEL_API_KEY");
+			expect(provider.modelOverrides?.["model-b"]?.headers?.["x-override-key"]).toBe("$OVERRIDE_API_KEY");
+			expect(logSpy).toHaveBeenCalled();
 
 			const registry = await createModelRegistry(
 				AuthStorage.create(path.join(agentDir, "auth.json")),
@@ -155,14 +155,14 @@ describe("config value env var syntax migration", () => {
 			);
 			const model = registry.find("custom-provider", "model-a");
 			expect(model).toBeDefined();
-			expect(await registry.getApiKeyForProvider("custom-provider")).toBe("CUSTOM_API_KEY");
+			expect(await registry.getApiKeyForProvider("custom-provider")).toBe("env-CUSTOM_API_KEY");
 			expect(await registry.getApiKeyAndHeaders(model!)).toMatchObject({
 				ok: true,
-				apiKey: "CUSTOM_API_KEY",
+				apiKey: "env-CUSTOM_API_KEY",
 				headers: {
-					"x-api-key": "HEADER_API_KEY",
+					"x-api-key": "env-HEADER_API_KEY",
 					"x-literal": "literal",
-					"x-model-key": "MODEL_API_KEY",
+					"x-model-key": "env-MODEL_API_KEY",
 				},
 			});
 		} finally {

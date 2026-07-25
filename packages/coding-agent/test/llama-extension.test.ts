@@ -50,7 +50,7 @@ describe("llama.cpp extension", () => {
 		);
 
 		expect(extension.commands.get("llama")?.description).toBe("Manage llama.cpp router models");
-		expect(runtime.pendingNativeProviderRegistrations.map((entry) => entry.provider.id)).toEqual([LLAMA_PROVIDER_ID]);
+		expect(runtime.pendingProviderRegistrations.map((entry) => (entry.name as any).id)).toEqual([LLAMA_PROVIDER_ID]);
 	});
 
 	it("normalizes management and inference URLs", () => {
