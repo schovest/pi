@@ -48,7 +48,7 @@ mkdir -p ~/.pi/agent/themes
 vim ~/.pi/agent/themes/my-theme.json
 ```
 
-2. Define the theme with all required colors (see [Color Tokens](#color-tokens)):
+1. Define the theme with all required colors (see [Color Tokens](#color-tokens)):
 
 ```json
 {
@@ -109,12 +109,13 @@ vim ~/.pi/agent/themes/my-theme.json
     "thinkingMedium": "#00ffff",
     "thinkingHigh": "#ff00ff",
     "thinkingXhigh": "#ff0000",
+    "thinkingMax": "#ff00ff",
     "bashMode": "#ffaa00"
   }
 }
 ```
 
-3. Select the theme via `/settings`.
+1. Select the theme via `/settings`.
 
 **Hot reload:** When you edit the currently active custom theme file, pi reloads it automatically for immediate visual feedback.
 
@@ -150,7 +151,7 @@ Every theme must define all 51 color tokens. There are no optional colors.
 ### Core UI (11 colors)
 
 | Token | Purpose |
-|-------|---------|
+| ------- | --------- |
 | `accent` | Primary accent (logo, selected items, cursor) |
 | `border` | Normal borders |
 | `borderAccent` | Highlighted borders |
@@ -166,7 +167,7 @@ Every theme must define all 51 color tokens. There are no optional colors.
 ### Backgrounds & Content (11 colors)
 
 | Token | Purpose |
-|-------|---------|
+| ------- | --------- |
 | `selectedBg` | Selected line background |
 | `userMessageBg` | User message background |
 | `userMessageText` | User message text |
@@ -182,7 +183,7 @@ Every theme must define all 51 color tokens. There are no optional colors.
 ### Markdown (10 colors)
 
 | Token | Purpose |
-|-------|---------|
+| ------- | --------- |
 | `mdHeading` | Headings |
 | `mdLink` | Link text |
 | `mdLinkUrl` | Link URL |
@@ -197,7 +198,7 @@ Every theme must define all 51 color tokens. There are no optional colors.
 ### Tool Diffs (3 colors)
 
 | Token | Purpose |
-|-------|---------|
+| ------- | --------- |
 | `toolDiffAdded` | Added lines |
 | `toolDiffRemoved` | Removed lines |
 | `toolDiffContext` | Context lines |
@@ -205,7 +206,7 @@ Every theme must define all 51 color tokens. There are no optional colors.
 ### Syntax Highlighting (9 colors)
 
 | Token | Purpose |
-|-------|---------|
+| ------- | --------- |
 | `syntaxComment` | Comments |
 | `syntaxKeyword` | Keywords |
 | `syntaxFunction` | Function names |
@@ -216,18 +217,19 @@ Every theme must define all 51 color tokens. There are no optional colors.
 | `syntaxOperator` | Operators |
 | `syntaxPunctuation` | Punctuation |
 
-### Thinking Level Borders (6 colors)
+### Thinking Level Borders (7 colors)
 
 Editor border colors indicating thinking level (visual hierarchy from subtle to prominent):
 
 | Token | Purpose |
-|-------|---------|
+| ------- | --------- |
 | `thinkingOff` | Thinking off |
 | `thinkingMinimal` | Minimal thinking |
 | `thinkingLow` | Low thinking |
 | `thinkingMedium` | Medium thinking |
 | `thinkingHigh` | High thinking |
 | `thinkingXhigh` | Extra high thinking |
+| `thinkingMax` | Max thinking |
 
 ### Bash Mode (1 color)
 
@@ -254,7 +256,7 @@ The `export` section controls colors for `/export` HTML output. If omitted, colo
 Four formats are supported:
 
 | Format | Example | Description |
-|--------|---------|-------------|
+| -------- | --------- | ------------- |
 | Hex | `"#ff0000"` | 6-digit hex RGB |
 | 256-color | `39` | xterm 256-color palette index (0-255) |
 | Variable | `"primary"` | Reference to a `vars` entry |
@@ -291,5 +293,6 @@ echo $COLORTERM  # Should output "truecolor" or "24bit"
 ## Examples
 
 See the built-in themes:
+
 - [dark.json](../src/modes/interactive/theme/dark.json)
 - [light.json](../src/modes/interactive/theme/light.json)

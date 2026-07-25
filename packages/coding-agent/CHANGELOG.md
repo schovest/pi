@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Thinking level `max` 在 TUI 中缺少专属颜色：新增 `thinkingMax` 主题 token，`getThinkingBorderColor` 正确映射 `max` 级别
+
 ## [0.12.0] - 2026-07-25
 
 ### Added
