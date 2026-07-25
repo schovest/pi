@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-07-26
+
 ### Changed
 
 - Subagent 运行状态显示优化：TUI heading 中序号后新增 `(agent)` 标签（accent 色），status 使用状态色（success 绿/failed 红/running 黄），model/thinking/tokens/tools 统一 muted 色，方便用户一眼定位 subagent 类型与运行情况
