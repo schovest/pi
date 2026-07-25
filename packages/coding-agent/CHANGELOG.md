@@ -10,6 +10,7 @@
 
 ### Fixed
 
+- 修复 subagent 运行后父 session extension runtime 被污染问题：`createSubagentChildSession` 现在创建独立的 `ExtensionRuntime`，子 session dispose 时不再在共享 runtime 上设置 stale 标记（根因：子 session 通过共享 `resourceLoader` 获得同一个 `ExtensionRuntime` 对象，dispose → invalidate 污染父 session）
 - Thinking level `max` 在 TUI 中缺少专属颜色：新增 `thinkingMax` 主题 token，`getThinkingBorderColor` 正确映射 `max` 级别
 - 修复 54 个预存测试失败（ModelRuntime 重构后测试 mock 过时）：
   - `getSessionStats()` 现在包含 toolResult/branch_summary/compaction 的 usage（之前仅统计 assistant message）

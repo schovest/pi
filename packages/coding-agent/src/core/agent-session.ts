@@ -66,6 +66,7 @@ import { exportSessionToHtml, type ToolHtmlRenderer } from "./export-html/index.
 import { createToolHtmlRenderer } from "./export-html/tool-renderer.ts";
 import {
 	type ContextUsage,
+	createExtensionRuntime,
 	type ExtensionCommandContextActions,
 	type ExtensionErrorListener,
 	type ExtensionMode,
@@ -229,6 +230,8 @@ export interface AgentSessionConfig {
 	sessionStartEvent?: SessionStartEvent;
 	/** Override skills for subagent child sessions. When set, used instead of resourceLoader skills. */
 	skillsOverride?: Skill[];
+	/** Create an isolated ExtensionRuntime instead of sharing resourceLoader's runtime. */
+	isolatedExtensionRuntime?: boolean;
 }
 
 export interface ExtensionBindings {
@@ -367,6 +370,7 @@ export class AgentSession {
 	private _excludedToolNames?: string[];
 	private _baseToolsOverride?: Record<string, AgentTool>;
 	private _skillsOverride?: Skill[];
+	private _isolatedExtensionRuntime: boolean;
 	private _sessionStartEvent: SessionStartEvent;
 	private _extensionUIContext?: ExtensionUIContext;
 	private _extensionMode: ExtensionMode = "print";
@@ -409,6 +413,7 @@ export class AgentSession {
 		this._excludedToolNames = config.excludedToolNames;
 		this._baseToolsOverride = config.baseToolsOverride;
 		this._skillsOverride = config.skillsOverride;
+		this._isolatedExtensionRuntime = config.isolatedExtensionRuntime ?? false;
 		this._sessionStartEvent = config.sessionStartEvent ?? { type: "session_start", reason: "startup" };
 
 		// Always subscribe to agent events for internal handling
@@ -1150,6 +1155,7 @@ export class AgentSession {
 			allowedToolNames: options.tools,
 			baseToolsOverride: this._baseToolsOverride,
 			enableSubagents: false,
+			isolatedExtensionRuntime: true,
 		});
 	}
 
@@ -2776,15 +2782,31 @@ export class AgentSession {
 		);
 
 		const extensionsResult = this._resourceLoader.getExtensions();
+
+		// Subagent child sessions share the resourceLoader (and thus the extensions list),
+		// but must NOT share the mutable ExtensionRuntime. A shared runtime means
+		// child.dispose() → invalidate() poisons the parent's assertActive, and
+		// child.bindCore() overwrites the parent's action methods.
+		// Creating a fresh runtime isolates assertActive/invalidate/bindCore state.
+		const runtime = this._isolatedExtensionRuntime
+			? (() => {
+					const child = createExtensionRuntime();
+					for (const [name, value] of extensionsResult.runtime.flagValues) {
+						child.flagValues.set(name, value);
+					}
+					return child;
+				})()
+			: extensionsResult.runtime;
+
 		if (options.flagValues) {
 			for (const [name, value] of options.flagValues) {
-				extensionsResult.runtime.flagValues.set(name, value);
+				runtime.flagValues.set(name, value);
 			}
 		}
 
 		this._extensionRunner = new ExtensionRunner(
 			extensionsResult.extensions,
-			extensionsResult.runtime,
+			runtime,
 			this._cwd,
 			this.sessionManager,
 			new ModelRegistry(this._modelRuntime),

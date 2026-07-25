@@ -479,3 +479,53 @@ describe("subagent skills discovery", () => {
 		}
 	});
 });
+
+describe("subagent extension isolation", () => {
+	it("does not poison parent extension runtime after subagent child session disposal", async () => {
+		const harness = await createHarness({
+			models: [{ id: "parent", reasoning: true }],
+			extensionFactories: [
+				(pi) => {
+					pi.on("session_start", () => {
+						pi.registerFlag("test-flag", { description: "test", type: "boolean", default: true });
+					});
+				},
+			],
+		});
+		try {
+			const agentDir = join(harness.tempDir, "agent");
+			const agentsDir = join(agentDir, "agents");
+			mkdirSync(agentsDir, { recursive: true });
+			writeFileSync(
+				join(agentsDir, "worker.md"),
+				"---\ndescription: Worker\nmodel: faux/parent\nincludedTools: []\n---\nDo work.",
+			);
+
+			harness.faux.setResponses([() => fauxAssistantMessage("subagent result")]);
+
+			await harness.session.runSubagents(
+				{
+					tasks: [{ agent: "worker", task: "work", title: "work" }],
+					subagentScope: "user",
+				},
+				{ agentDir },
+			);
+
+			// After subagent disposal, the parent session's shared ExtensionRuntime
+			// must still be active. Before the fix, child.dispose() called
+			// sharedRuntime.invalidate(), poisoning the parent's assertActive.
+			const sharedRuntime = (
+				harness.session as unknown as {
+					_resourceLoader: {
+						getExtensions: () => {
+							runtime: { assertActive: () => void };
+						};
+					};
+				}
+			)._resourceLoader.getExtensions().runtime;
+			expect(() => sharedRuntime.assertActive()).not.toThrow();
+		} finally {
+			harness.cleanup();
+		}
+	});
+});
