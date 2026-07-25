@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Footer 优化：路径、分支、session 名从 footer 底部移到输入框顶部横线，减少底部占用行数
+- 输入框顶部横线美化：新增 `editorBorderStyle` 设置项（`plain` | `emoji`），默认 `plain` 用颜色+Unicode 分隔符，`emoji` 用 emoji 图标+颜色区分
+- Footer 成本统计修复：现在包含 branch summary、compaction、toolResult 的 usage 成本（之前仅统计 assistant message）
+
 ### Fixed
 
 - Thinking level `max` 在 TUI 中缺少专属颜色：新增 `thinkingMax` 主题 token，`getThinkingBorderColor` 正确映射 `max` 级别

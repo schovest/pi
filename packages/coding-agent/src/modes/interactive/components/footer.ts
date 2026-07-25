@@ -1,4 +1,5 @@
 import { isAbsolute, relative, resolve, sep } from "node:path";
+import type { EditorComponent } from "@schovest/pi-tui";
 import { type Component, truncateToWidth, visibleWidth } from "@schovest/pi-tui";
 import type { AgentSession } from "../../../core/agent-session.ts";
 import type { ReadonlyFooterDataProvider } from "../../../core/footer-data-provider.ts";
@@ -46,18 +47,31 @@ export function formatCwdForFooter(cwd: string, home: string | undefined): strin
  * Footer component that shows pwd, token stats, and context usage.
  * Computes token/context stats from session, gets git branch and extension statuses from provider.
  */
+export type BorderTitleStyle = "plain" | "emoji";
+
 export class FooterComponent implements Component {
 	private autoCompactEnabled = true;
 	private session: AgentSession;
 	private footerData: ReadonlyFooterDataProvider;
+	private editor?: EditorComponent;
+	private borderTitleStyle: BorderTitleStyle = "plain";
 
-	constructor(session: AgentSession, footerData: ReadonlyFooterDataProvider) {
+	constructor(session: AgentSession, footerData: ReadonlyFooterDataProvider, editor?: EditorComponent) {
 		this.session = session;
 		this.footerData = footerData;
+		this.editor = editor;
 	}
 
 	setSession(session: AgentSession): void {
 		this.session = session;
+	}
+
+	setEditor(editor: EditorComponent | undefined): void {
+		this.editor = editor;
+	}
+
+	setBorderTitleStyle(style: BorderTitleStyle): void {
+		this.borderTitleStyle = style;
 	}
 
 	setAutoCompactEnabled(enabled: boolean): void {
@@ -80,8 +94,47 @@ export class FooterComponent implements Component {
 		// Git watcher cleanup handled by provider
 	}
 
+	/**
+	 * Compute the path + branch + session display string for the editor border title.
+	 * Style depends on borderTitleStyle: "plain" uses color + unicode separators,
+	 * "emoji" uses emoji icons + color.
+	 */
+	getPathDisplay(): string {
+		const pwd = formatCwdForFooter(this.session.sessionManager.getCwd(), process.env.HOME || process.env.USERPROFILE);
+		const branch = this.footerData.getGitBranch();
+		const sessionName = this.session.sessionManager.getSessionName();
+
+		if (this.borderTitleStyle === "emoji") {
+			const parts: string[] = [];
+			parts.push(`${theme.fg("accent", `📁 ${pwd}`)}`);
+			if (branch) {
+				parts.push(theme.fg("success", `🔀 ${branch}`));
+			}
+			if (sessionName) {
+				parts.push(theme.fg("muted", `✦ ${sessionName}`));
+			}
+			return parts.join("  ");
+		}
+
+		// plain style: color + unicode separators
+		const parts: string[] = [];
+		parts.push(theme.fg("accent", pwd));
+		if (branch) {
+			parts.push(theme.fg("success", branch));
+		}
+		if (sessionName) {
+			parts.push(theme.fg("muted", sessionName));
+		}
+		return parts.join(theme.fg("dim", " ⋅ "));
+	}
+
 	render(width: number): string[] {
 		const state = this.session.state;
+
+		// Update editor border title with path display
+		if (this.editor) {
+			this.editor.borderTitle = this.getPathDisplay();
+		}
 
 		// Calculate cumulative usage from ALL session entries (not just post-compaction messages)
 		let totalInput = 0;
@@ -92,17 +145,28 @@ export class FooterComponent implements Component {
 		let latestCacheHitRate: number | undefined;
 
 		for (const entry of this.session.sessionManager.getEntries()) {
-			if (entry.type === "message" && entry.message.role === "assistant") {
-				totalInput += entry.message.usage.input;
-				totalOutput += entry.message.usage.output;
-				totalCacheRead += entry.message.usage.cacheRead;
-				totalCacheWrite += entry.message.usage.cacheWrite;
-				totalCost += entry.message.usage.cost.total;
+			let usage:
+				| { input: number; output: number; cacheRead: number; cacheWrite: number; cost: { total: number } }
+				| undefined;
 
-				const latestPromptTokens =
-					entry.message.usage.input + entry.message.usage.cacheRead + entry.message.usage.cacheWrite;
-				latestCacheHitRate =
-					latestPromptTokens > 0 ? (entry.message.usage.cacheRead / latestPromptTokens) * 100 : undefined;
+			if (entry.type === "message" && entry.message.role === "assistant") {
+				usage = entry.message.usage;
+
+				// Cache hit rate only from assistant messages
+				const latestPromptTokens = usage.input + usage.cacheRead + usage.cacheWrite;
+				latestCacheHitRate = latestPromptTokens > 0 ? (usage.cacheRead / latestPromptTokens) * 100 : undefined;
+			} else if (entry.type === "message" && entry.message.role === "toolResult" && entry.message.usage) {
+				usage = entry.message.usage;
+			} else if ((entry.type === "branch_summary" || entry.type === "compaction") && entry.usage) {
+				usage = entry.usage;
+			}
+
+			if (usage) {
+				totalInput += usage.input;
+				totalOutput += usage.output;
+				totalCacheRead += usage.cacheRead;
+				totalCacheWrite += usage.cacheWrite;
+				totalCost += usage.cost.total;
 			}
 		}
 
@@ -113,21 +177,6 @@ export class FooterComponent implements Component {
 		const contextPercentValue = contextUsage?.percent ?? 0;
 		const contextPercent = contextUsage?.percent !== null ? contextPercentValue.toFixed(1) : "?";
 		const runningSubagents = this.session.getRunningSubagentCount();
-
-		// Replace home directory with ~
-		let pwd = formatCwdForFooter(this.session.sessionManager.getCwd(), process.env.HOME || process.env.USERPROFILE);
-
-		// Add git branch if available
-		const branch = this.footerData.getGitBranch();
-		if (branch) {
-			pwd = `${pwd} (${branch})`;
-		}
-
-		// Add session name if set
-		const sessionName = this.session.sessionManager.getSessionName();
-		if (sessionName) {
-			pwd = `${pwd} • ${sessionName}`;
-		}
 
 		// Build stats line
 		const statsParts = [];
@@ -238,8 +287,7 @@ export class FooterComponent implements Component {
 		const remainder = statsLine.slice(statsLeft.length); // padding + rightSide
 		const dimRemainder = theme.fg("dim", remainder);
 
-		const pwdLine = truncateToWidth(theme.fg("dim", pwd), width, theme.fg("dim", "..."));
-		const lines = [pwdLine, dimStatsLeft + dimRemainder];
+		const lines = [dimStatsLeft + dimRemainder];
 
 		// Add extension statuses on a single line, sorted by key alphabetically
 		const extensionStatuses = this.footerData.getExtensionStatuses();

@@ -272,6 +272,9 @@ export class Editor implements Component, Focusable {
 	// Border color (can be changed dynamically)
 	public borderColor: (str: string) => string;
 
+	// Title text embedded in the top border line (updated externally)
+	public borderTitle?: string;
+
 	// Autocomplete support
 	private autocompleteProvider?: AutocompleteProvider;
 	private autocompleteTriggerCharacters = [...DEFAULT_AUTOCOMPLETE_TRIGGER_CHARACTERS];
@@ -500,7 +503,7 @@ export class Editor implements Component, Focusable {
 		const leftPadding = " ".repeat(paddingX);
 		const rightPadding = leftPadding;
 
-		// Render top border (with scroll indicator if scrolled down)
+		// Render top border (with scroll indicator if scrolled down, or title if set)
 		if (this.scrollOffset > 0) {
 			const indicator = `─── ↑ ${this.scrollOffset} more `;
 			const remaining = width - visibleWidth(indicator);
@@ -508,6 +511,25 @@ export class Editor implements Component, Focusable {
 				result.push(this.borderColor(indicator + "─".repeat(remaining)));
 			} else {
 				result.push(this.borderColor(truncateToWidth(indicator, width)));
+			}
+		} else if (this.borderTitle) {
+			// Embed title text in the top border: ── title ──────
+			const prefix = "── ";
+			const titleWidth = visibleWidth(this.borderTitle);
+			const minTrailing = 3; // " ──" minimum after title
+			if (prefix.length + titleWidth + minTrailing > width) {
+				// Title too long - truncate to fit
+				const availableForTitle = Math.max(0, width - prefix.length);
+				const truncatedTitle = truncateToWidth(this.borderTitle, availableForTitle, "");
+				const used = visibleWidth(truncatedTitle);
+				result.push(
+					this.borderColor(prefix) +
+						truncatedTitle +
+						this.borderColor("─".repeat(Math.max(0, width - prefix.length - used))),
+				);
+			} else {
+				const trailingDashes = width - prefix.length - titleWidth;
+				result.push(this.borderColor(prefix) + this.borderTitle + this.borderColor("─".repeat(trailingDashes)));
 			}
 		} else {
 			result.push(horizontal.repeat(width));

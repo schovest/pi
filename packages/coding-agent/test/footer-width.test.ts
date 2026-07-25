@@ -78,8 +78,10 @@ function createSession(options: {
 			getCwd: () => "/tmp/project",
 		},
 		getContextUsage: () => ({ contextWindow: 200_000, percent: 12.3 }),
+		getRunningSubagentCount: () => 0,
+		backgroundProcessManager: { getRunningCount: () => 0 },
 		modelRuntime: {
-			isUsingOAuth: () => false,
+			isUsingOAuth: (provider: string) => provider === "kimi-coding",
 		},
 	};
 
@@ -108,6 +110,42 @@ describe("formatCwdForFooter", () => {
 	it("abbreviates the home directory and descendants", () => {
 		expect(formatCwdForFooter("/home/user", "/home/user")).toBe("~");
 		expect(formatCwdForFooter("/home/user/project", "/home/user")).toBe("~/project");
+	});
+});
+
+describe("FooterComponent.getPathDisplay", () => {
+	beforeAll(() => {
+		initTheme(undefined, false);
+	});
+
+	it("includes cwd, branch, and session name (plain style)", () => {
+		const session = createSession({ sessionName: "my-session" });
+		const footer = new FooterComponent(session, createFooterData(1));
+
+		expect(stripAnsi(footer.getPathDisplay())).toBe("/tmp/project ⋅ main ⋅ my-session");
+	});
+
+	it("includes cwd and branch without session name (plain style)", () => {
+		const session = createSession({ sessionName: "" });
+		const footer = new FooterComponent(session, createFooterData(1));
+
+		expect(stripAnsi(footer.getPathDisplay())).toBe("/tmp/project ⋅ main");
+	});
+
+	it("includes emoji icons in emoji style", () => {
+		const session = createSession({ sessionName: "my-session" });
+		const footer = new FooterComponent(session, createFooterData(1));
+		footer.setBorderTitleStyle("emoji");
+
+		expect(stripAnsi(footer.getPathDisplay())).toBe("📁 /tmp/project  🔀 main  ✦ my-session");
+	});
+
+	it("uses emoji style without session name", () => {
+		const session = createSession({ sessionName: "" });
+		const footer = new FooterComponent(session, createFooterData(1));
+		footer.setBorderTitleStyle("emoji");
+
+		expect(stripAnsi(footer.getPathDisplay())).toBe("📁 /tmp/project  🔀 main");
 	});
 });
 
@@ -185,7 +223,7 @@ describe("FooterComponent width handling", () => {
 		});
 		const footer = new FooterComponent(session, createFooterData(1));
 
-		const statsLine = stripAnsi(footer.render(120)[1]);
+		const statsLine = stripAnsi(footer.render(120)[0]);
 		expect(statsLine).toContain("$1.250");
 	});
 
@@ -202,7 +240,7 @@ describe("FooterComponent width handling", () => {
 		});
 		const footer = new FooterComponent(session, createFooterData(1));
 
-		const statsLine = stripAnsi(footer.render(120)[1]);
+		const statsLine = stripAnsi(footer.render(120)[0]);
 		expect(statsLine).toContain("CH25.0%");
 	});
 
@@ -220,6 +258,6 @@ describe("FooterComponent width handling", () => {
 		});
 		const footer = new FooterComponent(session, createFooterData(1));
 
-		expect(stripAnsi(footer.render(120)[1])).toContain("$1.234 (sub)");
+		expect(stripAnsi(footer.render(120)[0])).toContain("$1.234 (sub)");
 	});
 });

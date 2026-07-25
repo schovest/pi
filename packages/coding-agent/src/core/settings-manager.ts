@@ -131,6 +131,7 @@ export interface Settings {
 	thinkingBudgets?: ThinkingBudgetsSettings; // Custom token budgets for thinking levels
 	editorPaddingX?: number; // Horizontal padding for input editor (default: 0)
 	autocompleteMaxVisible?: number; // Max visible items in autocomplete dropdown (default: 5)
+	editorBorderStyle?: "plain" | "emoji"; // Border title style for the input editor (default: "plain")
 	showHardwareCursor?: boolean; // Show terminal hardware cursor (steady bar) for reliable IME positioning (default: true)
 	markdown?: MarkdownSettings;
 	warnings?: WarningSettings;
@@ -1237,6 +1238,16 @@ export class SettingsManager {
 	setAutocompleteMaxVisible(maxVisible: number): void {
 		this.globalSettings.autocompleteMaxVisible = Math.max(3, Math.min(20, Math.floor(maxVisible)));
 		this.markModified("autocompleteMaxVisible");
+		this.save();
+	}
+
+	getEditorBorderStyle(): "plain" | "emoji" {
+		return this.settings.editorBorderStyle ?? "plain";
+	}
+
+	setEditorBorderStyle(style: "plain" | "emoji"): void {
+		this.globalSettings.editorBorderStyle = style;
+		this.markModified("editorBorderStyle");
 		this.save();
 	}
 
