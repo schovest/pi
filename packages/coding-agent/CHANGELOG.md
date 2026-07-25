@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-07-25
+
 ### Added
 
 - 同步上游 v0.80.6 → v0.81.1：Model Runtime 架构重构（model-runtime.ts + 9 个新核心文件），provider 注册/认证流程统一到 ModelRuntime，model-registry.ts 降级为兼容 facade
