@@ -5414,7 +5414,18 @@ export class InteractiveMode {
 		// scrollOffset is from bottom: scrollableViewportTop = scrollableLines.length - scrollableViewport - scrollOffset
 		// We want scrollableViewportTop = targetLineOffset (target at top)
 		// So: scrollOffset = scrollableLines.length - scrollableViewport - targetLineOffset
-		const scrollableViewport = this.ui.getScrollableViewport();
+		// Compute scroll viewport fresh from terminal height and current fixed bottom
+		// children. Do NOT use getScrollableViewport() — it returns lastScrollableViewport
+		// from the previous doRender, which may be stale (e.g. action selector was taller
+		// than the editor, making the cached viewport smaller than actual).
+		const height = this.ui.terminal.rows;
+		let fixedHeight = 0;
+		const childCount = this.ui.children.length;
+		for (let i = childCount - fixedBottomCount; i < childCount; i++) {
+			fixedHeight += this.ui.children[i].render(width).length;
+		}
+		const scrollableViewport = Math.max(0, height - fixedHeight);
+
 		const desiredOffset = totalScrollableLines - scrollableViewport - targetLineOffset;
 
 		// Clamp to valid range
