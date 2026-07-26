@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- SessionContext 新增 `entryIds` 字段，与 `messages` 数组对齐追踪对应的 session entry ID
+
 ## [0.12.1] - 2026-07-26
 
 ### Changed

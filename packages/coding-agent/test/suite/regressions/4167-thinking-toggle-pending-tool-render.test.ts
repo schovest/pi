@@ -114,6 +114,7 @@ function createToolResultMessage(text: string): ToolResultMessage {
 function createSessionContext(messages: AgentMessage[]): SessionContext {
 	return {
 		messages,
+		entryIds: messages.map(() => null),
 		thinkingLevel: "off",
 		model: null,
 	};
