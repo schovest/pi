@@ -5353,6 +5353,62 @@ export class InteractiveMode {
 		}
 	}
 
+	/**
+	 * Scroll chat view to a specific message identified by entry ID.
+	 * Does NOT change the session branch.
+	 * @returns true if successfully located and scrolled, false if not found
+	 */
+	// biome-ignore lint/correctness/noUnusedPrivateClassMembers: used by tree-peek feature, wired up in Task 4
+	private peekAtMessage(entryId: string): boolean {
+		const targetComponent = this.entryIdToComponent.get(entryId);
+		if (!targetComponent) {
+			return false;
+		}
+
+		// Calculate target line offset within scrollable content
+		const width = this.ui.terminal.columns;
+		let targetLineOffset = 0;
+		let found = false;
+
+		// chatContainer is the first scrollable child of TUI.
+		// Sum rendered lines of all TUI children, then within chatContainer sum lines before target.
+		for (const tuiChild of this.ui.children) {
+			if (tuiChild === this.chatContainer) {
+				// Within chatContainer, find target component and sum lines before it
+				for (const chatChild of this.chatContainer.children) {
+					if (chatChild === targetComponent) {
+						found = true;
+						break;
+					}
+					targetLineOffset += chatChild.render(width).length;
+				}
+				if (found) break;
+				// Target not found in chatContainer - shouldn't happen since map is from same render
+				return false;
+			}
+			// Not chatContainer yet - sum its lines
+			targetLineOffset += tuiChild.render(width).length;
+		}
+
+		if (!found) {
+			return false;
+		}
+
+		// Calculate scroll offset to position target near top of viewport
+		// scrollOffset is from bottom: scrollableViewportTop = scrollableLines.length - scrollableViewport - scrollOffset
+		// We want scrollableViewportTop = targetLineOffset (target at top)
+		// So: scrollOffset = scrollableLines.length - scrollableViewport - targetLineOffset
+		const scrollableLines = this.chatContainer.render(width).length;
+		const scrollableViewport = this.ui.getScrollableViewport();
+		const desiredOffset = scrollableLines - scrollableViewport - targetLineOffset;
+
+		// Clamp to valid range
+		const clampedOffset = Math.max(0, Math.min(desiredOffset, this.ui.getMaxScrollOffset()));
+		this.ui.setScrollOffset(clampedOffset);
+
+		return true;
+	}
+
 	private showTreeSelector(initialSelectedId?: string): void {
 		const tree = this.sessionManager.getTree();
 		const realLeafId = this.sessionManager.getLeafId();
