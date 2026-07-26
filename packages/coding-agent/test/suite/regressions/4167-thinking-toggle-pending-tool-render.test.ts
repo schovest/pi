@@ -1,6 +1,6 @@
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, ToolResultMessage, Usage } from "@earendil-works/pi-ai/compat";
-import { Container, Text, type TUI } from "@schovest/pi-tui";
+import { type Component, Container, Text, type TUI } from "@schovest/pi-tui";
 import { beforeAll, describe, expect, test, vi } from "vitest";
 import type { AgentSessionEvent } from "../../../src/core/agent-session.ts";
 import type { SessionContext } from "../../../src/core/session-manager.ts";
@@ -29,6 +29,7 @@ const EMPTY_USAGE: Usage = {
 
 type RenderSessionContextThis = {
 	pendingTools: Map<string, ToolExecutionComponent>;
+	entryIdToComponent: Map<string, Component>;
 	chatContainer: Container;
 	footer: { invalidate(): void };
 	footerDataProvider: { invalidateBranchCache(): void };
@@ -59,6 +60,7 @@ function createFakeInteractiveModeThis(): RenderSessionContextThis {
 	const chatContainer = new Container();
 	return {
 		pendingTools: new Map<string, ToolExecutionComponent>(),
+		entryIdToComponent: new Map<string, Component>(),
 		chatContainer,
 		footer: { invalidate: vi.fn() },
 		footerDataProvider: { invalidateBranchCache: vi.fn() },

@@ -5499,11 +5499,6 @@ export class InteractiveMode {
 						}
 					}
 
-					// Check if user prefers to skip summary prompt
-					if (action === NAVIGATE && this.settingsManager.getBranchSummarySkipPrompt()) {
-						wantsSummary = false;
-					}
-
 					// Set up escape handler and loader if summarizing
 					let summaryLoader: Loader | undefined;
 					const originalOnEscape = this.defaultEditor.onEscape;

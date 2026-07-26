@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+	type BranchSummaryEntry,
 	buildSessionContext,
 	type CompactionEntry,
+	type CustomMessageEntry,
 	type SessionEntry,
 	type SessionMessageEntry,
 } from "../src/core/session-manager.ts";
@@ -39,6 +41,34 @@ function assistantEntry(id: string, parentId: string | null, text: string): Sess
 			stopReason: "stop",
 			timestamp: Date.now(),
 		},
+	};
+}
+
+function customMessageEntry(
+	id: string,
+	parentId: string | null,
+	customType: string,
+	content: string,
+): CustomMessageEntry {
+	return {
+		type: "custom_message",
+		id,
+		parentId,
+		timestamp: new Date().toISOString(),
+		customType,
+		content,
+		display: true,
+	};
+}
+
+function branchSummaryEntry(id: string, parentId: string | null, summary: string): BranchSummaryEntry {
+	return {
+		type: "branch_summary",
+		id,
+		parentId,
+		timestamp: new Date().toISOString(),
+		fromId: parentId ?? "root",
+		summary,
 	};
 }
 
@@ -92,5 +122,28 @@ describe("buildSessionContext entryIds", () => {
 		expect(ctx.messages).toHaveLength(5);
 		expect(ctx.messages[0].role).toBe("compactionSummary");
 		expect(ctx.entryIds).toEqual(["c1", "u2", "a1", "u3", "a2"]);
+	});
+
+	it("entryIds aligned with messages for custom_message entry", () => {
+		const entries: SessionEntry[] = [
+			userEntry("u1", null, "Hello"),
+			customMessageEntry("c1", "u1", "my_custom_type", "Custom content"),
+			assistantEntry("a1", "c1", "Response to custom message"),
+		];
+		const ctx = buildSessionContext(entries, "a1");
+		expect(ctx.messages).toHaveLength(3);
+		expect(ctx.entryIds).toEqual(["u1", "c1", "a1"]);
+	});
+
+	it("entryIds aligned with messages for branch_summary entry with non-empty summary", () => {
+		const entries: SessionEntry[] = [
+			userEntry("u1", null, "Branch point"),
+			assistantEntry("a1", "u1", "Response before branch"),
+			branchSummaryEntry("bs1", "a1", "Summary of abandoned path"),
+			userEntry("u2", "bs1", "New message after branch"),
+		];
+		const ctx = buildSessionContext(entries, "u2");
+		expect(ctx.messages).toHaveLength(4);
+		expect(ctx.entryIds).toEqual(["u1", "a1", "bs1", "u2"]);
 	});
 });
