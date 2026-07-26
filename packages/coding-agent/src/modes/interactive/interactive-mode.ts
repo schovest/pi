@@ -339,6 +339,9 @@ export class InteractiveMode {
 
 	// Tool execution tracking: toolCallId -> component
 	private pendingTools = new Map<string, ToolExecutionComponent>();
+
+	// entryId -> rendered Component mapping for tree-peek navigation
+	private entryIdToComponent: Map<string, Component> = new Map();
 	private latestSubagentDetails: SubagentDetailsData | undefined;
 	private subagentsPanelComponent: SubagentsPanelComponent | undefined;
 	private subagentOverlayComponent: SubagentOverlayComponent | undefined;
@@ -3828,6 +3831,7 @@ export class InteractiveMode {
 		options: { updateFooter?: boolean; populateHistory?: boolean } = {},
 	): void {
 		this.pendingTools.clear();
+		this.entryIdToComponent.clear();
 		const renderedPendingTools = new Map<string, ToolExecutionComponent>();
 
 		if (options.updateFooter) {
@@ -3835,10 +3839,18 @@ export class InteractiveMode {
 			this.updateEditorBorderColor();
 		}
 
-		for (const message of sessionContext.messages) {
+		for (let i = 0; i < sessionContext.messages.length; i++) {
+			const message = sessionContext.messages[i];
+			const entryId = sessionContext.entryIds[i] ?? null;
 			// Assistant messages need special handling for tool calls
 			if (message.role === "assistant") {
+				const beforeChildren = this.chatContainer.children.length;
 				this.addMessageToChat(message);
+				const afterChildren = this.chatContainer.children.length;
+				if (entryId && afterChildren > beforeChildren) {
+					// Register the last-added component (the assistant message component)
+					this.entryIdToComponent.set(entryId, this.chatContainer.children[afterChildren - 1]);
+				}
 				// Render tool call components
 				for (const content of message.content) {
 					if (content.type === "toolCall") {
@@ -3884,7 +3896,13 @@ export class InteractiveMode {
 				}
 			} else {
 				// All other messages use standard rendering
+				const beforeChildren = this.chatContainer.children.length;
 				this.addMessageToChat(message, options);
+				const afterChildren = this.chatContainer.children.length;
+				if (entryId && afterChildren > beforeChildren) {
+					// Register the last-added component
+					this.entryIdToComponent.set(entryId, this.chatContainer.children[afterChildren - 1]);
+				}
 			}
 		}
 
