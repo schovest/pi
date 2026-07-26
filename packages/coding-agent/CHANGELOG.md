@@ -7,6 +7,8 @@
 - SessionContext 新增 `entryIds` 字段，与 `messages` 数组对齐追踪对应的 session entry ID
 - `renderSessionContext` 中建立 `entryIdToComponent` 映射，按 entryId 追踪已渲染消息的 TUI 组件
 - 树导航选择器新增操作选择器：Peek（不切分支滚动定位）/ Navigate / Navigate with summary / Navigate with custom prompt，替代旧的「是否摘要」三选项
+- Tree Peek 功能：在 session tree 中选中节点 → Enter → 选择 "Peek"，关闭 tree 并滚动聊天视图到目标消息位置，不切换分支
+- Tree 操作选择器：选中节点后弹出 Peek / Navigate / Navigate with summary / Navigate with custom prompt 选项，默认选中 Peek
 
 ## [0.12.1] - 2026-07-26
 
