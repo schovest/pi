@@ -5367,12 +5367,19 @@ export class InteractiveMode {
 
 		// Calculate target line offset within scrollable content
 		const width = this.ui.terminal.columns;
+		const fixedBottomCount = this.ui.getFixedBottomCount();
 		let targetLineOffset = 0;
 		let found = false;
 
-		// chatContainer is the first scrollable child of TUI.
-		// Sum rendered lines of all TUI children, then within chatContainer sum lines before target.
-		for (const tuiChild of this.ui.children) {
+		// Sum rendered lines of all TUI children up to target.
+		// The TUI arranges children as: [scrollable..., fixedBottom...].
+		// targetLineOffset counts lines for all children before the target
+		// (fixed bottom children don't contribute to the offset since the
+		// target is never among them, but we skip them for correctness).
+		for (let i = 0; i < this.ui.children.length; i++) {
+			const tuiChild = this.ui.children[i];
+			const isScrollable = i < this.ui.children.length - fixedBottomCount;
+
 			if (tuiChild === this.chatContainer) {
 				// Within chatContainer, find target component and sum lines before it
 				for (const chatChild of this.chatContainer.children) {
@@ -5386,21 +5393,30 @@ export class InteractiveMode {
 				// Target not found in chatContainer - shouldn't happen since map is from same render
 				return false;
 			}
-			// Not chatContainer yet - sum its lines
-			targetLineOffset += tuiChild.render(width).length;
+
+			if (isScrollable) {
+				targetLineOffset += tuiChild.render(width).length;
+			}
 		}
 
 		if (!found) {
 			return false;
 		}
 
+		// Calculate total scrollable lines across ALL scrollable TUI children,
+		// not just chatContainer. This matches the coordinate system used by
+		// scrollOffset (which operates on all scrollable children).
+		let totalScrollableLines = 0;
+		for (let i = 0; i < this.ui.children.length - fixedBottomCount; i++) {
+			totalScrollableLines += this.ui.children[i].render(width).length;
+		}
+
 		// Calculate scroll offset to position target near top of viewport
 		// scrollOffset is from bottom: scrollableViewportTop = scrollableLines.length - scrollableViewport - scrollOffset
 		// We want scrollableViewportTop = targetLineOffset (target at top)
 		// So: scrollOffset = scrollableLines.length - scrollableViewport - targetLineOffset
-		const scrollableLines = this.chatContainer.render(width).length;
 		const scrollableViewport = this.ui.getScrollableViewport();
-		const desiredOffset = scrollableLines - scrollableViewport - targetLineOffset;
+		const desiredOffset = totalScrollableLines - scrollableViewport - targetLineOffset;
 
 		// Clamp to valid range
 		const clampedOffset = Math.max(0, Math.min(desiredOffset, this.ui.getMaxScrollOffset()));

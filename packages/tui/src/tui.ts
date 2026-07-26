@@ -910,6 +910,10 @@ export class TUI extends Container {
 		this.fixedBottomCount = count;
 	}
 
+	getFixedBottomCount(): number {
+		return this.fixedBottomCount;
+	}
+
 	private startAutoScroll(direction: -1 | 1): void {
 		// 同方向已运行则不重启，避免定时器堆积
 		if (this.autoScrollTimer && this.autoScrollDirection === direction) return;
