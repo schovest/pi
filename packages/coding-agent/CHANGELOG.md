@@ -5,6 +5,7 @@
 ### Added
 
 - SessionContext 新增 `entryIds` 字段，与 `messages` 数组对齐追踪对应的 session entry ID
+- `renderSessionContext` 中建立 `entryIdToComponent` 映射，按 entryId 追踪已渲染消息的 TUI 组件
 
 ## [0.12.1] - 2026-07-26
 
