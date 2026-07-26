@@ -5358,7 +5358,6 @@ export class InteractiveMode {
 	 * Does NOT change the session branch.
 	 * @returns true if successfully located and scrolled, false if not found
 	 */
-	// biome-ignore lint/correctness/noUnusedPrivateClassMembers: used by tree-peek feature, wired up in Task 4
 	private peekAtMessage(entryId: string): boolean {
 		const targetComponent = this.entryIdToComponent.get(entryId);
 		if (!targetComponent) {
@@ -5441,48 +5440,68 @@ export class InteractiveMode {
 				realLeafId,
 				this.ui.terminal.rows,
 				async (entryId) => {
-					// Selecting the current leaf is a no-op (already there)
+					// Selecting the current leaf shows action selector too (Peek is useful)
+					done(); // Close selector first
+
+					// Show action selector (default: Peek)
+					const PEEK = "Peek";
+					const NAVIGATE = "Navigate";
+					const NAVIGATE_SUMMARY = "Navigate with summary";
+					const NAVIGATE_CUSTOM = "Navigate with custom prompt";
+
+					const action = await this.showExtensionSelector("Select action", [
+						PEEK,
+						NAVIGATE,
+						NAVIGATE_SUMMARY,
+						NAVIGATE_CUSTOM,
+					]);
+
+					if (action === undefined) {
+						// Escape - re-show tree selector with same selection
+						this.showTreeSelector(entryId);
+						return;
+					}
+
+					if (action === PEEK) {
+						// Peek: scroll to message without navigating
+						if (entryId === realLeafId) {
+							this.showStatus("Already at this point");
+							return;
+						}
+						const success = this.peekAtMessage(entryId);
+						if (success) {
+							this.showStatus("Peeked at message");
+						} else {
+							this.showStatus("Cannot locate this message in current view");
+						}
+						return;
+					}
+
+					// For navigation actions, check if already at target
 					if (entryId === realLeafId) {
-						done();
 						this.showStatus("Already at this point");
 						return;
 					}
 
-					// Ask about summarization
-					done(); // Close selector first
-
-					// Loop until user makes a complete choice or cancels to tree
+					// Parse navigation choice
 					let wantsSummary = false;
 					let customInstructions: string | undefined;
 
-					// Check if we should skip the prompt (user preference to always default to no summary)
-					if (!this.settingsManager.getBranchSummarySkipPrompt()) {
-						while (true) {
-							const summaryChoice = await this.showExtensionSelector("Summarize branch?", [
-								"No summary",
-								"Summarize",
-								"Summarize with custom prompt",
-							]);
-
-							if (summaryChoice === undefined) {
-								// User pressed escape - re-show tree selector with same selection
-								this.showTreeSelector(entryId);
-								return;
-							}
-
-							wantsSummary = summaryChoice !== "No summary";
-
-							if (summaryChoice === "Summarize with custom prompt") {
-								customInstructions = await this.showExtensionEditor("Custom summarization instructions");
-								if (customInstructions === undefined) {
-									// User cancelled - loop back to summary selector
-									continue;
-								}
-							}
-
-							// User made a complete choice
-							break;
+					if (action === NAVIGATE_SUMMARY) {
+						wantsSummary = true;
+					} else if (action === NAVIGATE_CUSTOM) {
+						wantsSummary = true;
+						customInstructions = await this.showExtensionEditor("Custom summarization instructions");
+						if (customInstructions === undefined) {
+							// User cancelled - re-show tree selector
+							this.showTreeSelector(entryId);
+							return;
 						}
+					}
+
+					// Check if user prefers to skip summary prompt
+					if (action === NAVIGATE && this.settingsManager.getBranchSummarySkipPrompt()) {
+						wantsSummary = false;
 					}
 
 					// Set up escape handler and loader if summarizing
