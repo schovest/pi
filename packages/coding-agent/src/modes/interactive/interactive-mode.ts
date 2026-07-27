@@ -2012,6 +2012,9 @@ export class InteractiveMode {
 			this.ui.addChild(this.footer);
 		}
 
+		// The built-in footer is active only when no custom footer replaced it.
+		this.footer.setActive(this.customFooter === undefined);
+
 		this.ui.requestRender();
 	}
 
