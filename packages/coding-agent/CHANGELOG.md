@@ -16,6 +16,7 @@
 - 移除 `NAVIGATE` 分支中无效的 `getBranchSummarySkipPrompt` 死代码
 - Tree 操作选择器：选中节点后弹出 Peek / Navigate / Navigate with summary / Navigate with custom prompt 选项，默认选中 Peek
 - 修复切换主 agent（shift+tab）后边框标题（agent 名/模型/状态）不同步的问题：footer 的 `invalidate()` 现在主动将最新标题推送到编辑器边框，避免滞后一帧
+- Tree Peek：修复工具调用/工具结果（toolResult）节点无法通过 Peek 定位的问题——`renderSessionContext` 现在将 toolResult entryId 注册到对应的 `ToolExecutionComponent`，使工具结果节点也能滚动定位
 
 ## [0.12.1] - 2026-07-26
 

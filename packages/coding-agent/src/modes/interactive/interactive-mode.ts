@@ -3896,6 +3896,11 @@ export class InteractiveMode {
 					component.updateResult(message);
 					this.updateSubagentDetails(message.toolName, message.details);
 					renderedPendingTools.delete(message.toolCallId);
+					// Register the tool result entry so it can be peeked at directly.
+					// Its component is the same ToolExecutionComponent rendered inline.
+					if (entryId) {
+						this.entryIdToComponent.set(entryId, component);
+					}
 				}
 			} else {
 				// All other messages use standard rendering
