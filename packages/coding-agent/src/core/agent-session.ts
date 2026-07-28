@@ -92,7 +92,7 @@ import {
 	wrapRegisteredTools,
 } from "./extensions/index.ts";
 import { emitSessionShutdownEvent } from "./extensions/runner.ts";
-import { protectSnapshot, takeSnapshot } from "./git-snapshot.ts";
+import { protectSnapshot, takeSnapshot, unprotectSnapshot } from "./git-snapshot.ts";
 import type { BashExecutionMessage, CustomMessage } from "./messages.ts";
 import { ModelRegistry } from "./model-registry.ts";
 import type { ModelRuntime } from "./model-runtime.ts";
@@ -1438,6 +1438,13 @@ export class AgentSession {
 				// Protect stash object from gc if working tree was dirty
 				if (snapshot.stashCommit) {
 					await protectSnapshot(cwd, entryId, snapshot.stashCommit);
+				}
+
+				// Enforce maxCheckpoints limit: trim oldest snapshots and their git refs
+				const maxCheckpoints = this.settingsManager.getMaxCheckpoints();
+				const removedIds = this.sessionManager.trimOldestCustomEntries("git_snapshot", maxCheckpoints);
+				for (const id of removedIds) {
+					await unprotectSnapshot(cwd, id);
 				}
 			}
 		} catch {

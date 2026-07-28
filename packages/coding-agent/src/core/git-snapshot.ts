@@ -113,6 +113,21 @@ export async function protectSnapshot(cwd: string, entryId: string, stashCommit:
 }
 
 /**
+ * Remove the git ref protecting a snapshot, allowing git gc to reclaim the stash object.
+ * Deletes refs/pi-snapshots/<entryId>.
+ */
+export async function unprotectSnapshot(cwd: string, entryId: string): Promise<void> {
+	try {
+		await execFileAsync("git", ["update-ref", "-d", `refs/pi-snapshots/${entryId}`], {
+			cwd,
+			maxBuffer: MAX_BUFFER,
+		});
+	} catch {
+		// Non-fatal: ref may not exist or git operation failed
+	}
+}
+
+/**
  * Check if a git object (commit) exists in the repository.
  */
 async function objectExists(cwd: string, sha: string): Promise<boolean> {
