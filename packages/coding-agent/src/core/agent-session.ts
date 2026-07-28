@@ -233,6 +233,8 @@ export interface AgentSessionConfig {
 	skillsOverride?: Skill[];
 	/** Create an isolated ExtensionRuntime instead of sharing resourceLoader's runtime. */
 	isolatedExtensionRuntime?: boolean;
+	/** Skip git snapshot in prompt(). Used by subagent child sessions. */
+	skipGitSnapshot?: boolean;
 }
 
 export interface ExtensionBindings {
@@ -394,6 +396,7 @@ export class AgentSession {
 	private _baseSystemPrompt = "";
 	private _baseSystemPromptOptions!: BuildSystemPromptOptions;
 	private _systemPromptOverride?: string;
+	private _skipGitSnapshot: boolean;
 
 	constructor(config: AgentSessionConfig) {
 		this.agent = config.agent;
@@ -415,6 +418,7 @@ export class AgentSession {
 		this._baseToolsOverride = config.baseToolsOverride;
 		this._skillsOverride = config.skillsOverride;
 		this._isolatedExtensionRuntime = config.isolatedExtensionRuntime ?? false;
+		this._skipGitSnapshot = config.skipGitSnapshot ?? false;
 		this._sessionStartEvent = config.sessionStartEvent ?? { type: "session_start", reason: "startup" };
 
 		// Always subscribe to agent events for internal handling
@@ -1157,6 +1161,7 @@ export class AgentSession {
 			baseToolsOverride: this._baseToolsOverride,
 			enableSubagents: false,
 			isolatedExtensionRuntime: true,
+			skipGitSnapshot: true,
 		});
 	}
 
@@ -1431,8 +1436,8 @@ export class AgentSession {
 
 		// Take git snapshot before processing the prompt (for revert functionality)
 		const maxCount = this.settingsManager.getGitSnapshotMaxCount();
-		// Skip snapshots entirely when maxCount is 0 (user disabled the feature)
-		if (maxCount > 0) {
+		// Skip snapshots entirely when maxCount is 0 or session opted out (subagent child sessions)
+		if (!this._skipGitSnapshot && maxCount > 0) {
 			try {
 				const cwd = this.sessionManager.getCwd();
 				const snapshot = await takeSnapshot(cwd, this.settingsManager.getGitSnapshotMode());

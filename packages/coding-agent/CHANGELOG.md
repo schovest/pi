@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Subagent 子会话不再触发 git snapshot，避免产生无用的 stash commit 和 git ref 残留
+
 ### Changed
 
 - 顶部边框整体重排：左侧显示 Π + agent + path + branch，右侧显示 (provider) model · effort（思考强度），底部 footer 保留完整 token/上下文统计
