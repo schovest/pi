@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.12.6] - 2026-07-28
+
 ### Fixed
 
 - Subagent 子会话不再触发 git snapshot，避免产生无用的 stash commit 和 git ref 残留
