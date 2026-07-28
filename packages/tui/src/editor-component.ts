@@ -77,4 +77,10 @@ export interface EditorComponent extends Component {
 
 	/** Set max visible items in autocomplete dropdown */
 	setAutocompleteMaxVisible?(maxVisible: number): void;
+
+	/** Current prompt prefix displayed on the first line (e.g., "> "). Visual-only, not part of text. */
+	readonly prompt: string;
+
+	/** Set prompt prefix displayed on the first line (e.g., "> "). Visual-only. */
+	setPrompt?(prompt: string): void;
 }

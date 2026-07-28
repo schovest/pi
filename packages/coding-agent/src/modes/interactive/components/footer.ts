@@ -180,16 +180,17 @@ export class FooterComponent implements Component {
 		const agentRole = this.session.currentPrimaryAgent;
 		const dimSeparator = theme.fg("dim", " • ");
 
-		let rightSide = `${theme.fg("accent", agentRole)}${dimSeparator}${modelName}`;
+		// Build model display with optional provider prefix (provider before model, not before agent)
+		const modelDisplay =
+			this.footerData.getAvailableProviderCount() > 1 && state.model
+				? `(${state.model.provider}) ${modelName}`
+				: modelName;
+
+		let rightSide = `${theme.fg("accent", agentRole)}${dimSeparator}${modelDisplay}`;
 		if (state.model?.reasoning) {
 			const thinkingLevel = state.thinkingLevel || "off";
 			const thinkingStr = thinkingLevel === "off" ? "thinking off" : thinkingLevel;
 			rightSide = `${rightSide}${dimSeparator}${thinkingStr}`;
-		}
-
-		// Prepend the provider in parentheses if there are multiple providers
-		if (this.footerData.getAvailableProviderCount() > 1 && state.model) {
-			rightSide = `(${state.model!.provider}) ${rightSide}`;
 		}
 
 		return rightSide;

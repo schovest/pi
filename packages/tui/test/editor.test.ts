@@ -3539,6 +3539,69 @@ describe("Editor component", () => {
 		});
 	});
 
+	describe("Prompt prefix display", () => {
+		it("defaults to empty prompt", () => {
+			const editor = new Editor(createTestTUI(), defaultEditorTheme);
+			assert.strictEqual(editor.prompt, "");
+		});
+
+		it("setPrompt updates the prompt property", () => {
+			const editor = new Editor(createTestTUI(), defaultEditorTheme);
+			editor.setPrompt("> ");
+			assert.strictEqual(editor.prompt, "> ");
+			editor.setPrompt("$ ");
+			assert.strictEqual(editor.prompt, "$ ");
+			editor.setPrompt("");
+			assert.strictEqual(editor.prompt, "");
+		});
+
+		it('renders "> " prompt before text on first line', () => {
+			const editor = new Editor(createTestTUI(), defaultEditorTheme);
+			editor.setText("hello");
+			editor.setPrompt("> ");
+			const lines = editor.render(80);
+			// First line after the top border should contain prompt + text
+			const contentLine = stripVTControlCharacters(lines[1]);
+			assert.ok(contentLine.startsWith("> hello"), `Expected "> hello" got "${contentLine}"`);
+		});
+
+		it('renders "$ " prompt and strips leading "!" from text', () => {
+			const editor = new Editor(createTestTUI(), defaultEditorTheme);
+			editor.setText("!ls -la");
+			editor.setPrompt("$ ");
+			const lines = editor.render(80);
+			const contentLine = stripVTControlCharacters(lines[1]);
+			// Should show "$ ls -la" instead of "$ !ls -la"
+			assert.ok(contentLine.startsWith("$ ls -la"), `Expected "$ ls -la" got "${contentLine}"`);
+			// Original text should still contain "!"
+			assert.strictEqual(editor.getText(), "!ls -la");
+		});
+
+		it("does not affect second visual line on wrapped text", () => {
+			const editor = new Editor(createTestTUI(), defaultEditorTheme);
+			// Create text that wraps to multiple lines
+			const longText = "a".repeat(70) + " " + "b".repeat(20);
+			editor.setText(longText);
+			editor.setPrompt("> ");
+			const lines = editor.render(40);
+			// First content line should have prompt prefix
+			const contentLine1 = stripVTControlCharacters(lines[1]);
+			assert.ok(contentLine1.startsWith("> "), `First line should start with "> ", got "${contentLine1}"`);
+			// Content line 2 (wrapped) should not have prompt prefix
+			const contentLine2 = stripVTControlCharacters(lines[2]);
+			assert.ok(!contentLine2.startsWith("> "), `Wrapped line should not start with "> ", got "${contentLine2}"`);
+		});
+
+		it("does not show prompt when scrolled", () => {
+			const editor = new Editor(createTestTUI(80, 24), defaultEditorTheme);
+			editor.setText("line1\nline2\nline3\nline4\nline5\nline6\nline7");
+			editor.setPrompt("> ");
+			// Render normally - prompt should be on content line 1
+			const lines = editor.render(80);
+			assert.ok(stripVTControlCharacters(lines[1]).startsWith("> "));
+		});
+	});
+
 	describe("Paste marker atomic behavior", () => {
 		/** Helper: simulate a large paste that creates a marker */
 		function pasteWithMarker(editor: Editor): string {
