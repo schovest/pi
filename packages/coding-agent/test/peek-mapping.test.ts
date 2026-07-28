@@ -42,13 +42,8 @@ function toolResultMsg(toolCallId: string, toolName: string, text: string): Agen
 }
 
 function makeMockTerminal(columns: number, rows: number) {
-	let onInput: ((d: string) => void) | undefined;
-	let onResize: (() => void) | undefined;
 	return {
-		start(i: (d: string) => void, r: () => void) {
-			onInput = i;
-			onResize = r;
-		},
+		start() {},
 		stop() {},
 		drainInput() {
 			return Promise.resolve();
@@ -78,15 +73,22 @@ function makeMockTerminal(columns: number, rows: number) {
 		get stdinBuffer() {
 			return undefined;
 		},
-		triggerResize: () => onResize?.(),
-		sendInput: (d: string) => onInput?.(d),
 	};
 }
 
-interface TuiInternals {
+// Test-only view of the TUI's public API plus the private render state we need
+// to inspect. Lets us drive a real TUI without reaching through per-call casts.
+interface TuiView {
+	terminal: { columns: number; rows: number };
 	children: Component[];
 	currentFullLines: string[];
 	currentScrollableViewportTop: number;
+	getFixedBottomCount(): number;
+	getMaxScrollOffset(): number;
+	setScrollOffset(offset: number): void;
+	start(): void;
+	requestRender(force?: boolean): void;
+	doRender?(): void;
 }
 
 // Faithful copy of InteractiveMode.renderSessionContext's entryIdToComponent mapping.
@@ -95,7 +97,7 @@ function buildMap(
 	chat: Container,
 	entryIdToComponent: Map<string, Component>,
 	messages: { message: AgentMessage; entryId: string }[],
-) {
+): void {
 	entryIdToComponent.clear();
 	const renderedPendingTools = new Map<string, ToolExecutionComponent>();
 	for (const { message, entryId } of messages) {
@@ -129,6 +131,8 @@ function buildMap(
 			const component = renderedPendingTools.get((message as { toolCallId: string }).toolCallId);
 			if (component) {
 				component.updateResult(message);
+				// The tool-result entry shares the tool call's component, so it
+				// can be peeked directly once registered here.
 				if (entryId) {
 					entryIdToComponent.set(entryId, component);
 				}
@@ -150,20 +154,19 @@ function peekAtMessage(
 	entryIdToComponent: Map<string, Component>,
 	entryId: string,
 ): { ok: boolean; targetLineOffset: number } {
-	const internals = ui as unknown as TuiInternals;
+	const tui = ui as unknown as TuiView;
 	const targetComponent = entryIdToComponent.get(entryId);
 	if (!targetComponent) return { ok: false, targetLineOffset: -1 };
-	const width = (ui as unknown as { terminal: { columns: number } }).terminal.columns;
-	const fixedBottomCount = (ui as unknown as { getFixedBottomCount(): number }).getFixedBottomCount();
+	const width = tui.terminal.columns;
+	const fixedBottomCount = tui.getFixedBottomCount();
 	let targetLineOffset = 0;
 	let found = false;
-	const children = internals.children;
+	const children = tui.children;
 	for (let i = 0; i < children.length; i++) {
 		const tuiChild = children[i];
 		const isScrollable = i < children.length - fixedBottomCount;
 		if (tuiChild === chat) {
-			const chatChildren = (chat as unknown as { children: Component[] }).children;
-			for (const chatChild of chatChildren) {
+			for (const chatChild of chat.children) {
 				if (chatChild === targetComponent) {
 					found = true;
 					break;
@@ -176,7 +179,7 @@ function peekAtMessage(
 		if (isScrollable) targetLineOffset += tuiChild.render(width).length;
 	}
 	if (!found) return { ok: false, targetLineOffset: -1 };
-	const height = (ui as unknown as { terminal: { rows: number } }).terminal.rows;
+	const height = tui.terminal.rows;
 	let fixedHeight = 0;
 	const childCount = children.length;
 	for (let i = childCount - fixedBottomCount; i < childCount; i++) {
@@ -188,10 +191,10 @@ function peekAtMessage(
 		totalScrollableLines += children[i].render(width).length;
 	}
 	const desiredOffset = totalScrollableLines - scrollableViewport - targetLineOffset;
-	const maxScroll = (ui as unknown as { getMaxScrollOffset(): number }).getMaxScrollOffset();
+	const maxScroll = tui.getMaxScrollOffset();
 	const clamped = Math.max(0, Math.min(desiredOffset, maxScroll));
-	(ui as unknown as { setScrollOffset(o: number): void }).setScrollOffset(clamped);
-	(ui as unknown as { doRender?(): void }).doRender?.();
+	tui.setScrollOffset(clamped);
+	tui.doRender?.();
 	return { ok: true, targetLineOffset };
 }
 
@@ -255,22 +258,19 @@ describe("peek mapping + algorithm with tool calls", () => {
 		];
 
 		const entryIdToComponent = new Map<string, Component>();
+		const tui = ui as unknown as TuiView;
 		buildMap(ui, chat, entryIdToComponent, messages);
-		(ui as unknown as { start(): void }).start();
-		(ui as unknown as { requestRender(force?: boolean): void }).requestRender(true);
-		(ui as unknown as { doRender?(): void }).doRender?.();
+		tui.start();
+		tui.requestRender(true);
+		tui.doRender?.();
 
 		// Simulate the real flow where showStatus() has already appended a
 		// status line to chatContainer (it appends, not a fixed-bottom region).
 		chat.addChild(new Spacer(1));
 		chat.addChild(new Text("Peeked at message", 1, 0));
-		(ui as unknown as { doRender?(): void }).doRender?.();
+		tui.doRender?.();
 
-		const internals = ui as unknown as TuiInternals;
-		const chatChildren = (chat as unknown as { children: Component[] }).children;
-		console.log("chat children count:", chatChildren.length);
-		console.log("map keys:", [...entryIdToComponent.keys()]);
-
+		const strip = (s: string) => s.replace(/\x1b\][0-9;]*[A-Za-z]\x07/g, "").replace(/\x1b\[0?m/g, "");
 		for (const { entryId } of messages) {
 			const result = peekAtMessage(ui, chat, entryIdToComponent, entryId);
 			const target = entryIdToComponent.get(entryId);
@@ -281,12 +281,11 @@ describe("peek mapping + algorithm with tool calls", () => {
 
 			// The target component must be VISIBLE in the current viewport.
 			// (Near-bottom messages correctly clamp instead of reaching the very top.)
-			const strip = (s: string) => s.replace(/\x1b\][0-9;]*[A-Za-z]\x07/g, "").replace(/\x1b\[0?m/g, "");
 			const targetLines = target.render(80).map(strip);
 			const firstNonEmpty = targetLines.find((l) => l.trim().length > 0) ?? "";
-			const viewport = internals.currentFullLines.slice(
-				internals.currentScrollableViewportTop,
-				internals.currentScrollableViewportTop + (ui as unknown as { terminal: { rows: number } }).terminal.rows,
+			const viewport = tui.currentFullLines.slice(
+				tui.currentScrollableViewportTop,
+				tui.currentScrollableViewportTop + tui.terminal.rows,
 			);
 			expect(
 				viewport.some((l) => strip(l).includes(firstNonEmpty) || firstNonEmpty.includes(strip(l).trim())),
