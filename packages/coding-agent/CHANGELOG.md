@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.12.5] - 2026-07-28
+
 ### Fixed
 
 - **Revert and Delete**：修复 revert 后选中的节点对应的 snapshot entry 和其 git ref 未被清理的问题，现在执行 revert and delete 时会同时移除回滚点对应的快照条目，确保 snapshot 引用不会持续累积
