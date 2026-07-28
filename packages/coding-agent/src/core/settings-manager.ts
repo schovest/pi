@@ -899,9 +899,9 @@ export class SettingsManager {
 	}
 
 	setDefaultPrimaryAgent(name: string): void {
-		this.updateProjectSettings("defaultPrimaryAgent", (settings) => {
-			settings.defaultPrimaryAgent = name;
-		});
+		this.globalSettings.defaultPrimaryAgent = name;
+		this.markModified("defaultPrimaryAgent");
+		this.save();
 	}
 
 	getShellCommandPrefix(): string | undefined {

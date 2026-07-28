@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Shift+Tab 切换 primary agent 时，选择持久化到全局 settings（`~/.pi/settings.json`），不再写入项目级 `.pi/settings.json`
+
 ### Added
 
 - Tree Revert 功能：在 session tree 中选中用户消息节点 → Enter → 选择 "Revert"，将 git 工作区恢复到目标节点时间点的文件状态（包括 untracked 文件），并切换 session 到该节点。仅对用户消息节点显示 Revert 选项

@@ -192,7 +192,7 @@ When a bash command exceeds the timeout threshold, it is automatically moved to 
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `defaultPrimaryAgent` | string | - | Active primary agent name for this project (project setting). Restored on session creation. |
+| `defaultPrimaryAgent` | string | - | Active primary agent name (global setting). Restored on session creation. |
 
 ```json
 { "defaultPrimaryAgent": "my-custom-agent" }
