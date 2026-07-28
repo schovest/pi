@@ -5544,13 +5544,14 @@ export class InteractiveMode {
 					const NAVIGATE_CUSTOM = "Navigate with custom prompt";
 					const REVERT = "Revert";
 
-					// Revert only available for user message nodes
+					// Revert only available for user message nodes with a git snapshot
 					const entry = this.sessionManager.getEntry(entryId);
 					const isUserMessage =
 						entry?.type === "message" && (entry as SessionMessageEntry).message.role === "user";
+					const hasSnapshot = isUserMessage && this.sessionManager.findGitSnapshot(entryId) !== null;
 
 					const options = [PEEK, NAVIGATE, NAVIGATE_SUMMARY, NAVIGATE_CUSTOM];
-					if (isUserMessage) {
+					if (hasSnapshot) {
 						options.push(REVERT);
 					}
 

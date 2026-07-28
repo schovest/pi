@@ -7,7 +7,7 @@ const execFileAsync = promisify(execFile);
 export interface GitSnapshotData {
 	/** HEAD commit hash at snapshot time */
 	head: string;
-	/** git stash create --include-untracked result. null if working tree was clean. */
+	/** git stash push --include-untracked result. null if working tree was clean. */
 	stashCommit: string | null;
 	/** Whether the working tree was clean (no staged/unstaged/untracked changes) */
 	clean: boolean;
@@ -157,10 +157,8 @@ export async function restoreSnapshot(cwd: string, snapshot: GitSnapshotData): P
 	}
 
 	// Step 2: Discard all current working tree changes
-	await execFileAsync("git", ["checkout", "--", "."], { cwd, maxBuffer: MAX_BUFFER });
-	// Remove untracked files
+	// Remove untracked files, then reset staged + working tree to HEAD
 	await execFileAsync("git", ["clean", "-fd"], { cwd, maxBuffer: MAX_BUFFER });
-	// Reset staged changes
 	await execFileAsync("git", ["reset", "--hard", "HEAD"], { cwd, maxBuffer: MAX_BUFFER });
 
 	// Step 3: Restore tracked files to snapshot HEAD state (if HEAD differs)
