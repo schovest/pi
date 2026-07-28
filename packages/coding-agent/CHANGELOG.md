@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- Tree Revert 功能：在 session tree 中选中用户消息节点 → Enter → 选择 "Revert"，将 git 工作区恢复到目标节点时间点的文件状态（包括 untracked 文件），并切换 session 到该节点。仅对用户消息节点显示 Revert 选项
+- Git 快照系统：用户发送消息时自动记录 git 工作区快照（通过 `git stash push --include-untracked` + `git stash pop`），存储为 session CustomEntry，用于 Revert 回滚
+
 ## [0.12.2] - 2026-07-28
 
 ### Added
