@@ -55,6 +55,9 @@ export class FooterComponent implements Component {
 	private footerData: ReadonlyFooterDataProvider;
 	private editor?: EditorComponent;
 	private borderTitleStyle: BorderTitleStyle = "plain";
+	/** When false, the built-in footer is not the active displayed footer (a custom
+	 *  extension footer replaced it), so we must not push titles onto the editor border. */
+	private isActive = true;
 
 	constructor(session: AgentSession, footerData: ReadonlyFooterDataProvider, editor?: EditorComponent) {
 		this.session = session;
@@ -64,6 +67,15 @@ export class FooterComponent implements Component {
 
 	setSession(session: AgentSession): void {
 		this.session = session;
+	}
+
+	/**
+	 * Mark whether this built-in footer is the currently displayed footer.
+	 * When a custom extension footer is active, set this to false so that
+	 * {@link syncEditorBorderTitles} does not overwrite the editor border.
+	 */
+	setActive(active: boolean): void {
+		this.isActive = active;
 	}
 
 	setEditor(editor: EditorComponent | undefined): void {
@@ -79,11 +91,26 @@ export class FooterComponent implements Component {
 	}
 
 	/**
-	 * No-op: git branch caching now handled by provider.
-	 * Kept for compatibility with existing call sites in interactive-mode.
+	 * Push the current agent/model/path titles onto the editor border.
+	 *
+	 * This must run eagerly (not only during render) because the editor renders
+	 * BEFORE this footer in the TUI frame loop: if we only set the titles inside
+	 * render(), the editor shows the previous frame's values and lags one render
+	 * behind on discrete state changes (agent/model/thinking switch) that trigger
+	 * a single re-render.
 	 */
+	private syncEditorBorderTitles(): void {
+		if (!this.isActive || !this.editor) return;
+		this.editor.borderTitle = this.getPathDisplay();
+		this.editor.borderTitleRight = this.getModelDisplay();
+	}
+
+	/** Refresh the editor border titles immediately so agent/model/thinking switches appear without a one-frame lag. */
 	invalidate(): void {
-		// No-op: git branch is cached/invalidated by provider
+		// Eagerly push updated agent/model/path titles onto the editor border so
+		// discrete state changes (agent/model/thinking switch) refresh synchronously
+		// instead of lagging one render frame behind this component's own render.
+		this.syncEditorBorderTitles();
 	}
 
 	/**
@@ -158,11 +185,8 @@ export class FooterComponent implements Component {
 	render(width: number): string[] {
 		const state = this.session.state;
 
-		// Update editor border titles
-		if (this.editor) {
-			this.editor.borderTitle = this.getPathDisplay();
-			this.editor.borderTitleRight = this.getModelDisplay();
-		}
+		// Update editor border titles (eager push; editor renders before this footer)
+		this.syncEditorBorderTitles();
 
 		// Calculate cumulative usage from ALL session entries (not just post-compaction messages)
 		let totalInput = 0;

@@ -339,6 +339,9 @@ export class InteractiveMode {
 
 	// Tool execution tracking: toolCallId -> component
 	private pendingTools = new Map<string, ToolExecutionComponent>();
+
+	// entryId -> rendered Component mapping for tree-peek navigation
+	private entryIdToComponent: Map<string, Component> = new Map();
 	private latestSubagentDetails: SubagentDetailsData | undefined;
 	private subagentsPanelComponent: SubagentsPanelComponent | undefined;
 	private subagentOverlayComponent: SubagentOverlayComponent | undefined;
@@ -2008,6 +2011,9 @@ export class InteractiveMode {
 			this.customFooter = undefined;
 			this.ui.addChild(this.footer);
 		}
+
+		// The built-in footer is active only when no custom footer replaced it.
+		this.footer.setActive(this.customFooter === undefined);
 
 		this.ui.requestRender();
 	}
@@ -3828,6 +3834,7 @@ export class InteractiveMode {
 		options: { updateFooter?: boolean; populateHistory?: boolean } = {},
 	): void {
 		this.pendingTools.clear();
+		this.entryIdToComponent.clear();
 		const renderedPendingTools = new Map<string, ToolExecutionComponent>();
 
 		if (options.updateFooter) {
@@ -3835,10 +3842,18 @@ export class InteractiveMode {
 			this.updateEditorBorderColor();
 		}
 
-		for (const message of sessionContext.messages) {
+		for (let i = 0; i < sessionContext.messages.length; i++) {
+			const message = sessionContext.messages[i];
+			const entryId = sessionContext.entryIds[i] ?? null;
 			// Assistant messages need special handling for tool calls
 			if (message.role === "assistant") {
+				const beforeChildren = this.chatContainer.children.length;
 				this.addMessageToChat(message);
+				const afterChildren = this.chatContainer.children.length;
+				if (entryId && afterChildren > beforeChildren) {
+					// Register the last-added component (the assistant message component)
+					this.entryIdToComponent.set(entryId, this.chatContainer.children[afterChildren - 1]);
+				}
 				// Render tool call components
 				for (const content of message.content) {
 					if (content.type === "toolCall") {
@@ -3881,10 +3896,21 @@ export class InteractiveMode {
 					component.updateResult(message);
 					this.updateSubagentDetails(message.toolName, message.details);
 					renderedPendingTools.delete(message.toolCallId);
+					// Register the tool-result entry so it can be peeked directly.
+					// It reuses the same ToolExecutionComponent as its tool call.
+					if (entryId) {
+						this.entryIdToComponent.set(entryId, component);
+					}
 				}
 			} else {
 				// All other messages use standard rendering
+				const beforeChildren = this.chatContainer.children.length;
 				this.addMessageToChat(message, options);
+				const afterChildren = this.chatContainer.children.length;
+				if (entryId && afterChildren > beforeChildren) {
+					// Register the last-added component
+					this.entryIdToComponent.set(entryId, this.chatContainer.children[afterChildren - 1]);
+				}
 			}
 		}
 
@@ -5335,6 +5361,88 @@ export class InteractiveMode {
 		}
 	}
 
+	/**
+	 * Scroll chat view to a specific message identified by entry ID.
+	 * Does NOT change the session branch.
+	 * @returns true if successfully located and scrolled, false if not found
+	 */
+	private peekAtMessage(entryId: string): boolean {
+		const targetComponent = this.entryIdToComponent.get(entryId);
+		if (!targetComponent) {
+			return false;
+		}
+
+		// Calculate target line offset within scrollable content
+		const width = this.ui.terminal.columns;
+		const fixedBottomCount = this.ui.getFixedBottomCount();
+		let targetLineOffset = 0;
+		let found = false;
+
+		// Sum rendered lines of all TUI children up to target.
+		// The TUI arranges children as: [scrollable..., fixedBottom...].
+		// targetLineOffset counts lines for all children before the target
+		// (fixed bottom children don't contribute to the offset since the
+		// target is never among them, but we skip them for correctness).
+		for (let i = 0; i < this.ui.children.length; i++) {
+			const tuiChild = this.ui.children[i];
+			const isScrollable = i < this.ui.children.length - fixedBottomCount;
+
+			if (tuiChild === this.chatContainer) {
+				// Within chatContainer, find target component and sum lines before it
+				for (const chatChild of this.chatContainer.children) {
+					if (chatChild === targetComponent) {
+						found = true;
+						break;
+					}
+					targetLineOffset += chatChild.render(width).length;
+				}
+				if (found) break;
+				// Target not found in chatContainer - shouldn't happen since map is from same render
+				return false;
+			}
+
+			if (isScrollable) {
+				targetLineOffset += tuiChild.render(width).length;
+			}
+		}
+
+		if (!found) {
+			return false;
+		}
+
+		// Calculate total scrollable lines across ALL scrollable TUI children,
+		// not just chatContainer. This matches the coordinate system used by
+		// scrollOffset (which operates on all scrollable children).
+		let totalScrollableLines = 0;
+		for (let i = 0; i < this.ui.children.length - fixedBottomCount; i++) {
+			totalScrollableLines += this.ui.children[i].render(width).length;
+		}
+
+		// Calculate scroll offset to position target near top of viewport
+		// scrollOffset is from bottom: scrollableViewportTop = scrollableLines.length - scrollableViewport - scrollOffset
+		// We want scrollableViewportTop = targetLineOffset (target at top)
+		// So: scrollOffset = scrollableLines.length - scrollableViewport - targetLineOffset
+		// Compute scroll viewport fresh from terminal height and current fixed bottom
+		// children. Do NOT use getScrollableViewport() — it returns lastScrollableViewport
+		// from the previous doRender, which may be stale (e.g. action selector was taller
+		// than the editor, making the cached viewport smaller than actual).
+		const height = this.ui.terminal.rows;
+		let fixedHeight = 0;
+		const childCount = this.ui.children.length;
+		for (let i = childCount - fixedBottomCount; i < childCount; i++) {
+			fixedHeight += this.ui.children[i].render(width).length;
+		}
+		const scrollableViewport = Math.max(0, height - fixedHeight);
+
+		const desiredOffset = totalScrollableLines - scrollableViewport - targetLineOffset;
+
+		// Clamp to valid range
+		const clampedOffset = Math.max(0, Math.min(desiredOffset, this.ui.getMaxScrollOffset()));
+		this.ui.setScrollOffset(clampedOffset);
+
+		return true;
+	}
+
 	private showTreeSelector(initialSelectedId?: string): void {
 		const tree = this.sessionManager.getTree();
 		const realLeafId = this.sessionManager.getLeafId();
@@ -5351,47 +5459,62 @@ export class InteractiveMode {
 				realLeafId,
 				this.ui.terminal.rows,
 				async (entryId) => {
-					// Selecting the current leaf is a no-op (already there)
+					// Selecting the current leaf shows action selector too (Peek is useful)
+					done(); // Close selector first
+
+					// Show action selector (default: Peek)
+					const PEEK = "Peek";
+					const NAVIGATE = "Navigate";
+					const NAVIGATE_SUMMARY = "Navigate with summary";
+					const NAVIGATE_CUSTOM = "Navigate with custom prompt";
+
+					const action = await this.showExtensionSelector("Select action", [
+						PEEK,
+						NAVIGATE,
+						NAVIGATE_SUMMARY,
+						NAVIGATE_CUSTOM,
+					]);
+
+					if (action === undefined) {
+						// Escape - re-show tree selector with same selection
+						this.showTreeSelector(entryId);
+						return;
+					}
+
+					if (action === PEEK) {
+						// Peek: scroll to message without navigating
+						if (entryId === realLeafId) {
+							this.showStatus("Already at this point");
+							return;
+						}
+						const success = this.peekAtMessage(entryId);
+						if (success) {
+							this.showStatus("Peeked at message");
+						} else {
+							this.showStatus("Cannot locate this message in current view");
+						}
+						return;
+					}
+
+					// For navigation actions, check if already at target
 					if (entryId === realLeafId) {
-						done();
 						this.showStatus("Already at this point");
 						return;
 					}
 
-					// Ask about summarization
-					done(); // Close selector first
-
-					// Loop until user makes a complete choice or cancels to tree
+					// Parse navigation choice
 					let wantsSummary = false;
 					let customInstructions: string | undefined;
 
-					// Check if we should skip the prompt (user preference to always default to no summary)
-					if (!this.settingsManager.getBranchSummarySkipPrompt()) {
-						while (true) {
-							const summaryChoice = await this.showExtensionSelector("Summarize branch?", [
-								"No summary",
-								"Summarize",
-								"Summarize with custom prompt",
-							]);
-
-							if (summaryChoice === undefined) {
-								// User pressed escape - re-show tree selector with same selection
-								this.showTreeSelector(entryId);
-								return;
-							}
-
-							wantsSummary = summaryChoice !== "No summary";
-
-							if (summaryChoice === "Summarize with custom prompt") {
-								customInstructions = await this.showExtensionEditor("Custom summarization instructions");
-								if (customInstructions === undefined) {
-									// User cancelled - loop back to summary selector
-									continue;
-								}
-							}
-
-							// User made a complete choice
-							break;
+					if (action === NAVIGATE_SUMMARY) {
+						wantsSummary = true;
+					} else if (action === NAVIGATE_CUSTOM) {
+						wantsSummary = true;
+						customInstructions = await this.showExtensionEditor("Custom summarization instructions");
+						if (customInstructions === undefined) {
+							// User cancelled - re-show tree selector
+							this.showTreeSelector(entryId);
+							return;
 						}
 					}
 

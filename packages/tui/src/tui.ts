@@ -331,6 +331,10 @@ export class TUI extends Container {
 	private autoFollow = true;
 	private previousScrollableLineCount = 0;
 	private lastScrollableViewport = 0;
+
+	getScrollableViewport(): number {
+		return this.lastScrollableViewport;
+	}
 	private autoScrollTimer: ReturnType<typeof setInterval> | null = null;
 	private mouseListenerRemover?: () => void;
 	// Cached overlay layouts from the most recent render, used for selection clip
@@ -833,7 +837,7 @@ export class TUI extends Container {
 		}
 	}
 
-	private getMaxScrollOffset(): number {
+	getMaxScrollOffset(): number {
 		const width = this.terminal.columns;
 		const height = this.terminal.rows;
 		const childLines: string[][] = [];
@@ -904,6 +908,10 @@ export class TUI extends Container {
 
 	setFixedBottomCount(count: number): void {
 		this.fixedBottomCount = count;
+	}
+
+	getFixedBottomCount(): number {
+		return this.fixedBottomCount;
 	}
 
 	private startAutoScroll(direction: -1 | 1): void {
