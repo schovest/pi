@@ -3065,6 +3065,9 @@ export class InteractiveMode {
 			if (!text) return;
 
 			// Handle commands
+			if (text.startsWith("/")) {
+				this.editor.addToHistory?.(text);
+			}
 			if (text === "/settings") {
 				this.showSettingsSelector();
 				this.editor.setText("");
