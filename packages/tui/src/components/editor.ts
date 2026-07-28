@@ -515,7 +515,6 @@ export class Editor implements Component, Focusable {
 		const result: string[] = [];
 		const leftPadding = " ".repeat(paddingX);
 		const rightPadding = leftPadding;
-		const emptyContentLine = leftPadding + " ".repeat(contentWidth) + rightPadding;
 
 		// Render top border (with scroll indicator if scrolled down, or title if set)
 		if (this.scrollOffset > 0) {
@@ -597,9 +596,6 @@ export class Editor implements Component, Focusable {
 		} else {
 			result.push(horizontal.repeat(width));
 		}
-
-		// Vertical padding between top border and first content line
-		result.push(emptyContentLine);
 
 		// Render each visible layout line
 		// Emit hardware cursor marker when focused so TUI can position the
