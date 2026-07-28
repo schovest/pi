@@ -75,6 +75,13 @@ export {
 	type TurnStartEvent,
 	type WorkingIndicatorOptions,
 } from "./extensions/index.ts";
+export {
+	type GitSnapshotData,
+	hasUncommittedChanges,
+	isGitRepo,
+	restoreSnapshot,
+	takeSnapshot,
+} from "./git-snapshot.ts";
 export { createSyntheticSourceInfo } from "./source-info.ts";
 export {
 	createSubagentToolDefinition,
