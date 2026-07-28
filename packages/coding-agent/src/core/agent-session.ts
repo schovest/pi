@@ -92,6 +92,7 @@ import {
 	wrapRegisteredTools,
 } from "./extensions/index.ts";
 import { emitSessionShutdownEvent } from "./extensions/runner.ts";
+import { protectSnapshot, takeSnapshot } from "./git-snapshot.ts";
 import type { BashExecutionMessage, CustomMessage } from "./messages.ts";
 import { ModelRegistry } from "./model-registry.ts";
 import type { ModelRuntime } from "./model-runtime.ts";
@@ -1426,6 +1427,21 @@ export class AgentSession {
 
 		if (!messages) {
 			return;
+		}
+
+		// Take git snapshot before processing the prompt (for revert functionality)
+		try {
+			const cwd = this.sessionManager.getCwd();
+			const snapshot = await takeSnapshot(cwd, this.settingsManager.getGitSnapshotMode());
+			if (snapshot) {
+				const entryId = this.sessionManager.appendCustomEntry("git_snapshot", snapshot);
+				// Protect stash object from gc if working tree was dirty
+				if (snapshot.stashCommit) {
+					await protectSnapshot(cwd, entryId, snapshot.stashCommit);
+				}
+			}
+		} catch {
+			// Non-fatal: snapshot is best-effort, prompt should continue
 		}
 
 		preflightResult?.(true);

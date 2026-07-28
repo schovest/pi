@@ -16,7 +16,7 @@ Primary agent 通过以下方式影响 agent 行为：
 - agent 角色 prompt 立即更新
 - 工具集立即重解析
 - 系统提示词自动重建
-- 选择持久化到项目 settings（`defaultPrimaryAgent`），下次启动自动恢复
+- 选择持久化到全局 settings（`defaultPrimaryAgent`），下次启动自动恢复
 
 ## 内置 Agent
 
@@ -211,7 +211,7 @@ const currentAgent = session.currentPrimaryAgent;  // "build" | "plan" | ...
 
 ## 持久化
 
-切换 primary agent 时，选择自动保存到项目 settings（`.pi/settings.json`）：
+切换 primary agent 时，选择自动保存到全局 settings（`~/.pi/settings.json`）：
 
 ```json
 {
@@ -240,7 +240,7 @@ const currentAgent = session.currentPrimaryAgent;  // "build" | "plan" | ...
 | 系统提示词 | 修改主 agent 的系统提示词 | 有自己的独立系统提示词 |
 | 工具控制 | `includedTools` / `excludedTools` | `includedTools` / `excludedTools` |
 | Skills 控制 | `skills`（不配置则全部） | `skills`（不配置则不继承） |
-| 持久化 | 自动保存到项目 settings | 不持久化 |
+| 持久化 | 自动保存到全局 settings | 不持久化 |
 | 数量 | 一个会话同时只有一个 | 可并行运行多个 |
 | 定义位置 | `primary-agents/*.md` | `subagents/*.md` |
 

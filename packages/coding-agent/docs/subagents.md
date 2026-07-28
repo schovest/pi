@@ -28,7 +28,7 @@ includedTools: [read, grep, find, ls]
 **Frontmatter 字段**：
 
 | 字段 | 类型 | 说明 |
-|------|------|------|
+| ------ | ------ | ------ |
 | `description` | string | Agent 描述，用于工具提示 |
 | `model` | string | 模型 ID，如 `anthropic/claude-sonnet-4-5` |
 | `thinking` | string | 思考级别：`off`、`minimal`、`low`、`medium`、`high`、`xhigh` |
@@ -106,22 +106,12 @@ Frontmatter 中的 `model` 和 `thinking` 可被任务参数覆盖。
 ## Agent Scope
 
 | Scope | 加载的 Agent |
-|-------|-------------|
+| ------- | ------------- |
 | `user`（默认） | 内置 + `~/.pi/agent/subagents/` |
 | `project` | 内置 + `.pi/subagents/` |
 | `both` | 内置 + 用户级 + 项目级 |
 
 项目级 agent 覆盖同名的用户级 agent。
-
-通过设置 `settings.json` 中的 `defaultPrimaryAgent` 可以为项目指定默认使用的主 agent：
-
-```json
-{
-  "defaultPrimaryAgent": "my-custom-agent"
-}
-```
-
-设置后，每次启动会话时自动恢复该 agent。
 
 在任务中通过 `subagentScope` 参数控制 agent 搜索范围：
 
@@ -143,6 +133,7 @@ Frontmatter 中的 `model` 和 `thinking` 可被任务参数覆盖。
 ### 1. 确定 Agent 目标
 
 明确 agent 的职责边界：
+
 - 输入：agent 接收什么任务描述
 - 输出：agent 应返回什么格式
 - 工具：agent 需要哪些工具
@@ -186,7 +177,7 @@ includedTools: [read, grep, find, ls, bash]
 ### 3. 选择工具集
 
 | 工具 | 用途 |
-|------|------|
+| ------ | ------ |
 | `read` | 读取文件内容 |
 | `bash` | 执行命令（git、构建工具等） |
 | `edit` | 编辑文件 |
@@ -206,6 +197,7 @@ includedTools: [read, grep, find, ls, bash]
 ### 4. 设计输出格式
 
 结构化输出便于：
+
 - 主 agent 理解结果
 - 链式模式传递给下一步
 - 用户审查
@@ -273,7 +265,7 @@ pi
 ### 并行 vs 链式
 
 | 场景 | 模式 |
-|------|------|
+| ------ | ------ |
 | 独立任务（无依赖） | parallel |
 | 需要前一步结果 | chain |
 | 混合 | 分组并行 + 链式 |

@@ -1286,6 +1286,23 @@ export class SessionManager {
 	}
 
 	/**
+	 * Find the most recent git_snapshot custom entry at or before the given entry ID.
+	 * Walks from the given entry towards root.
+	 * @returns The entry data and ID if found, null otherwise
+	 */
+	findGitSnapshot(fromEntryId?: string | null): { data: unknown; entryId: string } | null {
+		const startId = fromEntryId ?? this.leafId;
+		let current = startId ? this.byId.get(startId) : undefined;
+		while (current) {
+			if (current.type === "custom" && (current as CustomEntry).customType === "git_snapshot") {
+				return { data: (current as CustomEntry).data, entryId: current.id };
+			}
+			current = current.parentId ? this.byId.get(current.parentId) : undefined;
+		}
+		return null;
+	}
+
+	/**
 	 * Build the session context (what gets sent to the LLM).
 	 * Uses tree traversal from current leaf.
 	 */
