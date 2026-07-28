@@ -84,6 +84,24 @@ describe("git-snapshot", () => {
 			expect(snapshot!.stashCommit).toMatch(/^[0-9a-f]{40}$/);
 		});
 
+		it("mode=all captures gitignored files", async () => {
+			writeFileSync(join(repoDir, ".gitignore"), "ignored.txt");
+			writeFileSync(join(repoDir, "ignored.txt"), "should be captured");
+			const snapshot = await takeSnapshot(repoDir, "all");
+			expect(snapshot).not.toBeNull();
+			expect(snapshot!.clean).toBe(false);
+			expect(snapshot!.stashCommit).not.toBeNull();
+		});
+
+		it("mode=include-untracked does not capture gitignored files", async () => {
+			writeFileSync(join(repoDir, ".gitignore"), "ignored.txt");
+			writeFileSync(join(repoDir, "ignored.txt"), "should NOT be captured");
+			const snapshot = await takeSnapshot(repoDir, "include-untracked");
+			// .gitignore itself is untracked and counts, so clean=false but ignored.txt won't be in stash
+			expect(snapshot).not.toBeNull();
+			expect(snapshot!.clean).toBe(false);
+		});
+
 		it("returns null for non-git directory", async () => {
 			const nonGit = join(tmpdir(), `pi-test-nongit-${Date.now()}`);
 			mkdirSync(nonGit, { recursive: true });
@@ -153,6 +171,23 @@ describe("git-snapshot", () => {
 
 			expect(await hasUncommittedChanges(repoDir)).toBe(false);
 			expect(readFileSync(join(repoDir, "file.txt"), "utf-8")).toBe("initial content");
+		});
+
+		it("mode=all restores gitignored files", async () => {
+			writeFileSync(join(repoDir, ".gitignore"), "ignored.txt");
+			writeFileSync(join(repoDir, "ignored.txt"), "captured");
+			const snapshot = await takeSnapshot(repoDir, "all");
+
+			// Remove files
+			unlinkSync(join(repoDir, ".gitignore"));
+			unlinkSync(join(repoDir, "ignored.txt"));
+
+			// Restore
+			await restoreSnapshot(repoDir, snapshot!);
+
+			// Verify gitignored file is restored
+			expect(existsSync(join(repoDir, "ignored.txt"))).toBe(true);
+			expect(readFileSync(join(repoDir, "ignored.txt"), "utf-8")).toBe("captured");
 		});
 	});
 });

@@ -1432,7 +1432,8 @@ export class AgentSession {
 		// Take git snapshot before processing the prompt (for revert functionality)
 		try {
 			const cwd = this.sessionManager.getCwd();
-			const snapshot = await takeSnapshot(cwd);
+			const mode = this.settingsManager.getGitSnapshotMode();
+			const snapshot = await takeSnapshot(cwd, mode);
 			if (snapshot) {
 				const entryId = this.sessionManager.appendCustomEntry("git_snapshot", snapshot);
 				// Protect stash object from gc if working tree was dirty

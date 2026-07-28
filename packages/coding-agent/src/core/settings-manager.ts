@@ -140,6 +140,8 @@ export interface Settings {
 	httpProxy?: string; // Proxy URL applied as HTTP_PROXY and HTTPS_PROXY for Pi-managed HTTP clients
 	websocketConnectTimeoutMs?: number; // WebSocket connect/open handshake timeout in milliseconds; 0 disables it
 	bashBackgroundTimeout?: number; // Default timeout in seconds before a bash command is moved to background (default: 120)
+	/** Git snapshot mode: "include-untracked" captures untracked files only; "all" also captures .gitignore'd files. Default: "include-untracked" */
+	gitSnapshotMode?: "include-untracked" | "all";
 }
 
 /** Deep merge settings: project/overrides take precedence, nested objects merge recursively */
@@ -1262,6 +1264,16 @@ export class SettingsManager {
 	setWarnings(warnings: WarningSettings): void {
 		this.globalSettings.warnings = { ...warnings };
 		this.markModified("warnings");
+		this.save();
+	}
+
+	getGitSnapshotMode(): "include-untracked" | "all" {
+		return this.settings.gitSnapshotMode ?? "include-untracked";
+	}
+
+	setGitSnapshotMode(mode: "include-untracked" | "all"): void {
+		this.globalSettings.gitSnapshotMode = mode;
+		this.markModified("gitSnapshotMode");
 		this.save();
 	}
 }

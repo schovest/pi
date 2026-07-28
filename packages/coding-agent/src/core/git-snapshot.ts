@@ -31,17 +31,24 @@ export async function isGitRepo(cwd: string): Promise<boolean> {
 /**
  * Take a git snapshot of the current working tree state.
  *
- * Uses `git stash push --include-untracked` to capture the complete state
- * (tracked modifications + staged changes + untracked files), then immediately
- * `git stash pop` to restore the working tree. This creates a proper 3-parent
- * stash commit that preserves untracked files.
+ * Uses `git stash push` with the specified mode to capture the working tree,
+ * then immediately `git stash pop` to restore it. Creates a 3-parent stash
+ * commit that preserves both tracked modifications and untracked files.
  *
- * @returns GitSnapshotData, or null if not a git repository
+ * @param cwd Working directory
+ * @param mode "include-untracked" (default) captures untracked files only;
+ *             "all" also captures .gitignore'd files
+ * @returns GitSnapshotData, or null if not a git repository or on error
  */
-export async function takeSnapshot(cwd: string): Promise<GitSnapshotData | null> {
+export async function takeSnapshot(
+	cwd: string,
+	mode: "include-untracked" | "all" = "include-untracked",
+): Promise<GitSnapshotData | null> {
 	if (!(await isGitRepo(cwd))) {
 		return null;
 	}
+
+	const stashFlag = mode === "all" ? "--all" : "--include-untracked";
 
 	try {
 		// Get current HEAD
@@ -62,10 +69,8 @@ export async function takeSnapshot(cwd: string): Promise<GitSnapshotData | null>
 			return { head, stashCommit: null, clean: true };
 		}
 
-		// Push stash to capture complete working tree state (including untracked)
-		// git stash push creates a 3-parent commit (HEAD, index, untracked) which
-		// preserves untracked files properly, unlike git stash create.
-		await execFileAsync("git", ["stash", "push", "--include-untracked", "-m", "pi-snapshot"], {
+		// Push stash to capture working tree state
+		await execFileAsync("git", ["stash", "push", stashFlag, "-m", "pi-snapshot"], {
 			cwd,
 			maxBuffer: MAX_BUFFER,
 		});
