@@ -3849,8 +3849,6 @@ describe("Editor component", () => {
 			editor.handleInput(`\x1b[200~${bigContent}\x1b[201~`);
 			editor.render(80);
 
-			const text = editor.getText();
-			const _marker = text.match(/\[paste #\d+ \d+ chars\]/)![0];
 			// Line 0: "12345678901234567890"
 			// Line 1: "" (empty)
 			// Line 2: "hello [paste #1 2000 chars]"

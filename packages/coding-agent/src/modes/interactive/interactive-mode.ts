@@ -803,12 +803,13 @@ export class InteractiveMode {
 		// Set up theme file watcher
 		onThemeChange(() => {
 			this.ui.invalidate();
-			this.updateEditorBorderColor();
+			this.updateEditorVisualState();
 			this.ui.requestRender();
 		});
 
 		// Set up git branch watcher (uses provider instead of footer)
 		this.footerDataProvider.onBranchChange(() => {
+			this.footer.invalidate();
 			this.ui.requestRender();
 		});
 
@@ -1705,7 +1706,7 @@ export class InteractiveMode {
 		await this.bindCurrentSessionExtensions();
 		this.subscribeToAgent();
 		await this.updateAvailableProviderCount();
-		this.updateEditorBorderColor();
+		this.updateEditorVisualState();
 		this.updateTerminalTitle();
 	}
 
@@ -2530,7 +2531,7 @@ export class InteractiveMode {
 			} else if (this.isBashMode) {
 				this.editor.setText("");
 				this.isBashMode = false;
-				this.updateEditorBorderColor();
+				this.updateEditorVisualState();
 			} else if (!this.editor.getText().trim()) {
 				// Double-escape with empty editor triggers /tree, /fork, or nothing based on setting
 				const action = this.settingsManager.getDoubleEscapeAction();
@@ -2580,7 +2581,7 @@ export class InteractiveMode {
 			const wasBashMode = this.isBashMode;
 			this.isBashMode = text.trimStart().startsWith("!");
 			if (wasBashMode !== this.isBashMode) {
-				this.updateEditorBorderColor();
+				this.updateEditorVisualState();
 			}
 		};
 
@@ -3243,7 +3244,7 @@ export class InteractiveMode {
 					this.editor.addToHistory?.(text);
 					await this.handleBashCommand(command, isExcluded);
 					this.isBashMode = false;
-					this.updateEditorBorderColor();
+					this.updateEditorVisualState();
 					return;
 				}
 			}
@@ -3341,7 +3342,7 @@ export class InteractiveMode {
 
 			case "thinking_level_changed":
 				this.footer.invalidate();
-				this.updateEditorBorderColor();
+				this.updateEditorVisualState();
 				break;
 
 			case "message_start":
@@ -3859,7 +3860,7 @@ export class InteractiveMode {
 
 		if (options.updateFooter) {
 			this.footer.invalidate();
-			this.updateEditorBorderColor();
+			this.updateEditorVisualState();
 		}
 
 		for (let i = 0; i < sessionContext.messages.length; i++) {
@@ -4245,7 +4246,7 @@ export class InteractiveMode {
 		}
 	}
 
-	private updateEditorBorderColor(): void {
+	private updateEditorVisualState(): void {
 		if (this.isBashMode) {
 			this.editor.borderColor = theme.getBashModeBorderColor();
 		} else {
@@ -4261,7 +4262,7 @@ export class InteractiveMode {
 			this.showStatus("Current model does not support thinking");
 		} else {
 			this.footer.invalidate();
-			this.updateEditorBorderColor();
+			this.updateEditorVisualState();
 			this.showStatus(`Thinking level: ${newLevel}`);
 		}
 	}
@@ -4300,7 +4301,7 @@ export class InteractiveMode {
 				this.showStatus(msg);
 			} else {
 				this.footer.invalidate();
-				this.updateEditorBorderColor();
+				this.updateEditorVisualState();
 				const thinkingStr =
 					result.model.reasoning && result.thinkingLevel !== "off" ? ` (thinking: ${result.thinkingLevel})` : "";
 				this.showStatus(`Switched to ${result.model.name || result.model.id}${thinkingStr}`);
@@ -4854,7 +4855,7 @@ export class InteractiveMode {
 					onThinkingLevelChange: (level) => {
 						this.session.setThinkingLevel(level);
 						this.footer.invalidate();
-						this.updateEditorBorderColor();
+						this.updateEditorVisualState();
 					},
 					onThemeChange: (themeName) => {
 						const result = setTheme(themeName, true);
@@ -5014,7 +5015,7 @@ export class InteractiveMode {
 			try {
 				await this.session.setModel(model);
 				this.footer.invalidate();
-				this.updateEditorBorderColor();
+				this.updateEditorVisualState();
 				this.showStatus(`Model: ${model.id}`);
 				void this.maybeWarnAboutAnthropicSubscriptionAuth(model);
 				this.checkDaxnutsEasterEgg(model);
@@ -5191,7 +5192,7 @@ export class InteractiveMode {
 					try {
 						await this.session.setModel(model);
 						this.footer.invalidate();
-						this.updateEditorBorderColor();
+						this.updateEditorVisualState();
 						done();
 						this.showStatus(`Model: ${model.id}`);
 						void this.maybeWarnAboutAnthropicSubscriptionAuth(model);
@@ -5225,7 +5226,7 @@ export class InteractiveMode {
 				(level) => {
 					this.session.setThinkingLevel(level);
 					this.footer.invalidate();
-					this.updateEditorBorderColor();
+					this.updateEditorVisualState();
 					done();
 					this.showStatus(`Thinking level: ${level}`);
 				},
@@ -6074,7 +6075,7 @@ export class InteractiveMode {
 
 		await this.updateAvailableProviderCount();
 		this.footer.invalidate();
-		this.updateEditorBorderColor();
+		this.updateEditorVisualState();
 		if (selectedModel) {
 			this.showStatus(`${actionLabel}. Selected ${selectedModel.id}. Credentials saved to ${getAuthPath()}`);
 			void this.maybeWarnAboutAnthropicSubscriptionAuth(selectedModel);

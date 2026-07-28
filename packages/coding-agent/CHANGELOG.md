@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [0.12.6] - 2026-07-28
+
+### Fixed
+
+- Subagent 子会话不再触发 git snapshot，避免产生无用的 stash commit 和 git ref 残留
+
+### Changed
+
+- 顶部边框整体重排：左侧显示 Π + agent + path + branch，右侧显示 (provider) model · effort（思考强度），底部 footer 保留完整 token/上下文统计
+- 边框元素分隔符从 `·`/`•` 改为空格，相邻元素使用不同颜色以维持视觉区分
+- primary-agent 移至 Π 符号之后，emoji 风格添加 🚀 前缀
+- 移除编辑器 prompt 前缀功能（`>` / `$`）
+
 ## [0.12.5] - 2026-07-28
 
 ### Fixed

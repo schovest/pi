@@ -9,7 +9,11 @@ interface MockEditor {
 	borderTitleRight?: string;
 }
 
-function createSession(currentPrimaryAgent: string, modelId = "test-model"): AgentSession {
+function createSession(
+	currentPrimaryAgent: string,
+	modelId = "test-model",
+	overrides?: Partial<AgentSession>,
+): AgentSession {
 	const session = {
 		currentPrimaryAgent,
 		state: {
@@ -30,16 +34,17 @@ function createSession(currentPrimaryAgent: string, modelId = "test-model"): Age
 		getRunningSubagentCount: () => 0,
 		backgroundProcessManager: { getRunningCount: () => 0 },
 		modelRuntime: { isUsingOAuth: () => false },
+		...overrides,
 	};
 
 	return session as unknown as AgentSession;
 }
 
-function createFooterData(): ReadonlyFooterDataProvider {
+function createFooterData(availableProviderCount = 1): ReadonlyFooterDataProvider {
 	return {
 		getGitBranch: () => "main",
 		getExtensionStatuses: () => new Map<string, string>(),
-		getAvailableProviderCount: () => 1,
+		getAvailableProviderCount: () => availableProviderCount,
 		onBranchChange: () => () => {},
 	};
 }
@@ -57,8 +62,8 @@ describe("FooterComponent border title sync", () => {
 
 		expect(editor.borderTitle).toContain("/tmp/project");
 		expect(editor.borderTitle).toContain("agent-a");
-		expect(editor.borderTitle).toContain("test-model");
-		expect(editor.borderTitleRight).toBeUndefined();
+		// Model is now on the right side, not left
+		expect(editor.borderTitleRight).toContain("test-model");
 	});
 
 	it("updates the editor border eagerly when the primary agent changes", () => {
@@ -100,6 +105,29 @@ describe("FooterComponent border title sync", () => {
 		footer.render(120);
 
 		expect(editor.borderTitle).toContain("agent-a");
-		expect(editor.borderTitleRight).toBeUndefined();
+		expect(editor.borderTitleRight).toContain("test-model");
+	});
+
+	it("places provider before model name (not before agent) when multiple providers exist", () => {
+		const editor: MockEditor = {};
+		const footer = new FooterComponent(
+			createSession("coding", "deepseek-v4-flash"),
+			createFooterData(2),
+			editor as never,
+		);
+
+		// Agent now lives in getPathDisplay (after Π)
+		const pathDisplay = footer.getPathDisplay();
+		expect(pathDisplay).toContain("coding");
+
+		const modelDisplay = footer.getModelEffortDisplay();
+		// Provider should appear before model name in getModelEffortDisplay
+		expect(modelDisplay).toContain("(test)");
+		expect(modelDisplay).toContain("deepseek-v4-flash");
+
+		// Verify provider is before model name
+		const providerPos = modelDisplay.indexOf("(test)");
+		const modelPos = modelDisplay.indexOf("deepseek-v4-flash");
+		expect(providerPos).toBeLessThan(modelPos);
 	});
 });

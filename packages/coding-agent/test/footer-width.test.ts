@@ -122,14 +122,14 @@ describe("FooterComponent.getPathDisplay", () => {
 		const session = createSession({ sessionName: "my-session" });
 		const footer = new FooterComponent(session, createFooterData(1));
 
-		expect(stripAnsi(footer.getPathDisplay())).toBe("Π ⋅ /tmp/project ⋅ main ⋅ my-session");
+		expect(stripAnsi(footer.getPathDisplay())).toBe("Π /tmp/project main my-session");
 	});
 
 	it("includes cwd and branch without session name (plain style)", () => {
 		const session = createSession({ sessionName: "" });
 		const footer = new FooterComponent(session, createFooterData(1));
 
-		expect(stripAnsi(footer.getPathDisplay())).toBe("Π ⋅ /tmp/project ⋅ main");
+		expect(stripAnsi(footer.getPathDisplay())).toBe("Π /tmp/project main");
 	});
 
 	it("includes emoji icons in emoji style", () => {
@@ -137,7 +137,7 @@ describe("FooterComponent.getPathDisplay", () => {
 		const footer = new FooterComponent(session, createFooterData(1));
 		footer.setBorderTitleStyle("emoji");
 
-		expect(stripAnsi(footer.getPathDisplay())).toBe("Π ⋅ 📁 /tmp/project ⋅ 🔀 main ⋅ ✦ my-session");
+		expect(stripAnsi(footer.getPathDisplay())).toBe("Π 📁 /tmp/project 🔀 main ✦ my-session");
 	});
 
 	it("uses emoji style without session name", () => {
@@ -145,7 +145,7 @@ describe("FooterComponent.getPathDisplay", () => {
 		const footer = new FooterComponent(session, createFooterData(1));
 		footer.setBorderTitleStyle("emoji");
 
-		expect(stripAnsi(footer.getPathDisplay())).toBe("Π ⋅ 📁 /tmp/project ⋅ 🔀 main");
+		expect(stripAnsi(footer.getPathDisplay())).toBe("Π 📁 /tmp/project 🔀 main");
 	});
 });
 
