@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.12.4] - 2026-07-28
+
 ### Added
 
 - **Revert and Delete**：在 session tree 中选中用户消息节点 → Enter → 选择 "Revert and Delete"，除正常 revert 行为外，还会删除回滚点之后的所有游离 session 条目及其对应的 git snapshot 引用，阻止磁盘空间持续膨胀
