@@ -5546,7 +5546,8 @@ export class InteractiveMode {
 
 	/**
 	 * Revert and Delete: revert to a tree node AND delete all orphaned entries
-	 * after the target point, including their git snapshot refs.
+	 * after the target point, including the snapshot entry for the target node
+	 * itself and its git ref (a new snapshot will be created for the next turn).
 	 */
 	private async handleRevertAndDelete(targetId: string): Promise<void> {
 		// Find git snapshot for target node
@@ -5596,11 +5597,23 @@ export class InteractiveMode {
 				return;
 			}
 
-			// Determine the new leaf ID to keep
-			const newLeafId = this.sessionManager.getLeafId();
+			// The snapshot entry we reverted to is now stale — the next prompt
+			// will create a new snapshot. Move the leaf to the snapshot's parent
+			// so pruneOrphanedEntries also removes the stale snapshot entry.
+			let keepLeafId: string | null = this.sessionManager.getLeafId();
+			if (keepLeafId === snapshotResult.entryId) {
+				const parentEntry = this.sessionManager.getEntry(snapshotResult.entryId);
+				if (parentEntry?.parentId) {
+					this.sessionManager.branch(parentEntry.parentId);
+				} else {
+					this.sessionManager.resetLeaf();
+				}
+				keepLeafId = this.sessionManager.getLeafId();
+			}
 
-			// Prune orphaned entries (destructive: removes abandoned branch)
-			const removedIds = this.sessionManager.pruneOrphanedEntries(newLeafId);
+			// Prune orphaned entries (destructive: removes abandoned branch,
+			// including the stale snapshot entry itself)
+			const removedIds = this.sessionManager.pruneOrphanedEntries(keepLeafId);
 
 			// Clean up git refs for removed snapshot entries
 			for (const id of removedIds) {
