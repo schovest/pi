@@ -142,6 +142,8 @@ export interface Settings {
 	bashBackgroundTimeout?: number; // Default timeout in seconds before a bash command is moved to background (default: 120)
 	/** Git snapshot mode: "include-untracked" captures untracked files only; "all" also captures .gitignore'd files. Default: "include-untracked" */
 	gitSnapshotMode?: "include-untracked" | "all";
+	/** Maximum number of git snapshot checkpoints to retain. Oldest snapshots are pruned when exceeded. Set to 0 to disable snapshots entirely. Default: 100 */
+	gitSnapshotMaxCount?: number;
 }
 
 /** Deep merge settings: project/overrides take precedence, nested objects merge recursively */
@@ -1274,6 +1276,16 @@ export class SettingsManager {
 	setGitSnapshotMode(mode: "include-untracked" | "all"): void {
 		this.globalSettings.gitSnapshotMode = mode;
 		this.markModified("gitSnapshotMode");
+		this.save();
+	}
+
+	getGitSnapshotMaxCount(): number {
+		return this.settings.gitSnapshotMaxCount ?? 100;
+	}
+
+	setGitSnapshotMaxCount(limit: number): void {
+		this.globalSettings.gitSnapshotMaxCount = limit;
+		this.markModified("gitSnapshotMaxCount");
 		this.save();
 	}
 }

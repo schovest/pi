@@ -71,6 +71,8 @@ export interface SettingsConfig {
 	clearOnShrink: boolean;
 	showTerminalProgress: boolean;
 	warnings: WarningSettings;
+	gitSnapshotMode: "include-untracked" | "all";
+	gitSnapshotMaxCount: number;
 }
 
 export interface SettingsCallbacks {
@@ -101,6 +103,8 @@ export interface SettingsCallbacks {
 	onClearOnShrinkChange: (enabled: boolean) => void;
 	onShowTerminalProgressChange: (enabled: boolean) => void;
 	onWarningsChange: (warnings: WarningSettings) => void;
+	onGitSnapshotModeChange: (mode: "include-untracked" | "all") => void;
+	onGitSnapshotMaxCountChange: (count: number) => void;
 	onCancel: () => void;
 }
 
@@ -489,6 +493,26 @@ export class SettingsSelectorComponent extends Container {
 			values: ["true", "false"],
 		});
 
+		// Git snapshot mode (insert after terminal-progress)
+		const terminalProgressIndex = items.findIndex((item) => item.id === "terminal-progress");
+		items.splice(terminalProgressIndex + 1, 0, {
+			id: "git-snapshot-mode",
+			label: "Git snapshot mode",
+			description: "What files to capture in git snapshots for revert",
+			currentValue: config.gitSnapshotMode,
+			values: ["include-untracked", "all"],
+		});
+
+		// Git snapshot max count (insert after git-snapshot-mode)
+		const snapshotModeIndex = items.findIndex((item) => item.id === "git-snapshot-mode");
+		items.splice(snapshotModeIndex + 1, 0, {
+			id: "git-snapshot-max-count",
+			label: "Git snapshot max count",
+			description: "Maximum snapshots to retain (0 = disable snapshots)",
+			currentValue: String(config.gitSnapshotMaxCount),
+			values: ["0", "20", "50", "100", "200"],
+		});
+
 		// Add borders
 		this.addChild(new DynamicBorder());
 
@@ -576,6 +600,12 @@ export class SettingsSelectorComponent extends Container {
 						break;
 					case "terminal-progress":
 						callbacks.onShowTerminalProgressChange(newValue === "true");
+						break;
+					case "git-snapshot-mode":
+						callbacks.onGitSnapshotModeChange(newValue as "include-untracked" | "all");
+						break;
+					case "git-snapshot-max-count":
+						callbacks.onGitSnapshotMaxCountChange(parseInt(newValue, 10));
 						break;
 				}
 			},

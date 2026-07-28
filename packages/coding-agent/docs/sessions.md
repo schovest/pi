@@ -22,11 +22,12 @@ For the JSONL file format and SessionManager API, see [Session Format](session-f
 ## Session Commands
 
 | Command | Description |
-|---------|-------------|
+| --------- | ------------- |
 | `/resume` | Browse and select previous sessions |
 | `/new` | Start a new session |
 | `/name <name>` | Set the current session display name |
 | `/session` | Show session info |
+| `/git-snapshot` | Show git snapshot count, refs, and config |
 | `/tree` | Navigate the current session tree |
 | `/fork` | Create a new session from a previous user message |
 | `/clone` | Duplicate the current active branch into a new session |
@@ -87,7 +88,7 @@ Example shape:
 ### Tree Controls
 
 | Key | Action |
-|-----|--------|
+| ----- | -------- |
 | ↑/↓ | Navigate visible entries |
 | ←/→ | Page up/down |
 | Ctrl+←/Ctrl+→ or Alt+←/Alt+→ | Fold/unfold or jump between branch segments |
@@ -118,7 +119,7 @@ Selecting the root user message resets the leaf to an empty conversation and pla
 ## `/tree`, `/fork`, and `/clone`
 
 | Feature | `/tree` | `/fork` | `/clone` |
-|---------|---------|---------|----------|
+| --------- | --------- | --------- | ---------- |
 | Output | Same session file | New session file | New session file |
 | View | Full tree | User-message selector | Current active branch |
 | Typical use | Explore alternatives in place | Start a new session from an earlier prompt | Duplicate current work before continuing |

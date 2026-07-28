@@ -3,11 +3,13 @@
  * Handles TUI rendering and user interaction, delegating business logic to AgentSession.
  */
 
+import { execFile } from "node:child_process";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as readline from "node:readline";
+import { promisify } from "node:util";
 import type { AgentMessage, ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { AuthEvent, AuthPrompt } from "@earendil-works/pi-ai";
 import {
@@ -75,7 +77,7 @@ import type {
 } from "../../core/extensions/index.ts";
 import { FooterDataProvider, type ReadonlyFooterDataProvider } from "../../core/footer-data-provider.ts";
 import type { GitSnapshotData } from "../../core/git-snapshot.ts";
-import { hasUncommittedChanges, restoreSnapshot } from "../../core/git-snapshot.ts";
+import { hasUncommittedChanges, isGitRepo, restoreSnapshot, unprotectSnapshot } from "../../core/git-snapshot.ts";
 import { configureHttpDispatcher, formatHttpIdleTimeoutMs } from "../../core/http-dispatcher.ts";
 import { type AppKeybinding, KeybindingsManager } from "../../core/keybindings.ts";
 import { createCompactionSummaryMessage } from "../../core/messages.ts";
@@ -2860,6 +2862,14 @@ export class InteractiveMode {
 		});
 
 		registry.register({
+			id: "slash.gitSnapshot",
+			label: "/git-snapshot",
+			description: "查看 git 快照详情",
+			category: "slash",
+			handler: () => this.handleGitSnapshotCommand(),
+		});
+
+		registry.register({
 			id: "slash.subagents",
 			label: "/subagents",
 			description: "查看子 agent",
@@ -3107,6 +3117,11 @@ export class InteractiveMode {
 			}
 			if (text === "/session") {
 				this.handleSessionCommand();
+				this.editor.setText("");
+				return;
+			}
+			if (text === "/git-snapshot") {
+				void this.handleGitSnapshotCommand();
 				this.editor.setText("");
 				return;
 			}
@@ -4784,6 +4799,8 @@ export class InteractiveMode {
 					clearOnShrink: this.settingsManager.getClearOnShrink(),
 					showTerminalProgress: this.settingsManager.getShowTerminalProgress(),
 					warnings: this.settingsManager.getWarnings(),
+					gitSnapshotMode: this.settingsManager.getGitSnapshotMode(),
+					gitSnapshotMaxCount: this.settingsManager.getGitSnapshotMaxCount(),
 				},
 				{
 					onAutoCompactChange: (enabled) => {
@@ -4911,6 +4928,12 @@ export class InteractiveMode {
 					},
 					onWarningsChange: (warnings) => {
 						this.settingsManager.setWarnings(warnings);
+					},
+					onGitSnapshotModeChange: (mode) => {
+						this.settingsManager.setGitSnapshotMode(mode);
+					},
+					onGitSnapshotMaxCountChange: (count) => {
+						this.settingsManager.setGitSnapshotMaxCount(count);
 					},
 					onCancel: () => {
 						done();
@@ -5518,6 +5541,85 @@ export class InteractiveMode {
 		}
 	}
 
+	/**
+	 * Revert and Delete: revert to a tree node AND delete all orphaned entries
+	 * after the target point, including their git snapshot refs.
+	 */
+	private async handleRevertAndDelete(targetId: string): Promise<void> {
+		// Find git snapshot for target node
+		const snapshotResult = this.sessionManager.findGitSnapshot(targetId);
+
+		if (!snapshotResult) {
+			this.showStatus("No git snapshot found for this node");
+			return;
+		}
+
+		const snapshot = snapshotResult.data as GitSnapshotData;
+
+		// Check for uncommitted changes
+		const cwd = this.sessionManager.getCwd();
+		const hasChanges = await hasUncommittedChanges(cwd);
+
+		if (hasChanges) {
+			const confirmed = await this.showExtensionConfirm(
+				"Revert and Delete",
+				"Working tree has uncommitted changes. Reverting will discard them and delete orphaned entries. Continue?",
+			);
+			if (!confirmed) {
+				this.showStatus("Revert and Delete cancelled");
+				return;
+			}
+		}
+
+		// Show loader
+		const revertLoader = new Loader(
+			this.ui,
+			(spinner) => theme.fg("accent", spinner),
+			(text) => theme.fg("muted", text),
+			"Reverting and cleaning up...",
+		);
+		this.statusContainer.addChild(revertLoader);
+		this.ui.requestRender();
+
+		try {
+			// Restore git working tree
+			await restoreSnapshot(cwd, snapshot);
+
+			// Navigate session to target node (without summary)
+			const navResult = await this.session.navigateTree(targetId, { summarize: false });
+
+			if (navResult.cancelled) {
+				this.showStatus("Revert and Delete cancelled");
+				return;
+			}
+
+			// Determine the new leaf ID to keep
+			const newLeafId = this.sessionManager.getLeafId();
+
+			// Prune orphaned entries (destructive: removes abandoned branch)
+			const removedIds = this.sessionManager.pruneOrphanedEntries(newLeafId);
+
+			// Clean up git refs for removed snapshot entries
+			for (const id of removedIds) {
+				await unprotectSnapshot(cwd, id);
+			}
+
+			// Update UI
+			this.chatContainer.clear();
+			this.renderInitialMessages();
+			if (navResult.editorText && !this.editor.getText().trim()) {
+				this.editor.setText(navResult.editorText);
+			}
+			this.showStatus("Reverted and cleaned up orphaned entries");
+			void this.flushCompactionQueue({ willRetry: false });
+		} catch (error) {
+			this.showError(error instanceof Error ? error.message : String(error));
+		} finally {
+			revertLoader.stop();
+			this.statusContainer.clear();
+		}
+	}
+
 	private showTreeSelector(initialSelectedId?: string): void {
 		const tree = this.sessionManager.getTree();
 		const realLeafId = this.sessionManager.getLeafId();
@@ -5543,6 +5645,7 @@ export class InteractiveMode {
 					const NAVIGATE_SUMMARY = "Navigate with summary";
 					const NAVIGATE_CUSTOM = "Navigate with custom prompt";
 					const REVERT = "Revert";
+					const REVERT_DELETE = "Revert and Delete";
 
 					// Revert only available for user message nodes with a git snapshot
 					const entry = this.sessionManager.getEntry(entryId);
@@ -5553,6 +5656,7 @@ export class InteractiveMode {
 					const options = [PEEK, NAVIGATE, NAVIGATE_SUMMARY, NAVIGATE_CUSTOM];
 					if (hasSnapshot) {
 						options.push(REVERT);
+						options.push(REVERT_DELETE);
 					}
 
 					const action = await this.showExtensionSelector("Select action", options);
@@ -5580,6 +5684,11 @@ export class InteractiveMode {
 
 					if (action === REVERT) {
 						await this.handleRevert(entryId);
+						return;
+					}
+
+					if (action === REVERT_DELETE) {
+						await this.handleRevertAndDelete(entryId);
 						return;
 					}
 
@@ -6585,6 +6694,46 @@ export class InteractiveMode {
 		if (stats.cost > 0) {
 			info += `\n${theme.bold("Cost")}\n`;
 			info += `${theme.fg("dim", "Total:")} ${stats.cost.toFixed(4)}`;
+		}
+
+		this.chatContainer.addChild(new Spacer(1));
+		this.chatContainer.addChild(new Text(info, 1, 0));
+		this.ui.requestRender();
+	}
+
+	private async handleGitSnapshotCommand(): Promise<void> {
+		const cwd = this.sessionManager.getCwd();
+		const maxCount = this.settingsManager.getGitSnapshotMaxCount();
+		const totalCount = this.sessionManager.countCustomEntries("git_snapshot");
+		const snapMode = this.settingsManager.getGitSnapshotMode();
+
+		let info = `${theme.bold("Git Snapshot Info")}\n\n`;
+		info += `${theme.fg("dim", "Mode:")} ${snapMode}\n`;
+		info += `${theme.fg("dim", "Max count:")} ${maxCount === 0 ? "disabled" : String(maxCount)}\n`;
+		info += `${theme.fg("dim", "Session entries:")} ${totalCount}\n`;
+
+		// Check git refs
+		const inRepo = await isGitRepo(cwd);
+		if (inRepo) {
+			try {
+				const execFileAsync = promisify(execFile);
+				const { stdout } = await execFileAsync(
+					"git",
+					["for-each-ref", "refs/pi-snapshots/", "--format=%(refname:short) %(objectname:short)"],
+					{ cwd },
+				);
+				const refs = stdout.trim().split("\n").filter(Boolean);
+				info += `${theme.fg("dim", "Git refs:")} ${refs.length}\n`;
+				if (refs.length > 0 && refs.length <= 20) {
+					for (const ref of refs) {
+						info += `  ${theme.fg("dim", ref)}\n`;
+					}
+				}
+			} catch {
+				info += `${theme.fg("dim", "Git refs:")} (unable to query)\n`;
+			}
+		} else {
+			info += `${theme.fg("dim", "Git:")} not a git repository\n`;
 		}
 
 		this.chatContainer.addChild(new Spacer(1));

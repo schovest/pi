@@ -79,8 +79,10 @@ export {
 	type GitSnapshotData,
 	hasUncommittedChanges,
 	isGitRepo,
+	protectSnapshot,
 	restoreSnapshot,
 	takeSnapshot,
+	unprotectSnapshot,
 } from "./git-snapshot.ts";
 export { createSyntheticSourceInfo } from "./source-info.ts";
 export {

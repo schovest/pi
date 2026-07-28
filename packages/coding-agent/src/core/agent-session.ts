@@ -92,7 +92,7 @@ import {
 	wrapRegisteredTools,
 } from "./extensions/index.ts";
 import { emitSessionShutdownEvent } from "./extensions/runner.ts";
-import { protectSnapshot, takeSnapshot } from "./git-snapshot.ts";
+import { protectSnapshot, takeSnapshot, unprotectSnapshot } from "./git-snapshot.ts";
 import type { BashExecutionMessage, CustomMessage } from "./messages.ts";
 import { ModelRegistry } from "./model-registry.ts";
 import type { ModelRuntime } from "./model-runtime.ts";
@@ -1430,18 +1430,28 @@ export class AgentSession {
 		}
 
 		// Take git snapshot before processing the prompt (for revert functionality)
-		try {
-			const cwd = this.sessionManager.getCwd();
-			const snapshot = await takeSnapshot(cwd, this.settingsManager.getGitSnapshotMode());
-			if (snapshot) {
-				const entryId = this.sessionManager.appendCustomEntry("git_snapshot", snapshot);
-				// Protect stash object from gc if working tree was dirty
-				if (snapshot.stashCommit) {
-					await protectSnapshot(cwd, entryId, snapshot.stashCommit);
+		const maxCount = this.settingsManager.getGitSnapshotMaxCount();
+		// Skip snapshots entirely when maxCount is 0 (user disabled the feature)
+		if (maxCount > 0) {
+			try {
+				const cwd = this.sessionManager.getCwd();
+				const snapshot = await takeSnapshot(cwd, this.settingsManager.getGitSnapshotMode());
+				if (snapshot) {
+					const entryId = this.sessionManager.appendCustomEntry("git_snapshot", snapshot);
+					// Protect stash object from gc if working tree was dirty
+					if (snapshot.stashCommit) {
+						await protectSnapshot(cwd, entryId, snapshot.stashCommit);
+					}
+
+					// Enforce maxCount limit: trim oldest snapshots and their git refs
+					const removedIds = this.sessionManager.trimOldestCustomEntries("git_snapshot", maxCount);
+					for (const id of removedIds) {
+						await unprotectSnapshot(cwd, id);
+					}
 				}
+			} catch {
+				// Non-fatal: snapshot is best-effort, prompt should continue
 			}
-		} catch {
-			// Non-fatal: snapshot is best-effort, prompt should continue
 		}
 
 		preflightResult?.(true);

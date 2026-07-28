@@ -1430,6 +1430,146 @@ export class SessionManager {
 	}
 
 	/**
+	 * Remove all entries that are not reachable from root through the given leaf ID.
+	 * Also removes orphaned labels whose targetId is no longer in the session.
+	 * This is a destructive operation: orphaned entries are permanently deleted.
+	 *
+	 * Subagent trees (subagent_run entries and their children) are preserved
+	 * regardless of their position in the main conversation tree.
+	 *
+	 * Returns the set of removed entry IDs (useful for cleaning up associated git refs).
+	 */
+	pruneOrphanedEntries(keepLeafId: string | null): Set<string> {
+		const keepIds = new Set<string>();
+
+		// Collect path from root to keepLeafId
+		if (keepLeafId !== null) {
+			const path = this.getBranch(keepLeafId);
+			for (const entry of path) {
+				keepIds.add(entry.id);
+			}
+		}
+
+		// Also preserve subagent_run entries
+		const subagentRunIds = new Set<string>();
+		for (const entry of this.fileEntries) {
+			if (entry.type === "session") continue;
+			if (entry.type === "subagent_run") {
+				keepIds.add(entry.id);
+				subagentRunIds.add(entry.id);
+			}
+		}
+
+		// Transitive closure: add entries whose parent chain traces back to a subagent_run.
+		// Only traverse into the subagent subtrees, not the main conversation tree.
+		let changed = true;
+		while (changed) {
+			changed = false;
+			for (const entry of this.fileEntries) {
+				if (entry.type === "session") continue;
+				if (!keepIds.has(entry.id) && entry.parentId && keepIds.has(entry.parentId)) {
+					// Check if parent chain reaches a subagent_run
+					let isUnderSubagent = subagentRunIds.has(entry.parentId);
+					if (!isUnderSubagent) {
+						let currentId: string | null | undefined = entry.parentId;
+						while (currentId && keepIds.has(currentId)) {
+							if (subagentRunIds.has(currentId)) {
+								isUnderSubagent = true;
+								break;
+							}
+							const parent = this.byId.get(currentId);
+							currentId = parent?.parentId;
+						}
+					}
+					if (isUnderSubagent) {
+						keepIds.add(entry.id);
+						changed = true;
+					}
+				}
+			}
+		}
+
+		// Collect label entries whose targetId is in the keep set
+		for (const entry of this.fileEntries) {
+			if (entry.type === "label") {
+				const labelEntry = entry as LabelEntry;
+				if (keepIds.has(labelEntry.targetId)) {
+					keepIds.add(entry.id);
+				}
+			}
+		}
+
+		// Remove orphaned entries
+		const removedIds = new Set<string>();
+		const header = this.fileEntries.find((e) => e.type === "session");
+		this.fileEntries = this.fileEntries.filter((entry) => {
+			if (entry.type === "session") return true;
+			if (keepIds.has(entry.id)) return true;
+			removedIds.add(entry.id);
+			return false;
+		});
+
+		if (removedIds.size > 0) {
+			this._buildIndex();
+			if (header) {
+				this._rewriteFile();
+			}
+		}
+
+		return removedIds;
+	}
+
+	/**
+	 * Count the number of custom entries of a given type in the session.
+	 */
+	countCustomEntries(customType: string): number {
+		let count = 0;
+		for (const entry of this.fileEntries) {
+			if (entry.type === "custom" && (entry as CustomEntry).customType === customType) {
+				count++;
+			}
+		}
+		return count;
+	}
+
+	/**
+	 * Remove the oldest custom entries of a given type until the count is at most maxCount.
+	 * Returns the set of removed entry IDs.
+	 */
+	trimOldestCustomEntries(customType: string, maxCount: number): Set<string> {
+		const entries: CustomEntry[] = [];
+		for (const entry of this.fileEntries) {
+			if (entry.type === "custom" && (entry as CustomEntry).customType === customType) {
+				entries.push(entry as CustomEntry);
+			}
+		}
+
+		if (entries.length <= maxCount) {
+			return new Set();
+		}
+
+		// Sort by timestamp, oldest first
+		entries.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+		const toRemove = entries.slice(0, entries.length - maxCount);
+		const removeIds = new Set(toRemove.map((e) => e.id));
+
+		if (removeIds.size > 0) {
+			const header = this.fileEntries.find((e) => e.type === "session");
+			this.fileEntries = this.fileEntries.filter((entry) => {
+				if (entry.type === "session") return true;
+				return !removeIds.has(entry.id);
+			});
+			this._buildIndex();
+			if (header) {
+				this._rewriteFile();
+			}
+		}
+
+		return removeIds;
+	}
+
+	/**
 	 * Create a new session file containing only the path from root to the specified leaf.
 	 * Useful for extracting a single conversation path from a branched session.
 	 * Returns the new session file path, or undefined if not persisting.

@@ -18,7 +18,7 @@ The editor can be replaced temporarily by built-in UI such as `/settings` or by 
 ### Editor Features
 
 | Feature | How |
-|---------|-----|
+| --------- | ----- |
 | File reference | Type `@` to fuzzy-search project files |
 | Path completion | Press Tab to complete paths |
 | Multi-line input | Ctrl+J or Alt+Enter (Shift+Enter queues follow-up) |
@@ -34,7 +34,7 @@ See [Keybindings](keybindings.md) for all shortcuts and customization.
 Type `/` in the editor to open command completion. Extensions can register custom commands, skills are available as `/skill:name`, and prompt templates expand via `/templatename`.
 
 | Command | Description |
-|---------|-------------|
+| --------- | ------------- |
 | `/login`, `/logout` | Manage OAuth or API-key credentials |
 | `/model` | Switch models |
 | `/scoped-models` | Enable/disable models for Ctrl+P cycling |
@@ -43,6 +43,7 @@ Type `/` in the editor to open command completion. Extensions can register custo
 | `/new` | Start a new session |
 | `/name <name>` | Set session display name |
 | `/session` | Show session file, ID, messages, tokens, and cost |
+| `/git-snapshot` | Show git snapshot count, refs, and configuration |
 | `/tree` | Jump to any point in the session and continue from there |
 | `/fork` | Create a new session from a previous user message |
 | `/clone` | Duplicate the current active branch into a new session |
@@ -116,10 +117,12 @@ Pi 的系统提示词按以下优先级构成：
 Primary agent prompt **始终在最前面**，即使存在 SYSTEM.md。这确保了 primary agent 的角色定义不受自定义 prompt 覆盖。
 
 替换默认 prompt：
+
 - `.pi/SYSTEM.md` for a project
 - `~/.pi/agent/SYSTEM.md` globally
 
 追加到 prompt 而不替换：
+
 - `.pi/APPEND_SYSTEM.md` for a project
 - `~/.pi/agent/APPEND_SYSTEM.md` globally
 
@@ -136,7 +139,6 @@ If no extension or saved decision applies, `defaultProjectTrust` controls the fa
 `pi config` and package commands use the same project trust flow. Pass `--approve` to trust project-local settings for one command or `--no-approve` to ignore them.
 
 Use `/trust` in interactive mode to save a project trust decision for future sessions, including trust for the immediate parent folder. It writes `~/.pi/agent/trust.json` only; the current session is not reloaded, so restart pi for changes to take effect.
-
 
 ## Exporting and Sharing Sessions
 
@@ -173,7 +175,7 @@ See [Pi Packages](packages.md) for package sources and security notes.
 ### Modes
 
 | Flag | Description |
-|------|-------------|
+| ------ | ------------- |
 | default | Interactive mode |
 | `-p`, `--print` | Print response and exit |
 | `--mode json` | Output all events as JSON lines; see [JSON mode](json.md) |
@@ -189,7 +191,7 @@ cat README.md | pi -p "Summarize this text"
 ### Model Options
 
 | Option | Description |
-|--------|-------------|
+| -------- | ------------- |
 | `--provider <name>` | Provider, such as `anthropic`, `openai`, or `google` |
 | `--model <pattern>` | Model pattern or ID; supports `provider/id` and optional `:<thinking>` |
 | `--api-key <key>` | API key, overriding environment variables |
@@ -200,7 +202,7 @@ cat README.md | pi -p "Summarize this text"
 ### Session Options
 
 | Option | Description |
-|--------|-------------|
+| -------- | ------------- |
 | `-c`, `--continue` | Continue the most recent session |
 | `-r`, `--resume` | Browse and select a session |
 | `--session <path\|id>` | Use a specific session file or partial UUID |
@@ -213,7 +215,7 @@ cat README.md | pi -p "Summarize this text"
 ### Tool Options
 
 | Option | Description |
-|--------|-------------|
+| -------- | ------------- |
 | `--tools <list>`, `-t <list>` | Allowlist specific tools, supports glob patterns (e.g., `"read*"`) |
 | `--exclude-tools <list>`, `-xt <list>` | Exclude specific tools, supports glob patterns (e.g., `"!bash"`) |
 | `--no-builtin-tools`, `-nbt` | Disable built-in tools but keep extension/custom tools enabled |
@@ -226,7 +228,7 @@ All `--tools` and `--exclude-tools` patterns support glob matching (via minimatc
 ### Resource Options
 
 | Option | Description |
-|--------|-------------|
+| -------- | ------------- |
 | `-e`, `--extension <source>` | Load an extension from path, npm, or git; repeatable |
 | `--no-extensions`, `-ne` | Disable extension discovery |
 | `--skill <path>` | Load a skill; repeatable |
@@ -246,7 +248,7 @@ pi --no-extensions -e ./my-extension.ts
 ### Other Options
 
 | Option | Description |
-|--------|-------------|
+| -------- | ------------- |
 | `--system-prompt <text>` | Replace default prompt; primary agent prompt, context files, and skills are still appended |
 | `--append-system-prompt <text>` | Append to system prompt |
 | `--offline` | Disable startup network operations (same as `PI_OFFLINE=1`) |
@@ -309,7 +311,7 @@ pi --exclude-tools ask_question
 ### Environment Variables
 
 | Variable | Description |
-|----------|-------------|
+| ---------- | ------------- |
 | `PI_CODING_AGENT_DIR` | Override config directory; default is `~/.pi/agent` |
 | `PI_CODING_AGENT_SESSION_DIR` | Override session storage directory; overridden by `--session-dir` |
 | `PI_PACKAGE_DIR` | Override package directory, useful for Nix/Guix store paths |
