@@ -113,16 +113,6 @@ Frontmatter 中的 `model` 和 `thinking` 可被任务参数覆盖。
 
 项目级 agent 覆盖同名的用户级 agent。
 
-通过设置全局 `settings.json` 中的 `defaultPrimaryAgent` 可以指定默认使用的主 agent：
-
-```json
-{
-  "defaultPrimaryAgent": "my-custom-agent"
-}
-```
-
-设置后，每次启动会话时自动恢复该 agent（跨项目生效）。
-
 在任务中通过 `subagentScope` 参数控制 agent 搜索范围：
 
 ```json
