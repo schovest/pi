@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.12.3] - 2026-07-28
+
 ### Changed
 
 - Shift+Tab 切换 primary agent 时，选择持久化到全局 settings（`~/.pi/settings.json`），不再写入项目级 `.pi/settings.json`
