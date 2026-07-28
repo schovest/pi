@@ -1430,25 +1430,28 @@ export class AgentSession {
 		}
 
 		// Take git snapshot before processing the prompt (for revert functionality)
-		try {
-			const cwd = this.sessionManager.getCwd();
-			const snapshot = await takeSnapshot(cwd, this.settingsManager.getGitSnapshotMode());
-			if (snapshot) {
-				const entryId = this.sessionManager.appendCustomEntry("git_snapshot", snapshot);
-				// Protect stash object from gc if working tree was dirty
-				if (snapshot.stashCommit) {
-					await protectSnapshot(cwd, entryId, snapshot.stashCommit);
-				}
+		const maxCount = this.settingsManager.getGitSnapshotMaxCount();
+		// Skip snapshots entirely when maxCount is 0 (user disabled the feature)
+		if (maxCount > 0) {
+			try {
+				const cwd = this.sessionManager.getCwd();
+				const snapshot = await takeSnapshot(cwd, this.settingsManager.getGitSnapshotMode());
+				if (snapshot) {
+					const entryId = this.sessionManager.appendCustomEntry("git_snapshot", snapshot);
+					// Protect stash object from gc if working tree was dirty
+					if (snapshot.stashCommit) {
+						await protectSnapshot(cwd, entryId, snapshot.stashCommit);
+					}
 
-				// Enforce maxCheckpoints limit: trim oldest snapshots and their git refs
-				const maxCheckpoints = this.settingsManager.getMaxCheckpoints();
-				const removedIds = this.sessionManager.trimOldestCustomEntries("git_snapshot", maxCheckpoints);
-				for (const id of removedIds) {
-					await unprotectSnapshot(cwd, id);
+					// Enforce maxCount limit: trim oldest snapshots and their git refs
+					const removedIds = this.sessionManager.trimOldestCustomEntries("git_snapshot", maxCount);
+					for (const id of removedIds) {
+						await unprotectSnapshot(cwd, id);
+					}
 				}
+			} catch {
+				// Non-fatal: snapshot is best-effort, prompt should continue
 			}
-		} catch {
-			// Non-fatal: snapshot is best-effort, prompt should continue
 		}
 
 		preflightResult?.(true);

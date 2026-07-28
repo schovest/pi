@@ -5,7 +5,8 @@
 ### Added
 
 - **Revert and Delete**：在 session tree 中选中用户消息节点 → Enter → 选择 "Revert and Delete"，除正常 revert 行为外，还会删除回滚点之后的所有游离 session 条目及其对应的 git snapshot 引用，阻止磁盘空间持续膨胀
-- **Checkpoint 数量上限**：新增 `maxCheckpoints` 设置项（默认 20），每次创建新 git 快照时自动修剪超出上限的最旧快照，释放对应的 `refs/pi-snapshots/`  git 引用，允许 git gc 回收 stash 对象
+- **Checkpoint 数量上限**：新增 `gitSnapshotMaxCount` 设置项（默认 20，设为 0 则完全禁用快照），每次创建新 git 快照时自动修剪超出上限的最旧快照，释放对应的 `refs/pi-snapshots/` git 引用，允许 git gc 回收 stash 对象
+- **Snapshot 设置交互配置**：`gitSnapshotMode` 和 `gitSnapshotMaxCount` 注册到 `/settings` 菜单，支持交互式修改
 
 ## [0.12.3] - 2026-07-28
 
