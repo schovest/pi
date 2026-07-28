@@ -846,7 +846,13 @@ export class TUI extends Container {
 		const height = this.terminal.rows;
 
 		// 优先使用 doRender 中缓存的子组件行数（避免滚轮事件时暴力重渲染全部子组件）
-		if (this.childLineCounts.length > 0 && this.lastRenderWidthForScroll === width) {
+		// childLineCounts.length !== this.children.length 时意味着 children 在
+		// 上次 doRender 后发生了变化但尚未触发新的渲染，此时回退到完整计算。
+		if (
+			this.childLineCounts.length > 0 &&
+			this.childLineCounts.length === this.children.length &&
+			this.lastRenderWidthForScroll === width
+		) {
 			const fixedCount = this.fixedBottomCount;
 			let scrollableLines = 0;
 			let fixedLines = 0;

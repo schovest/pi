@@ -383,9 +383,11 @@ export class ToolExecutionComponent extends Container {
 	 */
 	private truncateOutput(output: string): string {
 		if (output.length <= ToolExecutionComponent.MAX_PREVIEW_CHARS) return output;
+		const remaining = output.length - ToolExecutionComponent.MAX_PREVIEW_CHARS;
+		const label = remaining === 1 ? "char" : "chars";
 		return (
 			output.slice(0, ToolExecutionComponent.MAX_PREVIEW_CHARS) +
-			`\n${theme.fg("muted", `... (${(output.length - ToolExecutionComponent.MAX_PREVIEW_CHARS).toLocaleString()} more chars hidden)`)}`
+			`\n${theme.fg("muted", `... (${remaining.toString()} more ${label} hidden)`)}`
 		);
 	}
 }

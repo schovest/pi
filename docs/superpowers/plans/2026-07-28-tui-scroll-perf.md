@@ -4,7 +4,7 @@
 
 **Goal:** 修复多次 open-websearch 调用后 pi agent 卡顿（滚轮卡顿、editor 输入延时、掉帧），纯缓存优化不改逻辑。
 
-**架构分析见:** `docs/superpowers/plans/2026-07-28-tui-scroll-perf-analysis.md`（本计划的分析文档）
+**架构分析:** 详见本计划各 Task 的分析描述和已提交的变更 diff
 
 **Tech Stack:** TypeScript, TUI (packages/tui/src), coding-agent (packages/coding-agent/src)
 
