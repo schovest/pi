@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { AgentSession } from "../src/core/agent-session.ts";
 import type { ReadonlyFooterDataProvider } from "../src/core/footer-data-provider.ts";
 import { FooterComponent } from "../src/modes/interactive/components/footer.ts";
-import { initTheme, theme } from "../src/modes/interactive/theme/theme.ts";
+import { initTheme } from "../src/modes/interactive/theme/theme.ts";
 
 interface MockEditor {
 	borderTitle?: string;
@@ -62,8 +62,8 @@ describe("FooterComponent border title sync", () => {
 
 		expect(editor.borderTitle).toContain("/tmp/project");
 		expect(editor.borderTitle).toContain("agent-a");
-		expect(editor.borderTitle).toContain("test-model");
-		expect(editor.borderTitleRight).toBeUndefined();
+		// Model is now on the right side, not left
+		expect(editor.borderTitleRight).toContain("test-model");
 	});
 
 	it("updates the editor border eagerly when the primary agent changes", () => {
@@ -105,7 +105,7 @@ describe("FooterComponent border title sync", () => {
 		footer.render(120);
 
 		expect(editor.borderTitle).toContain("agent-a");
-		expect(editor.borderTitleRight).toBeUndefined();
+		expect(editor.borderTitleRight).toContain("test-model");
 	});
 
 	it("places provider before model name (not before agent) when multiple providers exist", () => {
@@ -116,16 +116,18 @@ describe("FooterComponent border title sync", () => {
 			editor as never,
 		);
 
-		const display = footer.getModelDisplay();
+		// Agent now lives in getPathDisplay (after Π), not getModelDisplay
+		const pathDisplay = footer.getPathDisplay();
+		expect(pathDisplay).toContain("coding");
 
-		// Provider should appear after agent ("coding") but before model name
-		expect(display).toContain(theme.fg("accent", "coding"));
-		expect(display).toContain("(test)");
-		expect(display).toContain("deepseek-v4-flash");
+		const modelDisplay = footer.getModelEffortDisplay();
+		// Provider should appear before model name in getModelEffortDisplay
+		expect(modelDisplay).toContain("(test)");
+		expect(modelDisplay).toContain("deepseek-v4-flash");
 
-		// Verify provider is NOT before agent — agent should come first
-		const agentPos = display.indexOf(theme.fg("accent", "coding"));
-		const providerPos = display.indexOf("(test)");
-		expect(providerPos).toBeGreaterThan(agentPos);
+		// Verify provider is before model name
+		const providerPos = modelDisplay.indexOf("(test)");
+		const modelPos = modelDisplay.indexOf("deepseek-v4-flash");
+		expect(providerPos).toBeLessThan(modelPos);
 	});
 });

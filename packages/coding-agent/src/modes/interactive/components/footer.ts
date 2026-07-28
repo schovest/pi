@@ -102,14 +102,11 @@ export class FooterComponent implements Component {
 	private syncEditorBorderTitles(): void {
 		if (!this.isActive || !this.editor) return;
 
-		// Left side: path/branch + agent/model/thinking + context usage
-		const leftParts = [this.getPathDisplay(), this.getModelDisplay(), this.getCompactContextDisplay()]
-			.filter(Boolean)
-			.join(theme.fg("dim", " · "));
-		this.editor.borderTitle = leftParts;
+		// Left side: path + branch + agent (model/effort/context on right)
+		this.editor.borderTitle = this.getPathDisplay();
 
-		// Right side: only input/output token stats (undefined when empty to avoid rendering empty border)
-		this.editor.borderTitleRight = this.getCompactTokenIO() || undefined;
+		// Right side: model · effort (thinking level)
+		this.editor.borderTitleRight = this.getModelEffortDisplay() || undefined;
 	}
 
 	/** Refresh the editor border titles immediately so agent/model/thinking switches appear without a one-frame lag. */
@@ -121,79 +118,26 @@ export class FooterComponent implements Component {
 	}
 
 	/**
-	 * Compute input/output token stats for the right side of the top border.
-	 * Returns a string like "↑14M · ↓70k" or empty string if no tokens used.
+	 * Model · effort display for the right side of the editor border title.
+	 * Shows "(provider) model-id · thinkingLevel" when reasoning is active,
+	 * "(provider) model-id" otherwise. Provider prefix only when >1 providers.
 	 */
-	private getCompactTokenIO(): string {
-		let totalInput = 0;
-		let totalOutput = 0;
-
-		for (const entry of this.session.sessionManager.getEntries()) {
-			let usage:
-				| { input: number; output: number; cacheRead: number; cacheWrite: number; cost: { total: number } }
-				| undefined;
-
-			if (entry.type === "message" && entry.message.role === "assistant") {
-				usage = entry.message.usage;
-			} else if (entry.type === "message" && entry.message.role === "toolResult" && entry.message.usage) {
-				usage = entry.message.usage;
-			} else if ((entry.type === "branch_summary" || entry.type === "compaction") && entry.usage) {
-				usage = entry.usage;
-			}
-
-			if (usage) {
-				totalInput += usage.input;
-				totalOutput += usage.output;
-			}
-		}
-
-		const parts: string[] = [];
-		if (totalInput) parts.push(`↑${formatTokens(totalInput)}`);
-		if (totalOutput) parts.push(`↓${formatTokens(totalOutput)}`);
-
-		return parts.join(" · ");
-	}
-
-	/**
-	 * Compute context usage display for the left side of the top border.
-	 * Returns a string like "11.9%/1.0M (auto)" or "?/200k (auto)".
-	 */
-	private getCompactContextDisplay(): string {
-		const state = this.session.state;
-		const contextUsage = this.session.getContextUsage();
-		const contextWindow = contextUsage?.contextWindow ?? state.model?.contextWindow ?? 0;
-		const contextPercent = contextUsage?.percent !== null ? contextUsage?.percent : undefined;
-		const autoIndicator = this.autoCompactEnabled ? " (auto)" : "";
-
-		return contextPercent !== undefined
-			? `${contextPercent.toFixed(1)}%/${formatTokens(contextWindow)}${autoIndicator}`
-			: `?/${formatTokens(contextWindow)}${autoIndicator}`;
-	}
-
-	/**
-	 * Compute the agent role + model + thinking display string for the right side
-	 * of the editor border title.
-	 */
-	getModelDisplay(): string {
+	getModelEffortDisplay(): string {
 		const state = this.session.state;
 		const modelName = state.model?.id || "no-model";
-		const agentRole = this.session.currentPrimaryAgent;
-		const dimSeparator = theme.fg("dim", " • ");
 
-		// Build model display with optional provider prefix (provider before model, not before agent)
-		const modelDisplay =
-			this.footerData.getAvailableProviderCount() > 1 && state.model
-				? `(${state.model.provider}) ${modelName}`
-				: modelName;
+		// Provider prefix when multiple providers configured
+		const hasProvider = this.footerData.getAvailableProviderCount() > 1 && state.model;
+		const modelPart = hasProvider ? `${theme.fg("dim", `(${state.model!.provider})`)} ${modelName}` : modelName;
 
-		let rightSide = `${theme.fg("accent", agentRole)}${dimSeparator}${modelDisplay}`;
 		if (state.model?.reasoning) {
 			const thinkingLevel = state.thinkingLevel || "off";
-			const thinkingStr = thinkingLevel === "off" ? "thinking off" : thinkingLevel;
-			rightSide = `${rightSide}${dimSeparator}${thinkingStr}`;
+			if (thinkingLevel !== "off") {
+				return `${modelPart} · ${theme.fg("text", thinkingLevel)}`;
+			}
 		}
 
-		return rightSide;
+		return modelPart;
 	}
 
 	/**
@@ -213,31 +157,38 @@ export class FooterComponent implements Component {
 		const pwd = formatCwdForFooter(this.session.sessionManager.getCwd(), process.env.HOME || process.env.USERPROFILE);
 		const branch = this.footerData.getGitBranch();
 		const sessionName = this.session.sessionManager.getSessionName();
+		const agentRole = this.session.currentPrimaryAgent;
 
 		if (this.borderTitleStyle === "emoji") {
 			const parts: string[] = [];
 			parts.push(theme.fg("accent", "Π"));
-			parts.push(`${theme.fg("accent", `📁 ${pwd}`)}`);
+			if (agentRole) {
+				parts.push(theme.fg("text", `🚀 ${agentRole}`));
+			}
+			parts.push(theme.fg("dim", `📁 ${pwd}`));
 			if (branch) {
 				parts.push(theme.fg("success", `🔀 ${branch}`));
 			}
 			if (sessionName) {
 				parts.push(theme.fg("muted", `✦ ${sessionName}`));
 			}
-			return parts.join(theme.fg("dim", " ⋅ "));
+			return parts.join(" ");
 		}
 
-		// plain style: color + unicode separators
+		// plain style
 		const parts: string[] = [];
 		parts.push(theme.fg("accent", "Π"));
-		parts.push(theme.fg("accent", pwd));
+		if (agentRole) {
+			parts.push(theme.fg("text", agentRole));
+		}
+		parts.push(theme.fg("dim", pwd));
 		if (branch) {
 			parts.push(theme.fg("success", branch));
 		}
 		if (sessionName) {
 			parts.push(theme.fg("muted", sessionName));
 		}
-		return parts.join(theme.fg("dim", " ⋅ "));
+		return parts.join(" ");
 	}
 
 	render(width: number): string[] {
