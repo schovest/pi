@@ -752,8 +752,8 @@ describe("Editor component", () => {
 				assert.strictEqual(lineWidth, width, `Line ${i} has width ${lineWidth}, expected ${width}`);
 			}
 
-			// Verify content split correctly (skip top/bottom padding)
-			const contentLines = lines.slice(2, -2).map((l) => stripVTControlCharacters(l).trim());
+			// Verify content split correctly (skip top padding, bottom border)
+			const contentLines = lines.slice(2, -1).map((l) => stripVTControlCharacters(l).trim());
 			assert.strictEqual(contentLines.length, 2);
 			assert.strictEqual(contentLines[0], "日本語テス"); // 5 chars = 10 columns
 			assert.strictEqual(contentLines[1], "ト"); // 1 char = 2 columns (+ padding)
@@ -767,8 +767,8 @@ describe("Editor component", () => {
 			editor.setText("Test ✅ OK 日本");
 			const lines = editor.render(width);
 
-			// Should fit in one content line (skip top/bottom padding)
-			const contentLines = lines.slice(2, -2);
+			// Should fit in one content line (skip top padding, bottom border)
+			const contentLines = lines.slice(2, -1);
 			assert.strictEqual(contentLines.length, 1);
 
 			const lineWidth = visibleWidth(contentLines[0]!);
@@ -815,23 +815,15 @@ describe("Editor component", () => {
 				for (const ch of "aaaaaaaaa") editor.handleInput(ch);
 				let lines = editor.render(width + paddingX);
 				let innerLines = lines.slice(1, -1);
-				assert.strictEqual(
-					innerLines.length,
-					3,
-					"Should be 3 inner lines (padding + 1 content + padding) before wrap",
-				);
-				// Content line is the middle one (index 1)
+				assert.strictEqual(innerLines.length, 2, "Should be 2 inner lines (padding + 1 content) before wrap");
+				// Content line is second (index 1)
 				assert.ok(innerLines[1]!.endsWith("\x1b[7m \x1b[0m"), "Cursor should be at end of line");
 
 				// Type 1 more → text wraps to second line
 				editor.handleInput("a");
 				lines = editor.render(width + paddingX);
 				innerLines = lines.slice(1, -1);
-				assert.strictEqual(
-					innerLines.length,
-					4,
-					"Should be 4 inner lines (padding + 2 content + padding) after wrap",
-				);
+				assert.strictEqual(innerLines.length, 3, "Should be 3 inner lines (padding + 2 content) after wrap");
 			}
 		});
 	});
@@ -913,8 +905,8 @@ describe("Editor component", () => {
 			editor.setText("");
 			const lines = editor.render(width);
 
-			// Should have border + padding + empty content + padding + border
-			assert.strictEqual(lines.length, 5);
+			// Should have 4 lines (border + padding + empty content + border)
+			assert.strictEqual(lines.length, 4);
 		});
 
 		it("handles single word that fits exactly", () => {
@@ -924,8 +916,8 @@ describe("Editor component", () => {
 			editor.setText("1234567890");
 			const lines = editor.render(width);
 
-			// Should have 5 lines (top border, padding, content, padding, bottom border)
-			assert.strictEqual(lines.length, 5);
+			// Should have 4 lines (top border, padding, content, bottom border)
+			assert.strictEqual(lines.length, 4);
 			const contentLine = stripVTControlCharacters(lines[2]!);
 			assert.ok(contentLine.includes("1234567890"), "Content should contain the word");
 		});
