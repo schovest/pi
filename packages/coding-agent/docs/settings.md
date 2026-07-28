@@ -188,6 +188,22 @@ When a bash command exceeds the timeout threshold, it is automatically moved to 
 - **Completion notification**: when the background process finishes, a message is automatically delivered to the agent with the exit code and output summary. If the agent is idle, a new turn is triggered; if the agent is busy, the message is queued.
 - **Management UI**: press `Ctrl+Down` to view all background processes, inspect their output, or kill running ones. The footer shows `bg:N(ctrl+down)` when background processes are active.
 
+### Git Snapshots
+
+Pi automatically takes git snapshots before each user prompt to enable the Revert and Revert and Delete features in the session tree. The snapshot captures the working tree state (tracked changes + untracked files) via `git stash`. A lightweight ref (`refs/pi-snapshots/<entryId>`) protects each snapshot from git garbage collection.
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `gitSnapshotMode` | string | `"include-untracked"` | What files to capture: `"include-untracked"` (untracked files only) or `"all"` (also includes `.gitignore`-ignored files) |
+| `gitSnapshotMaxCount` | number | `100` | Maximum number of snapshots to retain. Oldest snapshots exceeding this limit are pruned along with their git refs, allowing git gc to reclaim disk space. Set to `0` to disable snapshots entirely. |
+
+```json
+{
+  "gitSnapshotMode": "include-untracked",
+  "gitSnapshotMaxCount": 100
+}
+```
+
 ### Subagents
 
 | Setting | Type | Default | Description |
