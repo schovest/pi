@@ -3,11 +3,13 @@
  * Handles TUI rendering and user interaction, delegating business logic to AgentSession.
  */
 
+import { execFile } from "node:child_process";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import * as readline from "node:readline";
+import { promisify } from "node:util";
 import type { AgentMessage, ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { AuthEvent, AuthPrompt } from "@earendil-works/pi-ai";
 import {
@@ -75,7 +77,7 @@ import type {
 } from "../../core/extensions/index.ts";
 import { FooterDataProvider, type ReadonlyFooterDataProvider } from "../../core/footer-data-provider.ts";
 import type { GitSnapshotData } from "../../core/git-snapshot.ts";
-import { hasUncommittedChanges, restoreSnapshot, unprotectSnapshot } from "../../core/git-snapshot.ts";
+import { hasUncommittedChanges, isGitRepo, restoreSnapshot, unprotectSnapshot } from "../../core/git-snapshot.ts";
 import { configureHttpDispatcher, formatHttpIdleTimeoutMs } from "../../core/http-dispatcher.ts";
 import { type AppKeybinding, KeybindingsManager } from "../../core/keybindings.ts";
 import { createCompactionSummaryMessage } from "../../core/messages.ts";
@@ -2860,6 +2862,14 @@ export class InteractiveMode {
 		});
 
 		registry.register({
+			id: "slash.gitSnapshot",
+			label: "/git-snapshot",
+			description: "查看 git 快照详情",
+			category: "slash",
+			handler: () => this.handleGitSnapshotCommand(),
+		});
+
+		registry.register({
 			id: "slash.subagents",
 			label: "/subagents",
 			description: "查看子 agent",
@@ -3107,6 +3117,11 @@ export class InteractiveMode {
 			}
 			if (text === "/session") {
 				this.handleSessionCommand();
+				this.editor.setText("");
+				return;
+			}
+			if (text === "/git-snapshot") {
+				void this.handleGitSnapshotCommand();
 				this.editor.setText("");
 				return;
 			}
@@ -6679,6 +6694,46 @@ export class InteractiveMode {
 		if (stats.cost > 0) {
 			info += `\n${theme.bold("Cost")}\n`;
 			info += `${theme.fg("dim", "Total:")} ${stats.cost.toFixed(4)}`;
+		}
+
+		this.chatContainer.addChild(new Spacer(1));
+		this.chatContainer.addChild(new Text(info, 1, 0));
+		this.ui.requestRender();
+	}
+
+	private async handleGitSnapshotCommand(): Promise<void> {
+		const cwd = this.sessionManager.getCwd();
+		const maxCount = this.settingsManager.getGitSnapshotMaxCount();
+		const totalCount = this.sessionManager.countCustomEntries("git_snapshot");
+		const snapMode = this.settingsManager.getGitSnapshotMode();
+
+		let info = `${theme.bold("Git Snapshot Info")}\n\n`;
+		info += `${theme.fg("dim", "Mode:")} ${snapMode}\n`;
+		info += `${theme.fg("dim", "Max count:")} ${maxCount === 0 ? "disabled" : String(maxCount)}\n`;
+		info += `${theme.fg("dim", "Session entries:")} ${totalCount}\n`;
+
+		// Check git refs
+		const inRepo = await isGitRepo(cwd);
+		if (inRepo) {
+			try {
+				const execFileAsync = promisify(execFile);
+				const { stdout } = await execFileAsync(
+					"git",
+					["for-each-ref", "refs/pi-snapshots/", "--format=%(refname:short) %(objectname:short)"],
+					{ cwd },
+				);
+				const refs = stdout.trim().split("\n").filter(Boolean);
+				info += `${theme.fg("dim", "Git refs:")} ${refs.length}\n`;
+				if (refs.length > 0 && refs.length <= 20) {
+					for (const ref of refs) {
+						info += `  ${theme.fg("dim", ref)}\n`;
+					}
+				}
+			} catch {
+				info += `${theme.fg("dim", "Git refs:")} (unable to query)\n`;
+			}
+		} else {
+			info += `${theme.fg("dim", "Git:")} not a git repository\n`;
 		}
 
 		this.chatContainer.addChild(new Spacer(1));
