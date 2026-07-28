@@ -510,7 +510,7 @@ export class SettingsSelectorComponent extends Container {
 			label: "Git snapshot max count",
 			description: "Maximum snapshots to retain (0 = disable snapshots)",
 			currentValue: String(config.gitSnapshotMaxCount),
-			values: ["0", "10", "20", "50", "100"],
+			values: ["0", "20", "50", "100", "200"],
 		});
 
 		// Add borders
