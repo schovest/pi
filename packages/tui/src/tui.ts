@@ -331,6 +331,10 @@ export class TUI extends Container {
 	private autoFollow = true;
 	private previousScrollableLineCount = 0;
 	private lastScrollableViewport = 0;
+	/** 每个子组件在最近一次 doRender 中的渲染行数，用于 getMaxScrollOffset 缓存 */
+	private childLineCounts: number[] = [];
+	/** childLineCounts 对应的 terminal width */
+	private lastRenderWidthForScroll = 0;
 
 	getScrollableViewport(): number {
 		return this.lastScrollableViewport;
@@ -840,6 +844,24 @@ export class TUI extends Container {
 	getMaxScrollOffset(): number {
 		const width = this.terminal.columns;
 		const height = this.terminal.rows;
+
+		// 优先使用 doRender 中缓存的子组件行数（避免滚轮事件时暴力重渲染全部子组件）
+		if (this.childLineCounts.length > 0 && this.lastRenderWidthForScroll === width) {
+			const fixedCount = this.fixedBottomCount;
+			let scrollableLines = 0;
+			let fixedLines = 0;
+			for (let i = 0; i < this.childLineCounts.length; i++) {
+				if (i >= this.childLineCounts.length - fixedCount) {
+					fixedLines += this.childLineCounts[i];
+				} else {
+					scrollableLines += this.childLineCounts[i];
+				}
+			}
+			const scrollableViewport = Math.max(0, height - fixedLines);
+			return Math.max(0, scrollableLines - scrollableViewport);
+		}
+
+		// Fallback：无缓存时兜底（首次渲染前或宽度变化）
 		const childLines: string[][] = [];
 		for (const child of this.children) {
 			childLines.push(child.render(width));
@@ -1682,6 +1704,9 @@ export class TUI extends Container {
 		for (const child of this.children) {
 			childLines.push(child.render(width));
 		}
+		// 缓存每个子组件的渲染行数供 getMaxScrollOffset 使用
+		this.childLineCounts = childLines.map((cl) => cl.length);
+		this.lastRenderWidthForScroll = width;
 
 		// Split children into scrollable (top) and fixed (bottom)
 		// The fixedBottomCount property determines how many trailing children

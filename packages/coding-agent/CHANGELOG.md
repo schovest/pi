@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- TUI 滚轮性能优化：`getMaxScrollOffset()` 改用法 `doRender` 中缓存的子组件行数，避免滚轮事件时暴力重渲染全部聊天内容
+- MCP 工具结果渲染截断：`formatToolExecution()` 对超过 3000 字符的工具输出截断显示，防止聊天容器无限膨胀
+
 ## [0.12.6] - 2026-07-28
 
 ### Fixed

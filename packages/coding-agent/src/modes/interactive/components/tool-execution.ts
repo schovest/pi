@@ -362,6 +362,8 @@ export class ToolExecutionComponent extends Container {
 		return getRenderedTextOutput(this.result, this.showImages);
 	}
 
+	private static readonly MAX_PREVIEW_CHARS = 3_000;
+
 	private formatToolExecution(): string {
 		let text = theme.fg("toolTitle", theme.bold(this.toolName));
 		const content = JSON.stringify(this.args, null, 2);
@@ -370,8 +372,20 @@ export class ToolExecutionComponent extends Container {
 		}
 		const output = this.getTextOutput();
 		if (output) {
-			text += `\n${output}`;
+			text += `\n${this.truncateOutput(output)}`;
 		}
 		return text;
+	}
+
+	/**
+	 * 截断过长的工具输出文本，防止 chat 容器无限膨胀。
+	 * 仅截断 tool result 文本，不截断 args JSON。
+	 */
+	private truncateOutput(output: string): string {
+		if (output.length <= ToolExecutionComponent.MAX_PREVIEW_CHARS) return output;
+		return (
+			output.slice(0, ToolExecutionComponent.MAX_PREVIEW_CHARS) +
+			`\n${theme.fg("muted", `... (${(output.length - ToolExecutionComponent.MAX_PREVIEW_CHARS).toLocaleString()} more chars hidden)`)}`
+		);
 	}
 }
