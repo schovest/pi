@@ -719,7 +719,7 @@ describe("Editor component", () => {
 			editor.setText("✅✅✅✅✅✅");
 			const lines = editor.render(width);
 
-			// Should have 2 content lines (plus 2 border lines)
+			// Should have 4 inner lines (top padding, 2 content, bottom padding) between borders
 			// First line: 5 emojis (10 cols), second line: 1 emoji (2 cols) + padding
 			for (let i = 1; i < lines.length - 1; i++) {
 				const lineWidth = visibleWidth(lines[i]!);
@@ -752,8 +752,8 @@ describe("Editor component", () => {
 				assert.strictEqual(lineWidth, width, `Line ${i} has width ${lineWidth}, expected ${width}`);
 			}
 
-			// Verify content split correctly
-			const contentLines = lines.slice(1, -1).map((l) => stripVTControlCharacters(l).trim());
+			// Verify content split correctly (skip top/bottom padding)
+			const contentLines = lines.slice(2, -2).map((l) => stripVTControlCharacters(l).trim());
 			assert.strictEqual(contentLines.length, 2);
 			assert.strictEqual(contentLines[0], "日本語テス"); // 5 chars = 10 columns
 			assert.strictEqual(contentLines[1], "ト"); // 1 char = 2 columns (+ padding)
@@ -767,8 +767,8 @@ describe("Editor component", () => {
 			editor.setText("Test ✅ OK 日本");
 			const lines = editor.render(width);
 
-			// Should fit in one content line
-			const contentLines = lines.slice(1, -1);
+			// Should fit in one content line (skip top/bottom padding)
+			const contentLines = lines.slice(2, -2);
 			assert.strictEqual(contentLines.length, 1);
 
 			const lineWidth = visibleWidth(contentLines[0]!);
@@ -783,8 +783,8 @@ describe("Editor component", () => {
 			// Cursor should be at end (after B)
 			const lines = editor.render(width);
 
-			// The cursor (reverse video space) should be visible
-			const contentLine = lines[1]!;
+			// The cursor (reverse video space) should be visible (skip top padding at index 1)
+			const contentLine = lines[2]!;
 			assert.ok(contentLine.includes("\x1b[7m"), "Should have reverse video cursor");
 
 			// Line should still be correct width
@@ -814,15 +814,24 @@ describe("Editor component", () => {
 				// Type 9 chars → fills layoutWidth exactly, cursor at end on same line
 				for (const ch of "aaaaaaaaa") editor.handleInput(ch);
 				let lines = editor.render(width + paddingX);
-				let contentLines = lines.slice(1, -1);
-				assert.strictEqual(contentLines.length, 1, "Should be 1 content line before wrap");
-				assert.ok(contentLines[0]!.endsWith("\x1b[7m \x1b[0m"), "Cursor should be at end of line");
+				let innerLines = lines.slice(1, -1);
+				assert.strictEqual(
+					innerLines.length,
+					3,
+					"Should be 3 inner lines (padding + 1 content + padding) before wrap",
+				);
+				// Content line is the middle one (index 1)
+				assert.ok(innerLines[1]!.endsWith("\x1b[7m \x1b[0m"), "Cursor should be at end of line");
 
 				// Type 1 more → text wraps to second line
 				editor.handleInput("a");
 				lines = editor.render(width + paddingX);
-				contentLines = lines.slice(1, -1);
-				assert.strictEqual(contentLines.length, 2, "Should wrap to 2 content lines");
+				innerLines = lines.slice(1, -1);
+				assert.strictEqual(
+					innerLines.length,
+					4,
+					"Should be 4 inner lines (padding + 2 content + padding) after wrap",
+				);
 			}
 		});
 	});
@@ -892,7 +901,7 @@ describe("Editor component", () => {
 			editor.setText("Word1   Word2    Word3");
 			const lines = editor.render(width);
 
-			const contentLine = stripVTControlCharacters(lines[1]!).trim();
+			const contentLine = stripVTControlCharacters(lines[2]!).trim();
 			// Multiple spaces should be preserved
 			assert.ok(contentLine.includes("Word1   Word2"), "Multiple spaces should be preserved");
 		});
@@ -904,8 +913,8 @@ describe("Editor component", () => {
 			editor.setText("");
 			const lines = editor.render(width);
 
-			// Should have border + empty content + border
-			assert.strictEqual(lines.length, 3);
+			// Should have border + padding + empty content + padding + border
+			assert.strictEqual(lines.length, 5);
 		});
 
 		it("handles single word that fits exactly", () => {
@@ -915,9 +924,9 @@ describe("Editor component", () => {
 			editor.setText("1234567890");
 			const lines = editor.render(width);
 
-			// Should have exactly 3 lines (top border, content, bottom border)
-			assert.strictEqual(lines.length, 3);
-			const contentLine = stripVTControlCharacters(lines[1]!);
+			// Should have 5 lines (top border, padding, content, padding, bottom border)
+			assert.strictEqual(lines.length, 5);
+			const contentLine = stripVTControlCharacters(lines[2]!);
 			assert.ok(contentLine.includes("1234567890"), "Content should contain the word");
 		});
 
@@ -3561,7 +3570,7 @@ describe("Editor component", () => {
 			editor.setPrompt("> ");
 			const lines = editor.render(80);
 			// First line after the top border should contain prompt + text
-			const contentLine = stripVTControlCharacters(lines[1]);
+			const contentLine = stripVTControlCharacters(lines[2]);
 			assert.ok(contentLine.startsWith("> hello"), `Expected "> hello" got "${contentLine}"`);
 		});
 
@@ -3570,7 +3579,7 @@ describe("Editor component", () => {
 			editor.setText("!ls -la");
 			editor.setPrompt("$ ");
 			const lines = editor.render(80);
-			const contentLine = stripVTControlCharacters(lines[1]);
+			const contentLine = stripVTControlCharacters(lines[2]);
 			// Should show "$ ls -la" instead of "$ !ls -la"
 			assert.ok(contentLine.startsWith("$ ls -la"), `Expected "$ ls -la" got "${contentLine}"`);
 			// Original text should still contain "!"
@@ -3584,11 +3593,11 @@ describe("Editor component", () => {
 			editor.setText(longText);
 			editor.setPrompt("> ");
 			const lines = editor.render(40);
-			// First content line should have prompt prefix
-			const contentLine1 = stripVTControlCharacters(lines[1]);
+			// First content line (skip top padding at index 1) should have prompt prefix
+			const contentLine1 = stripVTControlCharacters(lines[2]);
 			assert.ok(contentLine1.startsWith("> "), `First line should start with "> ", got "${contentLine1}"`);
 			// Content line 2 (wrapped) should not have prompt prefix
-			const contentLine2 = stripVTControlCharacters(lines[2]);
+			const contentLine2 = stripVTControlCharacters(lines[3]);
 			assert.ok(!contentLine2.startsWith("> "), `Wrapped line should not start with "> ", got "${contentLine2}"`);
 		});
 
@@ -3598,7 +3607,7 @@ describe("Editor component", () => {
 			editor.setPrompt("> ");
 			// Render normally - prompt should be on content line 1
 			const lines = editor.render(80);
-			assert.ok(stripVTControlCharacters(lines[1]).startsWith("> "));
+			assert.ok(stripVTControlCharacters(lines[2]).startsWith("> "));
 		});
 	});
 
@@ -3912,8 +3921,6 @@ describe("Editor component", () => {
 			editor.handleInput(`\x1b[200~${bigContent}\x1b[201~`);
 			editor.render(80);
 
-			const text = editor.getText();
-			const _marker = text.match(/\[paste #\d+ \d+ chars\]/)![0];
 			// Line 0: "12345678901234567890"
 			// Line 1: "" (empty)
 			// Line 2: "hello [paste #1 2000 chars]"
