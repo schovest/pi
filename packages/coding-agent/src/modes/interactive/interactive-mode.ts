@@ -809,6 +809,7 @@ export class InteractiveMode {
 
 		// Set up git branch watcher (uses provider instead of footer)
 		this.footerDataProvider.onBranchChange(() => {
+			this.footer.invalidate();
 			this.ui.requestRender();
 		});
 

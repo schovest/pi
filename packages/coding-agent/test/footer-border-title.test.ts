@@ -116,7 +116,7 @@ describe("FooterComponent border title sync", () => {
 			editor as never,
 		);
 
-		// Agent now lives in getPathDisplay (after Π), not getModelDisplay
+		// Agent now lives in getPathDisplay (after Π)
 		const pathDisplay = footer.getPathDisplay();
 		expect(pathDisplay).toContain("coding");
 

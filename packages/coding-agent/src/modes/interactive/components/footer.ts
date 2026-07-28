@@ -102,7 +102,7 @@ export class FooterComponent implements Component {
 	private syncEditorBorderTitles(): void {
 		if (!this.isActive || !this.editor) return;
 
-		// Left side: path + branch + agent (model/effort/context on right)
+		// Left side: path + branch + agent (model/effort on right)
 		this.editor.borderTitle = this.getPathDisplay();
 
 		// Right side: model · effort (thinking level)
@@ -119,8 +119,10 @@ export class FooterComponent implements Component {
 
 	/**
 	 * Model · effort display for the right side of the editor border title.
-	 * Shows "(provider) model-id · thinkingLevel" when reasoning is active,
-	 * "(provider) model-id" otherwise. Provider prefix only when >1 providers.
+	 * Shows "(provider) model-id · thinkingLevel" when reasoning is active
+	 * (level !== "off"), otherwise just "(provider) model-id".
+	 * Intentionally omits "thinking off" to keep the border clean; users can
+	 * check thinking status via the /thinking selector or Alt+T cycling.
 	 */
 	getModelEffortDisplay(): string {
 		const state = this.session.state;
