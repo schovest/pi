@@ -74,6 +74,8 @@ import type {
 	ProjectTrustContext,
 } from "../../core/extensions/index.ts";
 import { FooterDataProvider, type ReadonlyFooterDataProvider } from "../../core/footer-data-provider.ts";
+import type { GitSnapshotData } from "../../core/git-snapshot.ts";
+import { hasUncommittedChanges, restoreSnapshot } from "../../core/git-snapshot.ts";
 import { configureHttpDispatcher, formatHttpIdleTimeoutMs } from "../../core/http-dispatcher.ts";
 import { type AppKeybinding, KeybindingsManager } from "../../core/keybindings.ts";
 import { createCompactionSummaryMessage } from "../../core/messages.ts";
@@ -83,7 +85,7 @@ import { DefaultPackageManager } from "../../core/package-manager.ts";
 import { discoverPrimaryAgentsSync } from "../../core/primary-agents/index.ts";
 import type { ResourceDiagnostic } from "../../core/resource-loader.ts";
 import { formatMissingSessionCwdPrompt, MissingSessionCwdError } from "../../core/session-cwd.ts";
-import { type SessionContext, SessionManager } from "../../core/session-manager.ts";
+import { type SessionContext, SessionManager, type SessionMessageEntry } from "../../core/session-manager.ts";
 import { BUILTIN_SLASH_COMMANDS } from "../../core/slash-commands.ts";
 import type { SourceInfo } from "../../core/source-info.ts";
 import { discoverSubagentsSync } from "../../core/subagents/index.ts";
@@ -4074,13 +4076,19 @@ export class InteractiveMode {
 		this.isShuttingDown = true;
 		try {
 			this.unregisterSignalHandlers();
-		} catch {}
+		} catch {
+			// ignore - crash handler must not throw
+		}
 		try {
 			killTrackedDetachedChildren();
-		} catch {}
+		} catch {
+			// ignore - crash handler must not throw
+		}
 		try {
 			this.ui.stop();
-		} catch {}
+		} catch {
+			// ignore - crash handler must not throw
+		}
 		console.error("pi exiting due to uncaughtException:");
 		console.error(error);
 		process.exit(1);
@@ -5443,6 +5451,73 @@ export class InteractiveMode {
 		return true;
 	}
 
+	/**
+	 * Revert to a tree node: restore git working tree to snapshot state + navigate session.
+	 */
+	private async handleRevert(targetId: string): Promise<void> {
+		// Find git snapshot for target node
+		const snapshotResult = this.sessionManager.findGitSnapshot(targetId);
+
+		if (!snapshotResult) {
+			this.showStatus("No git snapshot found for this node");
+			return;
+		}
+
+		const snapshot = snapshotResult.data as GitSnapshotData;
+
+		// Check for uncommitted changes
+		const cwd = this.sessionManager.getCwd();
+		const hasChanges = await hasUncommittedChanges(cwd);
+
+		if (hasChanges) {
+			const confirmed = await this.showExtensionConfirm(
+				"Revert",
+				"Working tree has uncommitted changes. Reverting will discard them. Continue?",
+			);
+			if (!confirmed) {
+				this.showStatus("Revert cancelled");
+				return;
+			}
+		}
+
+		// Show loader
+		const revertLoader = new Loader(
+			this.ui,
+			(spinner) => theme.fg("accent", spinner),
+			(text) => theme.fg("muted", text),
+			"Reverting...",
+		);
+		this.statusContainer.addChild(revertLoader);
+		this.ui.requestRender();
+
+		try {
+			// Restore git working tree
+			await restoreSnapshot(cwd, snapshot);
+
+			// Navigate session to target node (without summary)
+			const navResult = await this.session.navigateTree(targetId, { summarize: false });
+
+			if (navResult.cancelled) {
+				this.showStatus("Revert cancelled");
+				return;
+			}
+
+			// Update UI
+			this.chatContainer.clear();
+			this.renderInitialMessages();
+			if (navResult.editorText && !this.editor.getText().trim()) {
+				this.editor.setText(navResult.editorText);
+			}
+			this.showStatus("Reverted to selected node");
+			void this.flushCompactionQueue({ willRetry: false });
+		} catch (error) {
+			this.showError(error instanceof Error ? error.message : String(error));
+		} finally {
+			revertLoader.stop();
+			this.statusContainer.clear();
+		}
+	}
+
 	private showTreeSelector(initialSelectedId?: string): void {
 		const tree = this.sessionManager.getTree();
 		const realLeafId = this.sessionManager.getLeafId();
@@ -5467,13 +5542,19 @@ export class InteractiveMode {
 					const NAVIGATE = "Navigate";
 					const NAVIGATE_SUMMARY = "Navigate with summary";
 					const NAVIGATE_CUSTOM = "Navigate with custom prompt";
+					const REVERT = "Revert";
 
-					const action = await this.showExtensionSelector("Select action", [
-						PEEK,
-						NAVIGATE,
-						NAVIGATE_SUMMARY,
-						NAVIGATE_CUSTOM,
-					]);
+					// Revert only available for user message nodes
+					const entry = this.sessionManager.getEntry(entryId);
+					const isUserMessage =
+						entry?.type === "message" && (entry as SessionMessageEntry).message.role === "user";
+
+					const options = [PEEK, NAVIGATE, NAVIGATE_SUMMARY, NAVIGATE_CUSTOM];
+					if (isUserMessage) {
+						options.push(REVERT);
+					}
+
+					const action = await this.showExtensionSelector("Select action", options);
 
 					if (action === undefined) {
 						// Escape - re-show tree selector with same selection
@@ -5493,6 +5574,11 @@ export class InteractiveMode {
 						} else {
 							this.showStatus("Cannot locate this message in current view");
 						}
+						return;
+					}
+
+					if (action === REVERT) {
+						await this.handleRevert(entryId);
 						return;
 					}
 
