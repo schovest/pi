@@ -457,7 +457,6 @@ export class InteractiveMode {
 			paddingX: editorPaddingX,
 			autocompleteMaxVisible,
 		});
-		this.defaultEditor.setPrompt("> ");
 		this.editor = this.defaultEditor;
 		this.editorContainer = new Container();
 		this.editorContainer.addChild(this.editor as Component);
@@ -2358,9 +2357,6 @@ export class InteractiveMode {
 			if (newEditor.setPaddingX !== undefined) {
 				newEditor.setPaddingX(this.defaultEditor.getPaddingX());
 			}
-			if (newEditor.setPrompt !== undefined) {
-				newEditor.setPrompt(this.defaultEditor.prompt);
-			}
 
 			// Set autocomplete if supported
 			if (newEditor.setAutocompleteProvider && this.autocompleteProvider) {
@@ -4255,11 +4251,6 @@ export class InteractiveMode {
 		} else {
 			const level = this.session.thinkingLevel || "off";
 			this.editor.borderColor = theme.getThinkingBorderColor(level);
-		}
-		// Sync prompt prefix: "$ " for bash commands, "> " for normal input
-		const newPrompt = this.isBashMode ? "$ " : "> ";
-		if (this.editor.setPrompt) {
-			this.editor.setPrompt(newPrompt);
 		}
 		this.ui.requestRender();
 	}

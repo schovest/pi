@@ -272,9 +272,6 @@ export class Editor implements Component, Focusable {
 	// Border color (can be changed dynamically)
 	public borderColor: (str: string) => string;
 
-	/** Prompt prefix displayed on the first line (e.g., "> " or "$ "). Visual-only, not part of text. */
-	public prompt: string = "";
-
 	// Title text embedded in the top border line (updated externally)
 	public borderTitle?: string;
 
@@ -373,13 +370,6 @@ export class Editor implements Component, Focusable {
 		const newMaxVisible = Number.isFinite(maxVisible) ? Math.max(3, Math.min(20, Math.floor(maxVisible))) : 5;
 		if (this.autocompleteMaxVisible !== newMaxVisible) {
 			this.autocompleteMaxVisible = newMaxVisible;
-			this.tui.requestRender();
-		}
-	}
-
-	setPrompt(prompt: string): void {
-		if (this.prompt !== prompt) {
-			this.prompt = prompt;
 			this.tui.requestRender();
 		}
 	}
@@ -603,50 +593,15 @@ export class Editor implements Component, Focusable {
 		// autocomplete (e.g. slash-command menu) is visible.
 		const emitCursorMarker = this.focused;
 
-		// Prompt display on the first logical line (only when not scrolled)
-		const showPrompt = this.prompt && this.scrollOffset === 0 && visibleLines.length > 0;
-		const promptWidth = showPrompt ? visibleWidth(this.prompt) : 0;
-
-		for (let vi = 0; vi < visibleLines.length; vi++) {
-			const layoutLine = visibleLines[vi];
+		for (const layoutLine of visibleLines) {
 			let displayText = layoutLine.text;
 			let lineVisibleWidth = visibleWidth(layoutLine.text);
 			let cursorInPadding = false;
 
-			// Prompt prefix on the first visible line (first logical line)
-			let promptOffset = 0;
-			if (showPrompt && vi === 0) {
-				// Command mode: replace leading "!" with "$" prompt
-				if (this.prompt === "$ " && displayText.startsWith("!")) {
-					displayText = this.prompt + displayText.slice(1);
-					promptOffset = promptWidth;
-				} else {
-					displayText = this.prompt + displayText;
-					promptOffset = promptWidth;
-				}
-				lineVisibleWidth += promptWidth;
-			}
-
 			// Add cursor if this line has it
 			if (layoutLine.hasCursor && layoutLine.cursorPos !== undefined) {
-				// Adjust cursor position when prompt is prepended on the first line
-				let cursorPos: number;
-				if (promptOffset > 0) {
-					if (this.prompt === "$ " && layoutLine.cursorPos > 0) {
-						// Command mode: "!text" → "$ text", cursor skips both ! and $
-						cursorPos = promptWidth + (layoutLine.cursorPos - 1);
-					} else if (this.prompt === "$ ") {
-						// Command mode, cursor before "!": stays before "$"
-						cursorPos = 0;
-					} else {
-						// Normal prompt like "> ": shift right by prompt width
-						cursorPos = layoutLine.cursorPos + promptWidth;
-					}
-				} else {
-					cursorPos = layoutLine.cursorPos;
-				}
-				const before = displayText.slice(0, cursorPos);
-				const after = displayText.slice(cursorPos);
+				const before = displayText.slice(0, layoutLine.cursorPos);
+				const after = displayText.slice(layoutLine.cursorPos);
 
 				// Hardware cursor marker (zero-width, emitted before fake cursor for IME positioning)
 				const marker = emitCursorMarker ? CURSOR_MARKER : "";
