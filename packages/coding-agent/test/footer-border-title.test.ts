@@ -56,8 +56,9 @@ describe("FooterComponent border title sync", () => {
 		footer.invalidate();
 
 		expect(editor.borderTitle).toContain("/tmp/project");
-		expect(editor.borderTitleRight).toContain("agent-a");
-		expect(editor.borderTitleRight).toContain("test-model");
+		expect(editor.borderTitle).toContain("agent-a");
+		expect(editor.borderTitle).toContain("test-model");
+		expect(editor.borderTitleRight).toBeUndefined();
 	});
 
 	it("updates the editor border eagerly when the primary agent changes", () => {
@@ -66,14 +67,14 @@ describe("FooterComponent border title sync", () => {
 		const footer = new FooterComponent(session, createFooterData(), editor as never);
 
 		footer.invalidate();
-		expect(editor.borderTitleRight).toContain("agent-a");
+		expect(editor.borderTitle).toContain("agent-a");
 
 		// Simulate switching the primary agent (what shift+tab / cycleAgent does)
 		(session as unknown as { currentPrimaryAgent: string }).currentPrimaryAgent = "agent-b";
 		footer.invalidate();
 
-		expect(editor.borderTitleRight).toContain("agent-b");
-		expect(editor.borderTitleRight).not.toContain("agent-a");
+		expect(editor.borderTitle).toContain("agent-b");
+		expect(editor.borderTitle).not.toContain("agent-a");
 	});
 
 	it("does not overwrite the editor border while a custom footer is active", () => {
@@ -89,7 +90,7 @@ describe("FooterComponent border title sync", () => {
 		// Restoring the built-in footer re-enables syncing
 		footer.setActive(true);
 		footer.invalidate();
-		expect(editor.borderTitleRight).toContain("agent-a");
+		expect(editor.borderTitle).toContain("agent-a");
 	});
 
 	it("keeps the editor border in sync during render()", () => {
@@ -98,6 +99,7 @@ describe("FooterComponent border title sync", () => {
 
 		footer.render(120);
 
-		expect(editor.borderTitleRight).toContain("agent-a");
+		expect(editor.borderTitle).toContain("agent-a");
+		expect(editor.borderTitleRight).toBeUndefined();
 	});
 });

@@ -101,8 +101,15 @@ export class FooterComponent implements Component {
 	 */
 	private syncEditorBorderTitles(): void {
 		if (!this.isActive || !this.editor) return;
-		this.editor.borderTitle = this.getPathDisplay();
-		this.editor.borderTitleRight = this.getModelDisplay();
+
+		// Left side: path/branch + agent/model/thinking + context usage
+		const leftParts = [this.getPathDisplay(), this.getModelDisplay(), this.getCompactContextDisplay()]
+			.filter(Boolean)
+			.join(theme.fg("dim", " · "));
+		this.editor.borderTitle = leftParts;
+
+		// Right side: only input/output token stats (undefined when empty to avoid rendering empty border)
+		this.editor.borderTitleRight = this.getCompactTokenIO() || undefined;
 	}
 
 	/** Refresh the editor border titles immediately so agent/model/thinking switches appear without a one-frame lag. */
@@ -111,6 +118,56 @@ export class FooterComponent implements Component {
 		// discrete state changes (agent/model/thinking switch) refresh synchronously
 		// instead of lagging one render frame behind this component's own render.
 		this.syncEditorBorderTitles();
+	}
+
+	/**
+	 * Compute input/output token stats for the right side of the top border.
+	 * Returns a string like "↑14M · ↓70k" or empty string if no tokens used.
+	 */
+	private getCompactTokenIO(): string {
+		let totalInput = 0;
+		let totalOutput = 0;
+
+		for (const entry of this.session.sessionManager.getEntries()) {
+			let usage:
+				| { input: number; output: number; cacheRead: number; cacheWrite: number; cost: { total: number } }
+				| undefined;
+
+			if (entry.type === "message" && entry.message.role === "assistant") {
+				usage = entry.message.usage;
+			} else if (entry.type === "message" && entry.message.role === "toolResult" && entry.message.usage) {
+				usage = entry.message.usage;
+			} else if ((entry.type === "branch_summary" || entry.type === "compaction") && entry.usage) {
+				usage = entry.usage;
+			}
+
+			if (usage) {
+				totalInput += usage.input;
+				totalOutput += usage.output;
+			}
+		}
+
+		const parts: string[] = [];
+		if (totalInput) parts.push(`↑${formatTokens(totalInput)}`);
+		if (totalOutput) parts.push(`↓${formatTokens(totalOutput)}`);
+
+		return parts.join(" · ");
+	}
+
+	/**
+	 * Compute context usage display for the left side of the top border.
+	 * Returns a string like "11.9%/1.0M (auto)" or "?/200k (auto)".
+	 */
+	private getCompactContextDisplay(): string {
+		const state = this.session.state;
+		const contextUsage = this.session.getContextUsage();
+		const contextWindow = contextUsage?.contextWindow ?? state.model?.contextWindow ?? 0;
+		const contextPercent = contextUsage?.percent !== null ? contextUsage?.percent : undefined;
+		const autoIndicator = this.autoCompactEnabled ? " (auto)" : "";
+
+		return contextPercent !== undefined
+			? `${contextPercent.toFixed(1)}%/${formatTokens(contextWindow)}${autoIndicator}`
+			: `?/${formatTokens(contextWindow)}${autoIndicator}`;
 	}
 
 	/**
