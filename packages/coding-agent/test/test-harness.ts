@@ -381,8 +381,9 @@ async function createHarnessWithResourceLoader(
 		streamFn: streamFn,
 	});
 
-	const sessionManager = SessionManager.inMemory();
+	const sessionManager = SessionManager.inMemory(tempDir);
 	const settingsManager = SettingsManager.create(tempDir, tempDir);
+	settingsManager.applyOverrides({ gitSnapshotMaxCount: 0 });
 
 	if (options.settings) {
 		settingsManager.applyOverrides(options.settings);

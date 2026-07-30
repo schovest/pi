@@ -126,7 +126,7 @@ async function createRuntimeHost(options: { withAuth: boolean; responseDelayMs: 
 		},
 	});
 
-	const sessionManager = SessionManager.inMemory();
+	const sessionManager = SessionManager.inMemory(tempDir);
 	const settingsManager = SettingsManager.create(tempDir, tempDir);
 	const authStorage = AuthStorage.create(join(tempDir, "auth.json"));
 	const modelRegistry = await createModelRegistry(authStorage, tempDir);

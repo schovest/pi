@@ -108,8 +108,9 @@ export async function createHarness(options: HarnessOptions = {}): Promise<Harne
 	const withConfiguredAuth = options.withConfiguredAuth ?? true;
 	const extensionRunnerRef: { current?: ExtensionRunner } = {};
 
-	const sessionManager = SessionManager.inMemory();
+	const sessionManager = SessionManager.inMemory(tempDir);
 	const settingsManager = SettingsManager.inMemory(options.settings);
+	settingsManager.applyOverrides({ gitSnapshotMaxCount: 0 });
 
 	const authStorage = AuthStorage.inMemory();
 	if (withConfiguredAuth) {

@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 测试修复：`SessionManager.inMemory()` 默认使用 `process.cwd()` 导致 git snapshot 在项目仓库上执行 `stash push/pop`，产生 ~94ms 延迟使并发检测测试 flaky；改用测试临时目录并禁用 git snapshot
+
 ## [0.12.7] - 2026-07-30
 
 ### Fixed
