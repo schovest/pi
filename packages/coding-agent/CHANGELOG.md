@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.12.7] - 2026-07-30
+
+### Fixed
+
+- Esc 无法退出 auto-compaction：`_runAutoCompaction` 中 AbortController 在 `compaction_start` 事件后才创建，导致 signal 可能无法及时响应；catch 块总将 `aborted` 设为 `false`，AbortError 时用户看不到取消提示
+- TUI 滚轮性能优化：`getMaxScrollOffset()` 改用法 `doRender` 中缓存的子组件行数，避免滚轮事件时暴力重渲染全部聊天内容
+- MCP 工具结果渲染截断：`formatToolExecution()` 对超过 3000 字符的工具输出截断显示，防止聊天容器无限膨胀
+
 ## [0.12.6] - 2026-07-28
 
 ### Fixed

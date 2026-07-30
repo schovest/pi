@@ -75,12 +75,12 @@ fi
 
 # shellcheck disable=SC2034 # used via nameref in run_menu
 EXT_NAMES=(
-	"pi-mcp-adapter"
+	"@schovest/pi-mcp-adapter"
 	"@juicesharp/rpiv-todo"
 	"@juicesharp/rpiv-ask-user-question"
-	"tps"
-	"sudo-helper"
-	"goal"
+	"@schovest/pi-tps"
+	"@schovest/pi-sudo-helper"
+	"@narumitw/pi-goal"
 	"context-mode"
 	"@juicesharp/rpiv-btw"
 	"superpowers"
@@ -107,12 +107,12 @@ EXT_DESCS=(
 EXT_DEFAULTS=(1 1 1 0 0 0 0 0 0 1 0 0)
 # shellcheck disable=SC2034 # used via nameref in run_menu
 EXT_INSTALLS=(
-	"npm:pi-mcp-adapter"
+	"npm:@schovest/pi-mcp-adapter"
 	"npm:@juicesharp/rpiv-todo"
 	"npm:@juicesharp/rpiv-ask-user-question"
-	"file:tps.ts"
-	"file:sudo-helper.ts"
-	"file:goal.ts"
+	"npm:@schovest/pi-tps"
+	"npm:@schovest/pi-sudo-helper"
+	"npm:@narumitw/pi-goal"
 	"npm:context-mode"
 	"npm:@juicesharp/rpiv-btw"
 	"git:github.com/obra/superpowers"
@@ -194,7 +194,7 @@ draw_menu() {
 	done
 
 	printf "\n"
-	printf "  ${DIM}↑/↓${RESET} move  ${DIM}Space${RESET} toggle  ${DIM}a${RESET} all  ${DIM}s${RESET} standard  ${DIM}Enter${RESET} confirm  ${DIM}q${RESET} skip\n"
+	printf "  ${DIM}↑/↓${RESET} move  ${DIM}Space${RESET} toggle  ${DIM}a${RESET} all  ${DIM}c${RESET} none  ${DIM}s${RESET} standard  ${DIM}Enter${RESET} confirm  ${DIM}q${RESET} skip\n"
 }
 
 # -- Read single keypress ---------------------------------------------------
@@ -296,6 +296,11 @@ run_menu() {
 			a | A)
 				# Select all
 				for i in $(seq 0 $((MN_NUM - 1))); do MN_SELECTED[$i]=1; done
+				draw_menu "$title"
+				;;
+			c | C)
+				# Clear all
+				for i in $(seq 0 $((MN_NUM - 1))); do MN_SELECTED[$i]=0; done
 				draw_menu "$title"
 				;;
 			s | S)

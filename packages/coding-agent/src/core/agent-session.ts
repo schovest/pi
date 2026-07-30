@@ -2269,8 +2269,8 @@ export class AgentSession {
 	private async _runAutoCompaction(reason: "overflow" | "threshold", willRetry: boolean): Promise<boolean> {
 		const settings = this.settingsManager.getCompactionSettings();
 
-		this._emit({ type: "compaction_start", reason });
 		this._autoCompactionAbortController = new AbortController();
+		this._emit({ type: "compaction_start", reason });
 
 		try {
 			if (!this.model) {
@@ -2436,14 +2436,17 @@ export class AgentSession {
 			return this.agent.hasQueuedMessages();
 		} catch (error) {
 			const errorMessage = error instanceof Error ? error.message : "compaction failed";
+			const isAbortError =
+				errorMessage === "Compaction cancelled" || (error instanceof Error && error.name === "AbortError");
 			this._emit({
 				type: "compaction_end",
 				reason,
 				result: undefined,
-				aborted: false,
+				aborted: isAbortError,
 				willRetry: false,
-				errorMessage:
-					reason === "overflow"
+				errorMessage: isAbortError
+					? undefined
+					: reason === "overflow"
 						? `Context overflow recovery failed: ${errorMessage}`
 						: `Auto-compaction failed: ${errorMessage}`,
 			});
