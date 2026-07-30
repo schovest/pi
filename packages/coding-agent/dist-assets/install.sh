@@ -75,7 +75,7 @@ fi
 
 # shellcheck disable=SC2034 # used via nameref in run_menu
 EXT_NAMES=(
-	"pi-mcp-adapter"
+	"@schovest/pi-mcp-adapter"
 	"@juicesharp/rpiv-todo"
 	"@juicesharp/rpiv-ask-user-question"
 	"tps"
@@ -107,7 +107,7 @@ EXT_DESCS=(
 EXT_DEFAULTS=(1 1 1 0 0 0 0 0 0 1 0 0)
 # shellcheck disable=SC2034 # used via nameref in run_menu
 EXT_INSTALLS=(
-	"npm:pi-mcp-adapter"
+	"npm:@schovest/pi-mcp-adapter"
 	"npm:@juicesharp/rpiv-todo"
 	"npm:@juicesharp/rpiv-ask-user-question"
 	"file:tps.ts"
