@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.12.7] - 2026-07-30
+
 ### Fixed
 
 - Esc 无法退出 auto-compaction：`_runAutoCompaction` 中 AbortController 在 `compaction_start` 事件后才创建，导致 signal 可能无法及时响应；catch 块总将 `aborted` 设为 `false`，AbortError 时用户看不到取消提示
