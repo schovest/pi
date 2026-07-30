@@ -194,7 +194,7 @@ draw_menu() {
 	done
 
 	printf "\n"
-	printf "  ${DIM}↑/↓${RESET} move  ${DIM}Space${RESET} toggle  ${DIM}a${RESET} all  ${DIM}s${RESET} standard  ${DIM}Enter${RESET} confirm  ${DIM}q${RESET} skip\n"
+	printf "  ${DIM}↑/↓${RESET} move  ${DIM}Space${RESET} toggle  ${DIM}a${RESET} all  ${DIM}c${RESET} none  ${DIM}s${RESET} standard  ${DIM}Enter${RESET} confirm  ${DIM}q${RESET} skip\n"
 }
 
 # -- Read single keypress ---------------------------------------------------
@@ -296,6 +296,11 @@ run_menu() {
 			a | A)
 				# Select all
 				for i in $(seq 0 $((MN_NUM - 1))); do MN_SELECTED[$i]=1; done
+				draw_menu "$title"
+				;;
+			c | C)
+				# Clear all
+				for i in $(seq 0 $((MN_NUM - 1))); do MN_SELECTED[$i]=0; done
 				draw_menu "$title"
 				;;
 			s | S)
