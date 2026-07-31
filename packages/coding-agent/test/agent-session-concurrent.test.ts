@@ -108,8 +108,9 @@ describe("AgentSession concurrent prompt guard", () => {
 			},
 		});
 
-		const sessionManager = SessionManager.inMemory();
+		const sessionManager = SessionManager.inMemory(tempDir);
 		const settingsManager = SettingsManager.create(tempDir, tempDir);
+		settingsManager.applyOverrides({ gitSnapshotMaxCount: 0 });
 		const authStorage = AuthStorage.create(join(tempDir, "auth.json"));
 		const modelRegistry = await createModelRegistry(authStorage, tempDir);
 		// Set a runtime API key so validation passes
@@ -234,8 +235,9 @@ describe("AgentSession concurrent prompt guard", () => {
 			},
 		});
 
-		const sessionManager = SessionManager.inMemory();
+		const sessionManager = SessionManager.inMemory(tempDir);
 		const settingsManager = SettingsManager.create(tempDir, tempDir);
+		settingsManager.applyOverrides({ gitSnapshotMaxCount: 0 });
 		const authStorage = AuthStorage.create(join(tempDir, "auth.json"));
 		const modelRegistry = await createModelRegistry(authStorage, tempDir);
 		await authStorage.modify("anthropic", async () => ({ type: "api_key", key: "test-key" }));
@@ -313,8 +315,9 @@ describe("AgentSession concurrent prompt guard", () => {
 			},
 		});
 
-		const sessionManager = SessionManager.inMemory();
+		const sessionManager = SessionManager.inMemory(tempDir);
 		const settingsManager = SettingsManager.create(tempDir, tempDir);
+		settingsManager.applyOverrides({ gitSnapshotMaxCount: 0 });
 		const authStorage = AuthStorage.create(join(tempDir, "auth.json"));
 		const modelRegistry = await createModelRegistry(authStorage, tempDir);
 		await authStorage.modify("anthropic", async () => ({ type: "api_key", key: "test-key" }));
@@ -420,8 +423,9 @@ describe("AgentSession concurrent prompt guard", () => {
 			},
 		});
 
-		const sessionManager = SessionManager.inMemory();
+		const sessionManager = SessionManager.inMemory(tempDir);
 		const settingsManager = SettingsManager.create(tempDir, tempDir);
+		settingsManager.applyOverrides({ gitSnapshotMaxCount: 0 });
 		const authStorage = AuthStorage.create(join(tempDir, "auth.json"));
 		const modelRegistry = await createModelRegistry(authStorage, tempDir);
 		await authStorage.modify("anthropic", async () => ({ type: "api_key", key: "test-key" }));
@@ -568,8 +572,9 @@ describe("AgentSession concurrent prompt guard", () => {
 			},
 		});
 
-		const sessionManager = SessionManager.inMemory();
+		const sessionManager = SessionManager.inMemory(tempDir);
 		const settingsManager = SettingsManager.create(tempDir, tempDir);
+		settingsManager.applyOverrides({ gitSnapshotMaxCount: 0 });
 		const authStorage = AuthStorage.create(join(tempDir, "auth.json"));
 		const modelRegistry = await createModelRegistry(authStorage, tempDir);
 		await authStorage.modify("anthropic", async () => ({ type: "api_key", key: "test-key" }));
@@ -590,6 +595,7 @@ describe("AgentSession concurrent prompt guard", () => {
 				hasHandlers: (eventType: string) => boolean;
 				emit: (event: { type: string; message?: { role?: string } }) => Promise<void>;
 				emitMessageEnd: (event: { type: string; message?: { role?: string } }) => Promise<undefined>;
+				emitToolCall: (event: { type: string; toolCallId: string }) => Promise<undefined>;
 				emitInput: (
 					text: string,
 					images: unknown,
@@ -614,6 +620,7 @@ describe("AgentSession concurrent prompt guard", () => {
 				}
 				return undefined;
 			},
+			emitToolCall: async () => undefined,
 			emitInput: async () => ({ action: "continue" }),
 			emitBeforeAgentStart: async () => undefined,
 			invalidate: () => {},
