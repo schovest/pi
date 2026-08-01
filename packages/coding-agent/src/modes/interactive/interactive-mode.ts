@@ -80,6 +80,7 @@ import type { GitSnapshotData } from "../../core/git-snapshot.ts";
 import { hasUncommittedChanges, isGitRepo, restoreSnapshot, unprotectSnapshot } from "../../core/git-snapshot.ts";
 import { configureHttpDispatcher, formatHttpIdleTimeoutMs } from "../../core/http-dispatcher.ts";
 import { type AppKeybinding, KeybindingsManager } from "../../core/keybindings.ts";
+import { createCompactionSummaryMessage } from "../../core/messages.ts";
 import { ModelRegistry } from "../../core/model-registry.ts";
 import { defaultModelPerProvider, findExactModelReferenceMatch, resolveModelScope } from "../../core/model-resolver.ts";
 import { DefaultPackageManager } from "../../core/package-manager.ts";
@@ -111,6 +112,7 @@ import { BackgroundProcessSelector } from "./components/background-process-selec
 import { BashExecutionComponent } from "./components/bash-execution.ts";
 import { BorderedLoader } from "./components/bordered-loader.ts";
 import { BranchSummaryMessageComponent } from "./components/branch-summary-message.ts";
+import { CompactionSummaryMessageComponent } from "./components/compaction-summary-message.ts";
 import { CountdownTimer } from "./components/countdown-timer.ts";
 import { CustomEditor } from "./components/custom-editor.ts";
 import { CustomMessageComponent } from "./components/custom-message.ts";
@@ -3557,7 +3559,13 @@ export class InteractiveMode {
 				} else if (event.result) {
 					this.chatContainer.clear();
 					this.rebuildChatFromMessages();
-					// v3：chatbox 不渲染 [compaction] summary 块，compaction 后只显示真实对话。
+					this.addMessageToChat(
+						createCompactionSummaryMessage(
+							event.result.summary,
+							event.result.tokensBefore,
+							new Date().toISOString(),
+						),
+					);
 					this.footer.invalidate();
 				} else if (event.errorMessage) {
 					if (event.reason === "manual") {
@@ -3769,8 +3777,12 @@ export class InteractiveMode {
 				break;
 			}
 			case "compactionSummary": {
-				// v3：chatbox 不渲染 [compaction] summary 块（compaction 前历史不污染 chatbox）。
-				// LLM 上下文仍由 buildSessionContext emit summary（本方法只负责 UI 渲染层）。
+				// 恢复渲染：compaction 摘要是当前上下文的总结（非 compaction 前原始消息），应显示在 chatbox。
+				// LLM 上下文仍由 buildSessionContext emit summary；compaction 前原始消息保持 lazy 不展示。
+				this.chatContainer.addChild(new Spacer(1));
+				const component = new CompactionSummaryMessageComponent(message, this.getMarkdownThemeWithSettings());
+				component.setExpanded(this.toolOutputExpanded);
+				this.chatContainer.addChild(component);
 				break;
 			}
 			case "branchSummary": {

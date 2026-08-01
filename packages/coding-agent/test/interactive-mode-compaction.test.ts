@@ -3,10 +3,10 @@ import { createCompactionSummaryMessage } from "../src/core/messages.ts";
 import { CompactionSummaryMessageComponent } from "../src/modes/interactive/components/compaction-summary-message.ts";
 import { UserMessageComponent } from "../src/modes/interactive/components/user-message.ts";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.ts";
-import { getMarkdownTheme } from "../src/modes/interactive/theme/theme.ts";
+import { getMarkdownTheme, initTheme } from "../src/modes/interactive/theme/theme.ts";
 
 describe("InteractiveMode compaction events", () => {
-	test("rebuilds chat after compaction without appending a compaction summary block", async () => {
+	test("rebuilds chat and appends a synthetic compaction summary at the bottom", async () => {
 		const fakeThis = {
 			isInitialized: true,
 			footer: { invalidate: vi.fn() },
@@ -50,12 +50,20 @@ describe("InteractiveMode compaction events", () => {
 
 		expect(fakeThis.chatContainer.clear).toHaveBeenCalledTimes(1);
 		expect(fakeThis.rebuildChatFromMessages).toHaveBeenCalledTimes(1);
-		// v3：chatbox 不渲染 [compaction] summary 块，compaction 后只保留真实对话
-		expect(fakeThis.addMessageToChat).not.toHaveBeenCalled();
+		// 恢复 summary 渲染：compaction 摘要是当前上下文的总结，compaction 完成后追加到 chatbox
+		expect(fakeThis.addMessageToChat).toHaveBeenCalledTimes(1);
+		expect(fakeThis.addMessageToChat).toHaveBeenCalledWith(
+			expect.objectContaining({
+				role: "compactionSummary",
+				tokensBefore: 123,
+				summary: "summary",
+			}),
+		);
 		expect(fakeThis.flushCompactionQueue).toHaveBeenCalledWith({ willRetry: false });
 	});
 
-	test("renderSessionContext skips compaction summary messages in the chatbox", () => {
+	test("renderSessionContext renders compaction summary messages in the chatbox", () => {
+		initTheme("dark");
 		const chatChildren: unknown[] = [];
 		const fakeThis = {
 			pendingTools: new Map(),
@@ -90,7 +98,7 @@ describe("InteractiveMode compaction events", () => {
 			entryIds: ["c1", "u1"],
 		});
 
-		expect(chatChildren.some((child) => child instanceof CompactionSummaryMessageComponent)).toBe(false);
+		expect(chatChildren.some((child) => child instanceof CompactionSummaryMessageComponent)).toBe(true);
 		expect(chatChildren.some((child) => child instanceof UserMessageComponent)).toBe(true);
 	});
 });
