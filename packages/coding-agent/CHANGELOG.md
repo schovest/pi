@@ -16,6 +16,9 @@
 - LazyEntry 占位条目导致的 `.message` 解引用崩溃：`buildSessionContext` / `_persist` / `createBranchedSession` 对无 `.message` 的 message 条目增加 optional chaining guard
 - LazyEntry 全量重写丢内容：`_rewriteFile` / `_persist` 首次 flush 分支 / `forkFrom` 对 lazy 条目原样写回磁盘 raw 而非 `JSON.stringify` 占位；`createBranchedSession` 切换 sessionFile 前先 materialize lazy 条目
 - 全仓剩余 `.message` 解引用点 lazy guard：`sessionEntryToContextMessages` / compaction（`findCutPoint` / `getLastAssistantUsage`）/ `branchSummarizeBranch` / fork（`agent-session-runtime`）/ `getUserMessagesForForking` / `getSessionStats` / 上下文 token 估算 / footer 用量统计 / `getUsageCostBreakdown` / cache-stats / tree-selector 渲染与复制 / `getSubagentMessages` / export-html（preRenderCustomTools + template.js）/ examples 扩展，遇无 `.message` 的 LazyEntry 不再崩溃（lazy 条目不参与上下文与统计累计）
+- v3 懒加载只对 `type=message` 行 peek（其余类型 full parse）：label / subagent_run / custom / thinking_level_change / model_change / branch_summary / session_info 等在 compaction 前不再被错误 lazy 化，`_buildIndex`（labelsById）/ `loadSubagentRunEntries` / `getLabel` 等索引与查询恢复完整字段
+- compaction 保留的 kept messages 不再丢失：`buildSessionContext` 新增可选 `materializer` 参数，`SessionManager.buildSessionContext` 传入 `materialize`，resume 后 lazy 占位的 kept messages 读回并进入 LLM 上下文（不再只剩 summary）
+- resume 后二次 compaction / 分支汇总不再丢 kept 内容：`compact` / `_runAutoCompaction` / `navigateTree` 汇总前 materialize lazy 占位（`_materializeBranchEntries`），`prepareCompaction` / `generateBranchSummary` 拿到完整消息
 
 ## [0.12.8] - 2026-07-31
 

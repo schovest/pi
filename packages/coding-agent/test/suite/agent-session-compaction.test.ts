@@ -1,3 +1,6 @@
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
 	type AssistantMessage,
 	createAssistantMessageEventStream,
@@ -5,7 +8,8 @@ import {
 	type Model,
 } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { estimateTokens } from "../../src/core/compaction/index.ts";
+import { DEFAULT_COMPACTION_SETTINGS, estimateTokens, prepareCompaction } from "../../src/core/compaction/index.ts";
+import { SessionManager } from "../../src/core/session-manager.ts";
 import type { ExtensionAPI } from "../../src/index.ts";
 import { createHarness, type Harness } from "./harness.ts";
 
@@ -88,6 +92,68 @@ function seedCompactableSession(harness: Harness): void {
 
 describe("AgentSession compaction characterization", () => {
 	const harnesses: Harness[] = [];
+
+	it("resume 后二次 compaction materialize lazy kept（不丢 kept 内容）", () => {
+		const dir = mkdtempSync(join(tmpdir(), "pi-compact-resume-"));
+		const file = join(dir, "s.jsonl");
+		const bigText = "x".repeat(100_000);
+		const lines = [
+			JSON.stringify({
+				type: "session",
+				version: 3,
+				id: "resume1",
+				timestamp: "2026-08-01T00:00:00.000Z",
+				cwd: "/tmp",
+			}),
+			JSON.stringify({
+				type: "message",
+				id: "u1",
+				parentId: null,
+				timestamp: "2026-08-01T00:00:00.000Z",
+				message: { role: "user", content: [{ type: "text", text: "old question" }] },
+			}),
+			JSON.stringify({
+				type: "message",
+				id: "a1",
+				parentId: "u1",
+				timestamp: "2026-08-01T00:00:00.000Z",
+				message: { role: "assistant", content: [{ type: "text", text: bigText }] },
+			}),
+			JSON.stringify({
+				type: "compaction",
+				id: "c1",
+				parentId: "a1",
+				timestamp: "2026-08-01T00:00:00.000Z",
+				summary: "first summary",
+				firstKeptEntryId: "u1",
+				tokensBefore: 1000,
+			}),
+			JSON.stringify({
+				type: "message",
+				id: "u2",
+				parentId: "c1",
+				timestamp: "2026-08-01T00:00:00.000Z",
+				message: { role: "user", content: [{ type: "text", text: "new question after resume" }] },
+			}),
+		];
+		writeFileSync(file, `${lines.join("\n")}\n`);
+
+		const sm = SessionManager.open(file);
+		// compaction 前 kept（u1/a1）→ lazy 占位（v3）
+		expect((sm.getEntry("a1") as { __lazy?: boolean }).__lazy).toBe(true);
+
+		// 对应 AgentSession._materializeBranchEntries：materialize 后二次压缩拿到完整 kept
+		const pathEntries = sm
+			.getBranch()
+			.map((e) => ((e as { __lazy?: boolean }).__lazy ? (sm.materialize((e as { id: string }).id) ?? e) : e));
+		const prep = prepareCompaction(pathEntries, { ...DEFAULT_COMPACTION_SETTINGS, keepRecentTokens: 1 });
+		expect(prep).toBeDefined();
+		if (!prep) return; // 防未定义（上面已断言）
+		const summarized = prep.messagesToSummarize.map((m) => JSON.stringify(m)).join("\n");
+		// 不 materialize 时 lazy kept 会被 sessionEntryToContextMessages guard 跳过，
+		// 新 summary 将丢失旧 kept 内容；materialize 后必须能取到
+		expect(summarized).toContain(bigText);
+	});
 
 	afterEach(() => {
 		vi.useRealTimers();

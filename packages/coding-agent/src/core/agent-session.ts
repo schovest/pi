@@ -100,7 +100,7 @@ import type { PrimaryAgentDefinition } from "./primary-agents/index.ts";
 import { discoverPrimaryAgents } from "./primary-agents/index.ts";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.ts";
 import type { ResourceExtensionPaths, ResourceLoader } from "./resource-loader.ts";
-import type { BranchSummaryEntry, CompactionEntry } from "./session-manager.ts";
+import type { BranchSummaryEntry, CompactionEntry, SessionEntry } from "./session-manager.ts";
 import {
 	CURRENT_SESSION_VERSION,
 	getLatestCompactionEntry,
@@ -1993,6 +1993,17 @@ export class AgentSession {
 	// =========================================================================
 
 	/**
+	 * getBranch() / collectEntriesForBranchSummary() 返回的 LazyEntry 占位（compaction 前
+	 * kept message）无 .message：汇总/压缩需要完整内容。materialize 后返回，保证 resume 后的
+	 * 二次 compaction / 分支汇总不丢 kept 内容。非 lazy 条目原样返回。
+	 */
+	private _materializeBranchEntries(entries: SessionEntry[]): SessionEntry[] {
+		return entries.map((e) =>
+			(e as { __lazy?: boolean }).__lazy ? (this.sessionManager.materialize((e as { id: string }).id) ?? e) : e,
+		);
+	}
+
+	/**
 	 * Manually compact the session context.
 	 * Aborts current agent operation first.
 	 * @param customInstructions Optional instructions for the compaction summary
@@ -2010,7 +2021,7 @@ export class AgentSession {
 
 			const { apiKey, headers, env } = await this._getSummarizationRequestAuth(this.model);
 
-			const pathEntries = this.sessionManager.getBranch();
+			const pathEntries = this._materializeBranchEntries(this.sessionManager.getBranch());
 			const settings = this.settingsManager.getCompactionSettings();
 
 			const preparation = prepareCompaction(pathEntries, settings);
@@ -2306,7 +2317,7 @@ export class AgentSession {
 				({ apiKey, headers, env } = await this._getSummarizationRequestAuth(this.model));
 			}
 
-			const pathEntries = this.sessionManager.getBranch();
+			const pathEntries = this._materializeBranchEntries(this.sessionManager.getBranch());
 
 			const preparation = prepareCompaction(pathEntries, settings);
 			if (!preparation) {
@@ -3199,11 +3210,13 @@ export class AgentSession {
 		}
 
 		// Collect entries to summarize (from old leaf to common ancestor)
-		const { entries: entriesToSummarize, commonAncestorId } = collectEntriesForBranchSummary(
+		const { entries: rawEntriesToSummarize, commonAncestorId } = collectEntriesForBranchSummary(
 			this.sessionManager,
 			oldLeafId,
 			targetId,
 		);
+		// lazy kept 占位无 .message：materialize 后分支汇总才不丢内容
+		const entriesToSummarize = this._materializeBranchEntries(rawEntriesToSummarize);
 
 		// Prepare event data - mutable so extensions can override
 		let customInstructions = options.customInstructions;

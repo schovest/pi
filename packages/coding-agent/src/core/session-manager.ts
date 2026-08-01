@@ -148,8 +148,8 @@ export interface CustomMessageEntry<T = unknown> extends SessionEntryBase {
 }
 
 /**
- * 两阶段加载的中间态：行只 peek 元数据（v3：无大小阈值，lazy 纯按 compaction 边界），
- * 读完后据最后 compaction offset 决策。
+ * 两阶段加载的中间态：message 行只 peek 元数据（v3：无大小阈值，lazy 纯按 compaction 边界），
+ * 读完后据最后 compaction offset 决策。非 message 类型行不经过此态（直接 full parse）。
  * 显式 `__pending` 标记用于在第二阶段与 full-parse 的 FileEntry 区分
  * （不靠模糊的 in/类型判定）。
  */
@@ -453,11 +453,16 @@ export function sessionEntryToContextMessages(entry: SessionEntry): AgentMessage
  * Build the session context from entries using tree traversal.
  * If leafId is provided, walks from that entry to root.
  * Handles compaction and branch summaries along the path.
+ *
+ * @param materializer 可选：把 LazyEntry 占位（compaction 前 kept message）恢复为完整
+ *    entry 的回调（如 `SessionManager.materialize`）。提供时，compaction 保留的
+ *    kept messages 会恢复并进入 LLM 上下文；缺省时 lazy 占位被跳过（向后兼容）。
  */
 export function buildSessionContext(
 	entries: SessionEntry[],
 	leafId?: string | null,
 	byId?: Map<string, SessionEntry>,
+	materializer?: (id: string) => SessionEntry | undefined,
 ): SessionContext {
 	// Build uuid index if not available
 	if (!byId) {
@@ -519,17 +524,19 @@ export function buildSessionContext(
 	const entryIds: (string | null)[] = [];
 
 	const appendMessage = (entry: SessionEntry) => {
-		if (entry.type === "message" && entry.message) {
-			messages.push(entry.message);
-			entryIds.push(entry.id);
-		} else if (entry.type === "custom_message") {
-			messages.push(
-				createCustomMessage(entry.customType, entry.content, entry.display, entry.details, entry.timestamp),
-			);
-			entryIds.push(entry.id);
-		} else if (entry.type === "branch_summary" && entry.summary) {
-			messages.push(createBranchSummaryMessage(entry.summary, entry.fromId, entry.timestamp));
-			entryIds.push(entry.id);
+		// LazyEntry（compaction 前 kept message 占位）无 .message：有 materializer 时
+		// 读回完整 entry 再 emit（kept 内容不丢失）；无 materializer 维持跳过占位。
+		const resolved = (entry as { __lazy?: boolean }).__lazy && materializer ? materializer(entry.id) : undefined;
+		const full = resolved ?? entry;
+		if (full.type === "message" && full.message) {
+			messages.push(full.message);
+			entryIds.push(full.id);
+		} else if (full.type === "custom_message") {
+			messages.push(createCustomMessage(full.customType, full.content, full.display, full.details, full.timestamp));
+			entryIds.push(full.id);
+		} else if (full.type === "branch_summary" && full.summary) {
+			messages.push(createBranchSummaryMessage(full.summary, full.fromId, full.timestamp));
+			entryIds.push(full.id);
 		}
 	};
 
@@ -621,10 +628,14 @@ export function readRawLine(filePath: string, offset: number, length: number): s
 
 /**
  * 读取会话文件。两阶段（v3：lazy 纯按 compaction 边界，无大小阈值）：
- * 1. 流式读：每行 peek type——session/compaction 行 full parse（记录最后一个 compaction 行 offset）；
- *    其他行 peek 元数据存 PendingEntry（不 parse body、不保留 raw，省内存）。
- * 2. 据最后 compaction offset 决策：compaction 前行 → LazyEntry（占位，materialize 时读回）；
- *    否则（compaction 后 / 无 compaction）→ readRawLine full parse（活跃或零回归）。
+ * 1. 流式读：每行 peek type——仅 type=message 的行 peek 元数据存 PendingEntry
+ *    （不 parse body、不保留 raw，省内存）；其余行（session header / compaction /
+ *    label / subagent_run / custom / thinking_level_change / model_change /
+ *    branch_summary / session_info 等）full parse——它们小，且索引（labelsById）/
+ *    查询（loadSubagentRunEntries / getLabel）需要完整字段。记录最后一个 compaction 行 offset。
+ * 2. 据最后 compaction offset 决策：compaction 前 message 行 → LazyEntry（占位，
+ *    materialize 时读回）；否则（compaction 后 / 无 compaction）→ readRawLine
+ *    full parse（活跃或零回归）。
  */
 export function loadEntriesFromFile(filePath: string): FileEntry[] {
 	const resolvedFilePath = normalizePath(filePath);
@@ -645,10 +656,14 @@ export function loadEntriesFromFile(filePath: string): FileEntry[] {
 			const byteLen = Buffer.byteLength(line, "utf8");
 			consumedBytes += byteLen + 1; // +1 for \n
 			if (byteLen === 0) return; // 空行：推进字节游标（保持 offset 与磁盘一致）但不解析
-			// v3：每行 peek type（无大小阈值）。header/compaction 需完整字段 → full parse；
-			// 其余行 peek 元数据存 PendingEntry，阶段 2 据 compaction 边界决策。
+			// v3：每行 peek type（无大小阈值）。仅 type=message 的行 peek 元数据存
+			// PendingEntry（阶段 2 据 compaction 边界决策 lazy/full）；其他类型
+			// （label/subagent_run/custom/thinking_level_change/model_change/
+			// branch_summary/session_info 等）full parse——它们小，且索引（labelsById）/
+			// 查询（loadSubagentRunEntries/getLabel）需要完整字段，不能 lazy。
+			// header(type=session)/compaction 亦 full parse（记录 compaction offset）。
 			const f = peekEntryFields(line);
-			if (f.type !== undefined && f.type !== "session" && f.type !== "compaction") {
+			if (f.type === "message") {
 				if (f.id !== undefined && f.parentId !== undefined) {
 					slots.push({
 						type: "message",
@@ -1554,9 +1569,10 @@ export class SessionManager {
 	/**
 	 * Build the session context (what gets sent to the LLM).
 	 * Uses tree traversal from current leaf.
+	 * compaction 保留的 kept messages 以 LazyEntry 占位存在时，经 materializer 恢复后进入上下文。
 	 */
 	buildSessionContext(): SessionContext {
-		return buildSessionContext(this.getEntries(), this.leafId, this.byId);
+		return buildSessionContext(this.getEntries(), this.leafId, this.byId, (id) => this.materialize(id));
 	}
 
 	/**

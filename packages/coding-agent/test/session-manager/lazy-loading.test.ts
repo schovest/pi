@@ -39,6 +39,30 @@ function makeCompaction(id: string, firstKept: string, parentId: string | null =
 		tokensBefore: 1000,
 	});
 }
+function makeLabel(id: string, parentId: string, targetId: string, label: string): string {
+	return JSON.stringify({
+		type: "label",
+		id,
+		parentId,
+		timestamp: "2026-08-01T00:00:00.000Z",
+		targetId,
+		label,
+	});
+}
+function makeSubagentRun(id: string, parentId: string, agent: string): string {
+	return JSON.stringify({
+		type: "subagent_run",
+		id,
+		parentId,
+		timestamp: "2026-08-01T00:00:00.000Z",
+		runId: `run-${id}`,
+		index: 0,
+		agent,
+		task: "research",
+		status: "success",
+		toolCount: 3,
+	});
+}
 
 describe("peekEntryFields", () => {
 	it("extracts type/id/parentId without full parse", () => {
@@ -135,6 +159,30 @@ describe("loadEntriesFromFile compaction-boundary lazy (v3, no size threshold)",
 	});
 });
 
+it("compaction 前非 message 类型（label/subagent_run）full parse，索引不失效", () => {
+	const dir = mkdtempSync(join(tmpdir(), "pi-lazy-"));
+	const file = join(dir, "s.jsonl");
+	writeFileSync(
+		file,
+		`${makeHeader()}\n${makeMsg("m1", null, BIG)}\n${makeLabel("l1", "m1", "m1", "checkpoint")}\n${makeSubagentRun("sa1", "m1", "researcher")}\n${makeCompaction("c1", "m1", "m1")}\n${makeMsg("after", "c1", SMALL)}\n`,
+	);
+	const sm = SessionManager.create("/tmp", dir);
+	sm.setSessionFile(file);
+	// label 索引正常（_buildIndex 的 labelsById 生效）
+	expect(sm.getLabel("m1")).toBe("checkpoint");
+	// subagent_run 加载正常（loadSubagentRunEntries 按 type 过滤）
+	const runs = sm.loadSubagentRunEntries();
+	expect(runs).toHaveLength(1);
+	expect(runs[0].agent).toBe("researcher");
+	// 类型未被错误改写为 message/lazy
+	const l1 = sm.getEntry("l1") as { type: string; label?: string };
+	expect(l1.type).toBe("label");
+	expect(l1.label).toBe("checkpoint");
+	const sa1 = sm.getEntry("sa1") as { type: string; agent?: string };
+	expect(sa1.type).toBe("subagent_run");
+	expect(sa1.agent).toBe("researcher");
+});
+
 describe("SessionManager.materialize", () => {
 	it("restores full content from lazy placeholder", () => {
 		const dir = mkdtempSync(join(tmpdir(), "pi-lazy-"));
@@ -164,6 +212,25 @@ describe("SessionManager.materialize", () => {
 });
 
 describe("lazy entries and .message deref guards (B)", () => {
+	it("buildSessionContext materializes kept messages between firstKeptEntryId and compaction", () => {
+		const dir = mkdtempSync(join(tmpdir(), "pi-lazy-"));
+		const file = join(dir, "s.jsonl");
+		// m1（大，toolResult，firstKept）+ m2（小，user）在 compaction 前 → lazy；
+		// m2 是 compaction 本应保留的最近消息
+		writeFileSync(
+			file,
+			`${makeHeader()}\n${makeMsg("m1", null, BIG)}\n${makeMsg("m2", "m1", SMALL, "user")}\n${makeCompaction("c1", "m1", "m2")}\n`,
+		);
+		const sm = SessionManager.create("/tmp", dir);
+		sm.setSessionFile(file);
+		expect((sm.getEntry("m2") as { __lazy?: boolean }).__lazy).toBe(true);
+		const ctx = sm.buildSessionContext();
+		// compaction summary + kept m1 + kept m2（修复前 lazy 被 guard 跳过，只剩 summary）
+		expect(ctx.entryIds).toEqual(["c1", "m1", "m2"]);
+		expect(ctx.messages.length).toBe(3);
+		expect(ctx.messages[2]).toEqual(JSON.parse(makeMsg("m2", "m1", SMALL, "user")).message);
+	});
+
 	it("buildSessionContext does not crash on lazy entries", () => {
 		const dir = mkdtempSync(join(tmpdir(), "pi-lazy-"));
 		const file = join(dir, "s.jsonl");
@@ -176,10 +243,12 @@ describe("lazy entries and .message deref guards (B)", () => {
 		sm.setSessionFile(file);
 		expect((sm.getEntry("bigC") as { __lazy?: boolean }).__lazy).toBe(true);
 		const ctx = sm.buildSessionContext();
-		// compaction summary + after（lazy 条目无 .message，被 guard 跳过）
-		expect(ctx.messages.length).toBe(2);
+		// compaction summary + kept bigC（经 materializer 恢复）+ after
+		// （kept 内容不再被跳过：lazy 占位在 SessionManager 路径下被读回）
+		expect(ctx.messages.length).toBe(3);
+		expect(ctx.entryIds).toEqual(["c1", "bigC", "after"]);
 		const allText = ctx.messages.map((m) => JSON.stringify(m)).join("\n");
-		expect(allText).not.toContain("x".repeat(1000));
+		expect(allText).toContain("x".repeat(1000));
 	});
 
 	it("resume then append does not crash and preserves lazy line (hasAssistant guard)", () => {
