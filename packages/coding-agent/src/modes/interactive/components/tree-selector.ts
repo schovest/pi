@@ -9,7 +9,7 @@ import {
 	TruncatedText,
 	truncateToWidth,
 } from "@schovest/pi-tui";
-import type { SessionTreeNode } from "../../../core/session-manager.ts";
+import type { SessionEntry, SessionTreeNode } from "../../../core/session-manager.ts";
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { keyHint, keyText } from "./keybinding-hints.ts";
@@ -64,6 +64,9 @@ class TreeList implements Component {
 	private lastSelectedId: string | null = null;
 	private foldedNodes: Set<string> = new Set();
 
+	/** materialize-on-view 回调：把 lazy 占位条目恢复为完整 entry（由 sessionManager 注入）。 */
+	private materialize?: (id: string) => SessionEntry | undefined;
+
 	public onSelect?: (entryId: string) => void;
 	public onCancel?: () => void;
 	public onCopy?: (text: string | undefined) => void;
@@ -75,10 +78,12 @@ class TreeList implements Component {
 		maxVisibleLines: number,
 		initialSelectedId?: string,
 		initialFilterMode?: FilterMode,
+		materialize?: (id: string) => SessionEntry | undefined,
 	) {
 		this.currentLeafId = currentLeafId;
 		this.maxVisibleLines = maxVisibleLines;
 		this.filterMode = initialFilterMode ?? "default";
+		this.materialize = materialize;
 		this.multipleRoots = tree.length > 1;
 		this.flatNodes = this.flattenTree(tree);
 		this.buildActivePath();
@@ -500,9 +505,23 @@ class TreeList implements Component {
 		this.visibleChildrenMap = visibleChildren;
 	}
 
+	/**
+	 * materialize-on-view：lazy 占位条目（__lazy）首次显示/复制/搜索时经注入的 materialize
+	 * 回调恢复为完整 entry，并就地替换树节点引用（仅一次，后续渲染不再读盘）。
+	 * 无回调或恢复失败（id 未知）时维持占位，不崩溃。
+	 */
+	private resolveEntry(node: SessionTreeNode): SessionEntry {
+		const entry = node.entry;
+		if ((entry as { __lazy?: boolean }).__lazy && this.materialize) {
+			const full = this.materialize(entry.id);
+			if (full) node.entry = full;
+		}
+		return node.entry;
+	}
+
 	/** Get searchable text content from a node */
 	private getSearchableText(node: SessionTreeNode): string {
-		const entry = node.entry;
+		const entry = this.resolveEntry(node);
 		const parts: string[] = [];
 
 		if (node.label) {
@@ -706,7 +725,7 @@ class TreeList implements Component {
 	}
 
 	private getEntryDisplayText(node: SessionTreeNode, isSelected: boolean): string {
-		const entry = node.entry;
+		const entry = this.resolveEntry(node);
 		let result: string;
 
 		const normalize = (s: string) => s.replace(/[\n\t]/g, " ").trim();
@@ -839,7 +858,7 @@ class TreeList implements Component {
 	}
 
 	private getEntryCopyText(node: SessionTreeNode): string | undefined {
-		const entry = node.entry;
+		const entry = this.resolveEntry(node);
 		let text: string | undefined;
 
 		switch (entry.type) {
@@ -1210,13 +1229,21 @@ export class TreeSelectorComponent extends Container implements Focusable {
 		onLabelChange?: (entryId: string, label: string | undefined) => void,
 		initialSelectedId?: string,
 		initialFilterMode?: FilterMode,
+		materialize?: (id: string) => SessionEntry | undefined,
 	) {
 		super();
 
 		this.onLabelChangeCallback = onLabelChange;
 		const maxVisibleLines = Math.max(5, Math.floor(terminalHeight / 2));
 
-		this.treeList = new TreeList(tree, currentLeafId, maxVisibleLines, initialSelectedId, initialFilterMode);
+		this.treeList = new TreeList(
+			tree,
+			currentLeafId,
+			maxVisibleLines,
+			initialSelectedId,
+			initialFilterMode,
+			materialize,
+		);
 		this.treeList.onSelect = onSelect;
 		this.treeList.onCancel = onCancel;
 		this.treeList.onCopy = (text) => this.onCopy?.(text);

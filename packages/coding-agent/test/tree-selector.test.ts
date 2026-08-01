@@ -1,5 +1,5 @@
 import { setKeybindings } from "@schovest/pi-tui";
-import { beforeAll, beforeEach, describe, expect, test } from "vitest";
+import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { KeybindingsManager } from "../src/core/keybindings.ts";
 import type {
 	ModelChangeEntry,
@@ -650,6 +650,142 @@ describe("TreeSelectorComponent", () => {
 
 			selector.handleInput(DOWN); // user-3a → asst-3a (not user-3b)
 			expect(list.getSelectedNode()?.entry.id).toBe("asst-3a");
+		});
+	});
+
+	describe("lazy entry materialize-on-view", () => {
+		// LazyEntry 占位：只有元数据，无 .message（compaction 前行）
+		function lazyMessage(id: string): SessionEntry {
+			return {
+				type: "message",
+				id,
+				parentId: null,
+				timestamp: new Date().toISOString(),
+				__lazy: true,
+				offset: 0,
+				length: 100,
+			} as unknown as SessionEntry;
+		}
+
+		test("render materializes lazy entry and shows full content", () => {
+			const fullEntry = userMessage("lazy-1", null, "materialized content");
+			const materialize = vi.fn((id: string) => (id === "lazy-1" ? fullEntry : undefined));
+			const tree = buildTree([lazyMessage("lazy-1")]);
+
+			const selector = new TreeSelectorComponent(
+				tree,
+				"lazy-1",
+				24,
+				() => {},
+				() => {},
+				undefined,
+				undefined,
+				undefined,
+				materialize,
+			);
+			const list = selector.getTreeList();
+
+			const rendered = list.render(200).join("\n");
+
+			expect(materialize).toHaveBeenCalledWith("lazy-1");
+			expect(rendered).toContain("materialized content");
+			expect(rendered).not.toContain("[lazy message]");
+		});
+
+		test("copy materializes lazy entry and returns full text", () => {
+			const fullEntry = userMessage("lazy-1", null, "copy me");
+			const materialize = vi.fn((id: string) => (id === "lazy-1" ? fullEntry : undefined));
+			const tree = buildTree([lazyMessage("lazy-1")]);
+
+			const selector = new TreeSelectorComponent(
+				tree,
+				"lazy-1",
+				24,
+				() => {},
+				() => {},
+				undefined,
+				undefined,
+				undefined,
+				materialize,
+			);
+			const list = selector.getTreeList();
+
+			let copied: string | undefined;
+			list.onCopy = (text) => {
+				copied = text;
+			};
+			list.copySelected();
+
+			expect(materialize).toHaveBeenCalledWith("lazy-1");
+			expect(copied).toContain("copy me");
+		});
+
+		test("search materializes lazy entry for searchable text", () => {
+			const fullEntry = userMessage("lazy-1", null, "needle-in-history");
+			const materialize = vi.fn((id: string) => (id === "lazy-1" ? fullEntry : undefined));
+			const tree = buildTree([lazyMessage("lazy-1")]);
+
+			const selector = new TreeSelectorComponent(
+				tree,
+				"lazy-1",
+				24,
+				() => {},
+				() => {},
+				undefined,
+				undefined,
+				undefined,
+				materialize,
+			);
+			const list = selector.getTreeList();
+
+			// 输入搜索词触发 applyFilter → getSearchableText
+			for (const ch of "needle") {
+				list.handleInput(ch);
+			}
+
+			expect(materialize).toHaveBeenCalledWith("lazy-1");
+			expect(list.getSearchQuery()).toBe("needle");
+			expect(list.getSelectedNode()?.entry.id).toBe("lazy-1");
+		});
+
+		test("without materialize callback lazy entry stays placeholder (no crash)", () => {
+			const tree = buildTree([lazyMessage("lazy-1")]);
+
+			const selector = new TreeSelectorComponent(
+				tree,
+				"lazy-1",
+				24,
+				() => {},
+				() => {},
+			);
+			const list = selector.getTreeList();
+
+			const rendered = list.render(200).join("\n");
+			expect(rendered).toContain("[lazy message]");
+		});
+
+		test("lazy entry materializes only once (entry reused on subsequent renders)", () => {
+			const fullEntry = userMessage("lazy-1", null, "single materialization");
+			const materialize = vi.fn((id: string) => (id === "lazy-1" ? fullEntry : undefined));
+			const tree = buildTree([lazyMessage("lazy-1")]);
+
+			const selector = new TreeSelectorComponent(
+				tree,
+				"lazy-1",
+				24,
+				() => {},
+				() => {},
+				undefined,
+				undefined,
+				undefined,
+				materialize,
+			);
+			const list = selector.getTreeList();
+
+			list.render(200);
+			list.render(200);
+
+			expect(materialize).toHaveBeenCalledTimes(1);
 		});
 	});
 });

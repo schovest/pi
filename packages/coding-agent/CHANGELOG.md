@@ -10,6 +10,8 @@
 ### Changed
 
 - 懒加载去 64KB 阈值（v3）：`loadEntriesFromFile` 对非 header/compaction 行一律 peek 元数据（不再按大小判断），compaction 前全部行（含小行）懒加载为 `LazyEntry` 占位；compaction 后 / 无 compaction 的行仍 full parse（零回归）。移除 `LAZY_ENTRY_THRESHOLD` 常量
+- chatbox 不再渲染 `[compaction]` summary 块（v3 UI 简化）：`addMessageToChat` 跳过 compaction summary 消息，compaction 后 chatbox 只显示真实对话；LLM 上下文（`buildSessionContext`）仍 emit summary 不变
+- tree materialize-on-view：tree 查看/复制/搜索 lazy 条目时经注入的 `materialize` 回调恢复完整内容（`[lazy message]` 占位仅在无回调时兜底），compaction 前历史可在 tree 中完整回顾
 
 ### Fixed
 
