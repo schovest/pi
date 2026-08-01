@@ -1,155 +1,145 @@
-# Session Resume 懒加载设计
+# Session Resume 懒加载设计（v2 修正版）
+
+> **v2 修正（2026-08-01）**：首版假设「buildSessionContext 不碰 compaction 前 lazy 占位」**经实测证伪**——`buildSessionContext` 的 settings 循环遍历整个 leaf→root path 访问 `entry.message.role`，LazyEntry 无 `.message` 会 `TypeError`。本版改为「边界感知 lazy + 全访问点 guard」。
 
 ## 概述
 
-解决 resume 超大 session（含大量历史 toolResult）时加载阶段卡死的问题。核心思路：resume 时对 **compaction 边界之前**的巨型 message 条目只 peek 元数据、不做 `JSON.parse`，需要时（revert、详情查看等）再按磁盘偏移按需解析（materialize）。
+解决 resume 超大 session（含大量历史 toolResult）时加载阶段卡死。resume 时对 **compaction 边界之前**的巨型 message 条目只 peek 元数据、不做 `JSON.parse`，需要时按磁盘偏移按需解析（materialize）；对所有解引用 `.message` 的访问点加 guard，使 lazy 占位不致崩溃。不改 JSONL 格式，保留 revert 跨 compaction 能力。
 
-不改 JSONL 文件格式，保留 revert 跨 compaction 能力，兼容现有文件。
+## 背景与根因（数据支撑，不变）
 
-## 背景与根因（数据支撑）
-
-对实际 session 文件的测量：
-
-| 文件 | 总大小 | subagent 消息占比 | 主链 message 占比 |
+| 文件 | 总大小 | subagent 消息 | 主链 message |
 | --- | --- | --- | --- |
-| 2026-07-07 (platform) | 199.5 MB | 1.5 MB（1%） | 196.6 MB（99%） |
-| 2026-07-25 (pi) | 111.0 MB | 1.8 MB（2%） | 107.3 MB（97%） |
+| 2026-07-07 (platform) | 199.5 MB | 1%（1.5 MB） | 99%（196.6 MB） |
+| 2026-07-25 (pi) | 111.0 MB | 2%（1.8 MB） | 97%（107.3 MB） |
 
-体积集中在主链极少数巨型 toolResult：
+体积集中在主链极少数巨型 toolResult：111MB 文件 Top 3（61.4+25.6+18.5MB）占 98%、全在 compaction 前；199.5MB 文件 Top 5 占 99.5%、无 compaction。来源：`todo`(61-71MB)、`ctx_read`(54MB)、`read`(18-30MB)、`bash`(16MB)。
 
-- 111 MB 文件：Top 3 巨型 message（61.4 + 25.6 + 18.5 MB）占 98%，全部在 compaction 之前；compaction 后仅 0.3 MB。
-- 199.5 MB 文件：Top 5 巨型 message（71.8 + 53.9 + 30.4 + 23.2 + 16.5 MB）占 99.5%，无 compaction。
+**根因**：`loadEntriesFromFile` 逐行 `JSON.parse`（单条 70MB 极慢 + GC），其中 compaction 前巨型历史条目已被 compaction summary 逻辑替代却仍全量解析。subagent 消息（1-2%）无关。
 
-巨型 toolResult 的来源（按异常程度）：`todo`（61-71 MB，最反常）、`ctx_read`（54 MB）、`read`（18-30 MB）、`bash`（16 MB）。
+## 方案决策（不变）
 
-**根因**：resume 时 `loadEntriesFromFile` 对整个文件逐行 `JSON.parse`（单条 70 MB 的 JSON 极慢 + 触发 GC），其中 compaction 之前的巨型历史条目**逻辑上已被 compaction summary 替代**（`buildSessionContext` 不再使用它们），却每次 resume 都被全量解析。
+- **S1 平台级 toolResult 硬截断**：否决（内容不能丢失；源头控制由各插件自行实现）。
+- **M2 懒加载**：选定（不改格式、保留 revert）。代价是复杂度。
+- ~~M1 物理重写 compaction~~：丢 revert 跨 compaction，不选。
 
-**关键事实**：subagent 消息只占 1-2%，与本问题无关。
+## 关键代码事实（lazy 方案必须处理）
 
-## 方案决策
+grep 全仓 `.message` 解引用，以下点会对 lazy 占位（无 `.message`）崩溃，**必须 guard**：
 
-### 机制层：M2 懒加载（本次实现）
+| 位置 | 代码 | 触发 |
+| --- | --- | --- |
+| `buildSessionContext` settings 循环 (445-454) | `entry.type === "message" && entry.message.role === "assistant"` | 每次 buildSessionContext（resume 启动、渲染） |
+| `buildSessionContext` appendMessage (462) | `entry.type === "message"` → `messages.push(entry.message)` | compaction 后 emit / 无 compaction emit |
+| `_persist` (1003) | hasAssistant `.some(e.message.role)` | resume 后首次 append |
+| `createBranchedSession` (1639) | hasAssistant | fork/export |
+| `footer.ts:210` | `entry.message.role` / `entry.message.usage` | 每次渲染（热路径） |
+| `usage-totals.ts:43-48` | `entry.message.role` / `usage` | 成本统计 |
+| `cache-stats.ts:120` | `.message` 解引用 | 缓存统计 |
 
-在三个候选中选定 M2：
-
-- ~~M1 物理重写 compaction~~：根治但丢失 revert 跨 compaction 能力。
-- **M2 懒加载（不改格式）**：✅ 选定。保留 revert 能力、兼容现有文件。代价是实现复杂度、旧文件磁盘体积不变。
-- ~~M3 只做源头 + 手动 vacuum~~：治标不治本。
-
-### 源头层：S1 不实现
-
-~~S1 平台级 toolResult 输出大小强制限制~~：**明确否决**。理由：硬截断会丢失工具结果内容，用户要求"宁可多花上下文也不丢失内容"。源头控制大小由各插件/工具层面自行实现（截断时保留完整内容到可检索位置）。此决策已记入项目约定。
+**关键**：compaction **不重写 parentId 链**，故 `buildSessionContext` 的 leaf→root path 包含 compaction 前所有祖先条目——即使最终只 emit compaction 后条目，settings 循环也会遍历到 compaction 前条目并访问其 `.message.role`。
 
 ## 详细设计
 
-### 数据流（resume 时）
+### 边界感知 lazy（数据流）
 
 ```
-loadEntriesFromFile（改造）
-  │ 流式读 JSONL，对每行记录 byte offset + length
-  ├─ peek 顶层字段（regex: type / id / parentId）
-  ├─ 小行（≤ 阈值，默认 64KB）→ 正常 JSON.parse 进 fileEntries
-  ├─ 大行（> 阈值）→ 存 LazyEntry 占位（不解析 message 内容）
-  └─ 全部读完后确定 compaction 边界（firstKeptEntryId 集合）
-     注：JSONL append-only，compaction entry 在被压缩消息之后写入，
-     边界判定须在全部 peek 完成后进行
-
-_buildIndex
-  └─ lazy 占位也进 byId（带 __lazy 标记），leaf 计算正常
-     （compaction 前大条目本就不参与 leaf，现有 type 判断已处理）
-
-渲染路径（已验证不受影响）
-  renderInitialMessages / rebuildChatFromMessages → buildSessionContext
-  → 只返回 leaf→root 上 compaction 之后的条目 + compaction summary
-  → 不访问 compaction 前 lazy 占位的 .message → 不触发 materialize
+loadEntriesFromFile（改造，两阶段）
+  第一阶段：流式读，每行记录 byte offset
+    ├─ 小行（≤64KB）→ 立即 full parse 进 fileEntries
+    ├─ 大行（>64KB）→ 暂存为 PendingEntry {id,parentId,type,timestamp,offset,length}，不全量 parse
+    └─ compaction 行 → full parse（小，记录其 offset）
+  第二阶段：确定 lastCompactionOffset（最后一个 compaction entry 的行 offset，无则 Infinity）
+    ├─ PendingEntry.offset < lastCompactionOffset → 转 LazyEntry（compaction 前，保留 lazy）
+    └─ PendingEntry.offset >= lastCompactionOffset → readRawLine + full parse（活跃大行）
+       （无 compaction 时所有 PendingEntry 都 full parse → 行为与现状完全一致，零回归）
 ```
 
-### LazyEntry 占位结构
+**为什么两阶段**：JSONL append-only，compaction entry 在被压缩消息之后写入；流式读到 compaction 行时才知边界，但前面的大行可能已读——故先暂存 pending，读完全部后据 compaction offset 决策。
+
+### LazyEntry 占位结构（不变）
 
 ```typescript
-// compaction 前、体积超阈值的 message 条目的内存表示
 interface LazyEntry {
  type: "message";
  id: string;
  parentId: string | null;
  timestamp: string;
- __lazy: true;
- offset: number;   // 在 sessionFile 中的字节偏移
- length: number;   // 该行字节长度
+ readonly __lazy: true;
+ offset: number;
+ length: number;
 }
 ```
 
-- `byId.get(id)` 返回 LazyEntry；访问其 `.message` 前必须先 `materialize(id)`。
-- `materialize(id)`：seek 到 offset、读 length 字节、`JSON.parse` 单行，用完整 `SessionMessageEntry` 替换 byId 与 fileEntries 中的 lazy 占位。
+`materialize(id)`：seek 到 offset、读 length、`JSON.parse` 单行，替换 byId/fileEntries 中的占位。
 
-### materialize 触发点（逐一审查）
+### 访问点 guard（核心修正）
 
-| 操作 | 是否触发 materialize | 说明 |
-| --- | --- | --- |
-| `buildSessionContext` | ❌ 不触发 | 走 leaf→root，遇 compaction 用 summary，不访问 compaction 前条目的 message |
-| `_buildIndex` | ❌ | 只用 type / id / parentId |
-| `renderInitialMessages` 中数 compaction 数量 | ❌ | 只读 `.type` |
-| `handleCompactCommand` 数 message 数量 | ❌ | 只读 `.type` |
-| `pruneOrphanedEntries` 判断 | ❌ | 只读 type / parentId；末尾 `_rewriteFile()` 另处理 |
-| `getBranch` / `getEntry` / `getTree` | ⚠️ 调用方 | 返回 lazy 占位；调用方读 `.message` 时才 materialize |
-| **`_rewriteFile`** | ✅ 触发 | lazy 占位不能 `JSON.stringify`；从 offset+length 读 raw line 原样写回 |
-| `createBranchedSession` / export-html | ✅ | 重操作，materialize 全部 lazy（频率低，可接受） |
-| **`footer` 累计 usage** | ✅ 见下节 | 唯一热路径，单独用方案 B 处理 |
+**原则**：guard 不丢数据——只读元数据（type/id/parentId）的点用 optional chaining 安全跳过；需要 role/usage 的点保守处理或 materialize。
 
-### footer 累计 usage（方案 B：compaction 携带累计 usage）
+| 访问点 | guard 行为 |
+| --- | --- |
+| `buildSessionContext` settings 循环 (445) | `entry.message?.role === "assistant"`（optional chaining）。LazyEntry 主要是 toolResult（非 assistant），跳过 model 提取安全；assistant 通常 <64KB 不 lazy，故无 assistant LazyEntry 边界。 |
+| `buildSessionContext` appendMessage (462) | compaction 后条目经边界感知已 full parse（活跃），理论上无 LazyEntry；仍加 `entry.message != null` 守卫防御。 |
+| `_persist` hasAssistant (1003) | LazyEntry role 未知，**保守按可能-assistant=true**（只影响 flush 时机，不丢数据）。或 lazy 时 materialize。 |
+| `createBranchedSession` hasAssistant (1639) | 同上（fork/export 重操作，亦可 materialize 全部 lazy）。 |
+| `footer.ts:210` | 遇 LazyEntry 跳过逐条 usage（Task 3 用 compaction.cumulativeUsage 替代累计，见下节）。 |
+| `usage-totals.ts` | 遇 LazyEntry 跳过（成本统计不含 compaction 前细节，可接受）。 |
+| `cache-stats.ts` | 遇 LazyEntry 跳过。 |
+| `getBranch`/`getEntry`/`getTree` | 返回 lazy 占位；调用方读 `.message` 前 materialize（revert/详情等）。 |
 
-`footer.ts` 现遍历 `getEntries()` 累加每个 message 的 usage。lazy 占位无 `.message`，会触碰该热路径。处理方式：
+### footer 累计 usage（方案 B：compaction 携带 cumulativeUsage，不变）
 
-1. compaction 触发时，把"截至 compaction 的累计 usage"（input/output/cacheRead/cacheWrite/cost）写入 `CompactionEntry`，新增字段 `cumulativeUsage?: Usage`。
-2. `footer.ts` 遍历 entries 时：遇到 `compaction` entry 用其 `cumulativeUsage` 一次性计入 compaction 前累计，跳过 compaction 前的 lazy 占位（不读 `.message.usage`）。
-3. compaction 之后的 message 条目正常累加。
+`footer.ts` 遍历 `getEntries()` 累加 usage 是唯一热路径。处理：
 
-结果：footer 累计 token 准确 + 不触碰 lazy 占位 + 无额外解析开销。
+1. `CompactionEntry` 新增 `cumulativeUsage?: Usage`；`appendCompaction` 内部算 `sumEntriesUsage(this.fileEntries)` 写入。
+2. footer：以最后一个带 `cumulativeUsage` 的 compaction 作基线，累加其后条目；跳过 compaction 前 lazy 占位。
+3. 抽出可测纯函数 `computeFooterUsage(entries)`。
 
-### `_rewriteFile` 与 lazy 占位的交互
+结果：footer 累计准确 + 不触碰 lazy + 无额外解析。
 
-- append-only 追加不改变已有条目 offset，lazy 占位的 offset 在 append 后仍有效。
-- `_rewriteFile`（被 `pruneOrphanedEntries` / `createBranchedSession` / migrate 调用）会重写整个文件，使所有旧 offset 失效。**选定方案**：rewrite 时对 lazy 占位从 offset+length 读 raw line **原样写回**（保留内容、零丢失），并在写回过程中记录新 offset 更新占位。不采用「rewrite 时 materialize 全部 lazy」——那会让 prune/branch 等操作退化为全量解析，违背 M2 初衷。
+### `_rewriteFile` / `forkFrom` lazy 原样写回（不变）
+
+LazyEntry 不能 `JSON.stringify`（丢 message）。`_rewriteFile` 与 `forkFrom` 从源文件 offset 读 raw line 原样写回 + 更新占位 offset（rewrite 时）；append-only 下已有 offset 不变。
 
 ### 关键约束
 
-1. **peek 稳健性**：regex 提取依赖 `type` / `id` / `parentId` 在序列化时位于 `message` 对象之前。当前 `SessionMessageEntry`（含 subagent 子树的 message）构造顺序满足此约束（已验证）。**regex 取不到 → fallback full parse**（保守，绝不丢数据）。需固化该字段顺序（代码注释 + 测试防回归）。
-2. **offset 有效性**：见上节 `_rewriteFile` 交互。
-3. **阈值**：默认 64KB。普通 KB 级 message 正常 parse；几十 MB 的巨型 toolResult 走 lazy。可通过配置调整。
+1. **peek 稳健性**：regex 提取 `type/id/parentId` 依赖其在序列化时位于 `message` 之前（当前满足）。取不到 → fallback full parse（零丢失）。
+2. **无 compaction 零回归**：无 compaction 时所有大行 full parse，行为与现状一致（M2 对无 compaction 大文件本就无效）。
+3. **阈值**：`LAZY_ENTRY_THRESHOLD = 64KB`。
 
-## 适用边界（已确认接受）
+## 适用边界（不变）
 
 | 文件类型 | M2 效果 |
 | --- | --- |
-| **有 compaction**（如 111 MB 文件，compaction 前 107 MB） | ✅ 显著——resume 跳过 107 MB 的 parse |
-| **无 compaction 的历史大文件**（如 199.5 MB 文件） | ❌ 几乎无效——全主链都是活跃上下文，`buildSessionContext` 迟早全部 materialize |
+| 有 compaction（如 111MB） | ✅ 跳过 compaction 前 107MB parse |
+| 无 compaction 历史大文件（如 199.5MB） | ❌ 全主链活跃，全量 parse（与现状一致） |
 
-原因：无 compaction 文件的上下文本身就有 200 MB，不是"resume 慢"而是"上下文爆炸"。M2 不改格式，帮不了此类文件。S1 不做后，这类历史文件的缓解靠各插件自行控制输出大小，或用户手动触发 compaction（之后 M2 生效）。
+## 测试策略（修正）
 
-## 测试策略
-
-- **单元（session-manager）**：构造含巨型 compaction 前条目的 fixture，验证：
-  - resume 不 parse compaction 前大条目（用 spy/计数器断言 `JSON.parse` 调用次数）
-  - byId 结构正确（lazy 占位带元数据 + offset）
-  - `materialize(id)` 后内容与原始完整条目逐字节一致
-  - footer 累计 usage 从 compaction entry 的 `cumulativeUsage` 正确累加
-  - `_rewriteFile` 后 lazy 内容原样保留、offset 更新正确
-- **回归**：现有 `session-manager` 测试全过（小文件无 lazy，行为不变）。
-- **端到端**：真实 111 MB 文件 resume，对比优化前后耗时；验证 revert 到 compaction 前的节点仍能 materialize 出完整内容并正常渲染。
+- **单元**：fixture **必须含 compaction** 才触发 lazy（无 compaction 大行应 full parse）：
+  - 边界：compaction 前大行 lazy / compaction 后大行 full parse / 无 compaction 大行 full parse
+  - guard 不崩：buildSessionContext / footer / _persist 遇 lazy 占位不 TypeError（回归）
+  - materialize 内容完整
+  - footer cumulativeUsage 累计正确
+  - _rewriteFile/forkFrom lazy 内容原样保留
+- **回归**：现有 session-manager/compaction 全过（小文件零 lazy）。
+- **端到端**：真实 111MB 文件 resume 耗时对比；revert 到 compaction 前仍能 materialize。
 
 ## 非目标
 
-- 不实现平台级 toolResult 输出大小限制（S1，已否决）。
-- 不改 JSONL 文件格式、不物理清理 compaction 前条目。
-- 不解决无 compaction 历史大文件的 resume 慢（其上下文本身过大）。
+- 不实现平台级 toolResult 硬截断（S1 否决）。
+- 不改 JSONL 格式、不物理清理 compaction 前条目。
+- 不解决无 compaction 历史大文件 resume 慢。
 
-## 涉及文件
+## 涉及文件（修正）
 
 | 改动 | 文件 | 内容 |
 | --- | --- | --- |
-| 懒加载读取 | `packages/coding-agent/src/core/session-manager.ts` | `loadEntriesFromFile` 改造为 peek + lazy；新增 `LazyEntry` 类型、`materialize(id)` 方法 |
-| 索引 | 同上 | `_buildIndex` 处理 lazy 占位 |
-| 重写 | 同上 | `_rewriteFile` lazy 占位 raw 原样写回 + offset 更新 |
-| compaction 累计 usage | `packages/coding-agent/src/core/session-manager.ts`（`appendCompaction` / `CompactionEntry`）+ compaction 触发处 | 新增 `cumulativeUsage` 字段，compaction 时写入截至当前的累计 usage |
-| footer | `packages/coding-agent/src/modes/interactive/components/footer.ts` | 遇 compaction 用 `cumulativeUsage`，跳过 compaction 前 lazy 占位 |
-| 字段顺序固化 | `packages/coding-agent/src/core/session-manager.ts` | 注释固化 `type/id/parentId` 先于 `message`；regex fallback full parse |
+| 边界感知 lazy 读取 | `core/session-manager.ts` | `loadEntriesFromFile` 两阶段 peek+lazy；`LazyEntry`、`LAZY_ENTRY_THRESHOLD`、`peekEntryFields`、`readRawLine`、`materialize` |
+| **buildSessionContext guard** | `core/session-manager.ts` | settings 循环 + appendMessage optional chaining / null 守卫 |
+| **_persist / createBranchedSession guard** | `core/session-manager.ts` | hasAssistant 遇 lazy 保守 true 或 materialize |
+| compaction cumulativeUsage | `core/session-manager.ts` | `CompactionEntry.cumulativeUsage` + `appendCompaction` 计算 + `sumEntriesUsage` |
+| **footer guard + computeFooterUsage** | `modes/interactive/components/footer.ts` | 用 cumulativeUsage 基线，跳过 lazy |
+| **usage-totals / cache-stats guard** | `core/usage-totals.ts`、`core/cache-stats.ts` | 遇 lazy 跳过 |
+| _rewriteFile / forkFrom | `core/session-manager.ts` | lazy raw 原样写回 + offset 更新 |
