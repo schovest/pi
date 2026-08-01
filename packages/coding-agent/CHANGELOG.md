@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- Session resume 性能优化：`loadEntriesFromFile` 两阶段加载，compaction 前超 64KB 的 message 行懒加载为 `LazyEntry` 占位（`materialize` 按需读回），避免大 tool 输出行全量 parse 阻塞 resume
+
+### Fixed
+
+- LazyEntry 占位条目导致的 `.message` 解引用崩溃：`buildSessionContext` / `_persist` / `createBranchedSession` 对无 `.message` 的 message 条目增加 optional chaining guard
+- LazyEntry 全量重写丢内容：`_rewriteFile` / `_persist` 首次 flush 分支 / `forkFrom` 对 lazy 条目原样写回磁盘 raw 而非 `JSON.stringify` 占位；`createBranchedSession` 切换 sessionFile 前先 materialize lazy 条目
+
 ## [0.12.8] - 2026-07-31
 
 ### Fixed

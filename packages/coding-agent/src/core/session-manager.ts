@@ -141,6 +141,41 @@ export interface CustomMessageEntry<T = unknown> extends SessionEntryBase {
 	display: boolean;
 }
 
+/** 字节阈值：超过此长度的 message 行加载时不全量 parse。 */
+export const LAZY_ENTRY_THRESHOLD = 64 * 1024;
+
+/**
+ * 两阶段加载的中间态：大行只 peek 元数据，读完后据最后 compaction offset 决策。
+ * 显式 `__pending` 标记用于在第二阶段与 full-parse 的 FileEntry 区分
+ * （不靠模糊的 in/类型判定）。
+ */
+export interface PendingEntry {
+	type: "message";
+	id: string;
+	parentId: string | null;
+	timestamp: string;
+	offset: number;
+	length: number;
+	readonly __pending: true;
+}
+
+/**
+ * compaction 前、超阈值 message 条目的内存占位。仅元数据 + 磁盘偏移；
+ * 访问 .message 前必须 materialize。字段顺序依赖 type/id/parentId/timestamp
+ * 在序列化时位于 message 之前（peekEntryFields regex 依赖）。
+ * 注意：该类型不加入 SessionEntry union，运行时以 FileEntry 形态存在于
+ * fileEntries 中，下游通过 `__lazy` 标记 + optional chaining 防御。
+ */
+export interface LazyEntry {
+	type: "message";
+	id: string;
+	parentId: string | null;
+	timestamp: string;
+	readonly __lazy: true;
+	offset: number;
+	length: number;
+}
+
 /** Session entry - has id/parentId for tree structure (returned by "read" methods in SessionManager) */
 export type SessionEntry =
 	| SessionMessageEntry
@@ -409,7 +444,7 @@ export function buildSessionContext(
 			thinkingLevel = entry.thinkingLevel;
 		} else if (entry.type === "model_change") {
 			model = { provider: entry.provider, modelId: entry.modelId };
-		} else if (entry.type === "message" && entry.message.role === "assistant") {
+		} else if (entry.type === "message" && entry.message?.role === "assistant") {
 			model = { provider: entry.message.provider, modelId: entry.message.model };
 		} else if (entry.type === "compaction") {
 			compaction = entry;
@@ -425,7 +460,7 @@ export function buildSessionContext(
 	const entryIds: (string | null)[] = [];
 
 	const appendMessage = (entry: SessionEntry) => {
-		if (entry.type === "message") {
+		if (entry.type === "message" && entry.message) {
 			messages.push(entry.message);
 			entryIds.push(entry.id);
 		} else if (entry.type === "custom_message") {
@@ -505,17 +540,73 @@ function parseSessionEntryLine(line: string): FileEntry | null {
 	}
 }
 
-/** Exported for testing */
+/** Regex peek 顶层字段（不全量 parse）。取不到返回 undefined 字段，调用方 fallback full parse。 */
+export function peekEntryFields(line: string): { type?: string; id?: string; parentId?: string | null } {
+	const type = line.match(/"type"\s*:\s*"([^"]+)"/)?.[1];
+	const id = line.match(/"id"\s*:\s*"([^"]+)"/)?.[1];
+	const pm = line.match(/"parentId"\s*:\s*(?:"([^"]+)"|null)/);
+	return { type, id, parentId: pm ? (pm[1] ?? null) : undefined };
+}
+
+/** 从文件 offset 读 length 字节返回 utf8（materialize / lazy 序列化复用）。 */
+export function readRawLine(filePath: string, offset: number, length: number): string {
+	const fd = openSync(filePath, "r");
+	try {
+		const buf = Buffer.allocUnsafe(length);
+		const n = readSync(fd, buf, 0, length, offset);
+		return buf.subarray(0, n).toString("utf8");
+	} finally {
+		closeSync(fd);
+	}
+}
+
+/**
+ * 读取会话文件。两阶段：
+ * 1. 流式读：小行 full parse；大行 peek 存 PendingEntry（不保留 raw，省内存）；记录最后一个 compaction 行 offset。
+ * 2. 据最后 compaction offset 决策：compaction 前大行 → LazyEntry（占位，materialize 时读回）；
+ *    否则（compaction 后 / 无 compaction）→ readRawLine full parse（活跃或零回归）。
+ */
 export function loadEntriesFromFile(filePath: string): FileEntry[] {
 	const resolvedFilePath = normalizePath(filePath);
 	if (!existsSync(resolvedFilePath)) return [];
 
-	const entries: FileEntry[] = [];
+	// 第一阶段：流式读
+	const slots: Array<FileEntry | PendingEntry> = [];
+	let lastCompactionOffset: number | null = null;
 	const fd = openSync(resolvedFilePath, "r");
 	try {
 		const decoder = new StringDecoder("utf8");
 		const buffer = Buffer.allocUnsafe(SESSION_READ_BUFFER_SIZE);
 		let pending = "";
+		let consumedBytes = 0; // 单一字节游标：已完整消费的字节数（含行尾 \n）
+
+		const handleLine = (line: string): void => {
+			const offset = consumedBytes;
+			const byteLen = Buffer.byteLength(line, "utf8");
+			consumedBytes += byteLen + 1; // +1 for \n
+			if (byteLen === 0) return; // 空行：推进字节游标（保持 offset 与磁盘一致）但不解析
+			if (byteLen > LAZY_ENTRY_THRESHOLD) {
+				const f = peekEntryFields(line);
+				if (f.type === "message" && f.id !== undefined && f.parentId !== undefined) {
+					slots.push({
+						type: "message",
+						id: f.id,
+						parentId: f.parentId,
+						timestamp: line.match(/"timestamp"\s*:\s*"([^"]+)"/)?.[1] ?? "",
+						offset,
+						length: byteLen,
+						__pending: true,
+					});
+					return;
+				}
+				// peek 失败 → fallback full parse（零丢失）
+			}
+			const entry = parseSessionEntryLine(line);
+			if (entry) {
+				slots.push(entry);
+				if (entry.type === "compaction") lastCompactionOffset = offset;
+			}
+		};
 
 		while (true) {
 			const bytesRead = readSync(fd, buffer, 0, buffer.length, null);
@@ -525,8 +616,7 @@ export function loadEntriesFromFile(filePath: string): FileEntry[] {
 			let lineStart = 0;
 			let newlineIndex = pending.indexOf("\n", lineStart);
 			while (newlineIndex !== -1) {
-				const entry = parseSessionEntryLine(pending.slice(lineStart, newlineIndex));
-				if (entry) entries.push(entry);
+				handleLine(pending.slice(lineStart, newlineIndex));
 				lineStart = newlineIndex + 1;
 				newlineIndex = pending.indexOf("\n", lineStart);
 			}
@@ -534,10 +624,36 @@ export function loadEntriesFromFile(filePath: string): FileEntry[] {
 		}
 
 		pending += decoder.end();
-		const finalEntry = parseSessionEntryLine(pending);
-		if (finalEntry) entries.push(finalEntry);
+		if (pending.trim()) handleLine(pending);
 	} finally {
 		closeSync(fd);
+	}
+
+	// 第二阶段：据 lastCompactionOffset 决策 pending
+	const entries: FileEntry[] = [];
+	for (const slot of slots) {
+		if ((slot as PendingEntry).__pending) {
+			const p = slot as PendingEntry;
+			if (lastCompactionOffset !== null && p.offset < lastCompactionOffset) {
+				// compaction 前大行 → LazyEntry 占位
+				entries.push({
+					type: "message",
+					id: p.id,
+					parentId: p.parentId,
+					timestamp: p.timestamp,
+					__lazy: true,
+					offset: p.offset,
+					length: p.length,
+				} as unknown as FileEntry);
+			} else {
+				// compaction 后（活跃）或无 compaction（零回归）→ full parse
+				const raw = readRawLine(resolvedFilePath, p.offset, p.length);
+				const full = parseSessionEntryLine(raw);
+				if (full) entries.push(full);
+			}
+		} else {
+			entries.push(slot as FileEntry);
+		}
 	}
 
 	// Validate session header
@@ -919,12 +1035,53 @@ export class SessionManager {
 		}
 	}
 
+	private _lazyRawCache(): Map<string, string> {
+		const cache = new Map<string, string>();
+		if (!this.sessionFile) return cache;
+		for (const entry of this.fileEntries) {
+			if ((entry as { __lazy?: boolean }).__lazy) {
+				const l = entry as unknown as LazyEntry;
+				try {
+					cache.set(l.id, readRawLine(this.sessionFile, l.offset, l.length));
+				} catch {
+					// 源文件不可读（例如 createBranchedSession 的 !flushed 全量写路径：
+					// lazy 已在切换前 materialize，正常不会触发）；缓存缺失时
+					// _writeEntryRaw fallback JSON.stringify 占位，保证系统可用。
+				}
+			}
+		}
+		return cache;
+	}
+
+	/**
+	 * 写单个条目到 fd：lazy 条目从 sessionFile offset 读 raw 原样写回并更新 offset；
+	 * 非 lazy 走 JSON.stringify。返回写入后的新字节 offset。
+	 */
+	private _writeEntryRaw(fd: number, entry: FileEntry, newOffset: number, lazyRawCache: Map<string, string>): number {
+		if ((entry as { __lazy?: boolean }).__lazy) {
+			const lazy = entry as unknown as LazyEntry;
+			const raw = lazyRawCache.get(lazy.id);
+			if (raw !== undefined) {
+				writeFileSync(fd, `${raw}\n`);
+				lazy.offset = newOffset;
+				return newOffset + lazy.length + 1;
+			}
+			// 缓存缺失：写入占位（不应发生，见 _lazyRawCache 注释）
+		}
+		const serialized = JSON.stringify(entry);
+		writeFileSync(fd, `${serialized}\n`);
+		return newOffset + Buffer.byteLength(serialized, "utf8") + 1;
+	}
+
 	private _rewriteFile(): void {
 		if (!this.persist || !this.sessionFile) return;
+		// lazy 条目需要从源文件读 raw：必须在 "w" 截断前缓存
+		const lazyRawCache = this._lazyRawCache();
 		const fd = openSync(this.sessionFile, "w");
 		try {
+			let offset = 0;
 			for (const entry of this.fileEntries) {
-				writeFileSync(fd, `${JSON.stringify(entry)}\n`);
+				offset = this._writeEntryRaw(fd, entry, offset, lazyRawCache);
 			}
 		} finally {
 			closeSync(fd);
@@ -958,6 +1115,27 @@ export class SessionManager {
 	/** Load all subagent_run entries from the current session. */
 	loadSubagentRunEntries(): SubagentRunEntry[] {
 		return this.fileEntries.filter((e): e is SubagentRunEntry => e.type === "subagent_run") as SubagentRunEntry[];
+	}
+
+	/**
+	 * 将 lazy 占位条目恢复为完整 message 条目（从 sessionFile 的 offset 读回 raw）。
+	 * 非 lazy 条目原样返回；未知 id 返回 undefined。
+	 */
+	materialize(id: string): SessionEntry | undefined {
+		const entry = this.byId.get(id);
+		if (!entry) return undefined;
+		if (!(entry as { __lazy?: boolean }).__lazy) return entry;
+		if (!this.sessionFile) return entry;
+		const lazy = entry as unknown as LazyEntry;
+		const raw = readRawLine(this.sessionFile, lazy.offset, lazy.length);
+		const full = parseSessionEntryLine(raw);
+		if (!full || full.type === "session") return entry;
+		this.byId.set(id, full);
+		const idx = this.fileEntries.findIndex(
+			(e) => (e as { id?: string }).id === id && (e as { __lazy?: boolean }).__lazy,
+		);
+		if (idx !== -1) this.fileEntries[idx] = full;
+		return full;
 	}
 
 	/** Append subagent messages as children of a SubagentRunEntry.
@@ -1000,7 +1178,7 @@ export class SessionManager {
 	_persist(entry: SessionEntry): void {
 		if (!this.persist || !this.sessionFile) return;
 
-		const hasAssistant = this.fileEntries.some((e) => e.type === "message" && e.message.role === "assistant");
+		const hasAssistant = this.fileEntries.some((e) => e.type === "message" && e.message?.role === "assistant");
 		if (!hasAssistant) {
 			if (this.flushed) {
 				appendFileSync(this.sessionFile, `${JSON.stringify(entry)}\n`);
@@ -1012,10 +1190,13 @@ export class SessionManager {
 		}
 
 		if (!this.flushed) {
+			// 首次 assistant 到达：全量写 fileEntries（含可能的 lazy 条目，须 raw 原样写回）
+			const lazyRawCache = this._lazyRawCache();
 			const fd = openSync(this.sessionFile, "wx");
 			try {
+				let offset = 0;
 				for (const e of this.fileEntries) {
-					writeFileSync(fd, `${JSON.stringify(e)}\n`);
+					offset = this._writeEntryRaw(fd, e, offset, lazyRawCache);
 				}
 			} finally {
 				closeSync(fd);
@@ -1628,15 +1809,23 @@ export class SessionManager {
 
 			this.fileEntries = [header, ...pathWithoutLabels, ...labelEntries];
 			this.sessionId = newSessionId;
-			this.sessionFile = newSessionFile;
 			this._buildIndex();
+
+			// lazy 条目的 offset 指向旧文件：在切换到新 sessionFile 前必须 materialize，
+			// 否则新文件全量写入（_rewriteFile / _persist !flushed）会写占位丢内容。
+			for (const e of this.fileEntries) {
+				if ((e as { __lazy?: boolean }).__lazy) {
+					this.materialize((e as { id: string }).id);
+				}
+			}
+			this.sessionFile = newSessionFile;
 
 			// Only write the file now if it contains an assistant message.
 			// Otherwise defer to _persist(), which creates the file on the
 			// first assistant response, matching the newSession() contract
 			// and avoiding the duplicate-header bug when _persist()'s
 			// no-assistant guard later resets flushed to false.
-			const hasAssistant = this.fileEntries.some((e) => e.type === "message" && e.message.role === "assistant");
+			const hasAssistant = this.fileEntries.some((e) => e.type === "message" && e.message?.role === "assistant");
 			if (hasAssistant) {
 				this._rewriteFile();
 				this.flushed = true;
@@ -1778,7 +1967,13 @@ export class SessionManager {
 		// Copy all non-header entries from source
 		for (const entry of sourceEntries) {
 			if (entry.type !== "session") {
-				appendFileSync(newSessionFile, `${JSON.stringify(entry)}\n`);
+				if ((entry as { __lazy?: boolean }).__lazy) {
+					// lazy 条目：从源文件 offset 读 raw 原样 append（避免 JSON.stringify 写占位）
+					const l = entry as unknown as LazyEntry;
+					appendFileSync(newSessionFile, `${readRawLine(resolvedSourcePath, l.offset, l.length)}\n`);
+				} else {
+					appendFileSync(newSessionFile, `${JSON.stringify(entry)}\n`);
+				}
 			}
 		}
 
