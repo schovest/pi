@@ -9,6 +9,7 @@ import {
 	prepareCompaction,
 } from "../../src/core/compaction/index.ts";
 import {
+	isLazyEntry,
 	loadEntriesFromFile,
 	type SessionEntry,
 	SessionManager,
@@ -95,8 +96,8 @@ function loadLazyEntries(): SessionEntry[] {
 describe("lazy guards: sessionEntryToContextMessages", () => {
 	it("returns [] for a lazy entry instead of crashing", () => {
 		const entries = loadLazyEntries();
-		const lazy = entries.find((e) => e.id === "bigMid") as SessionEntry & { __lazy?: boolean; message?: unknown };
-		expect(lazy.__lazy).toBe(true);
+		const lazy = entries.find((e) => e.id === "bigMid") as SessionEntry & { message?: unknown };
+		expect(isLazyEntry(lazy)).toBe(true);
 		expect(lazy.message).toBeUndefined();
 		// 修复前：TypeError: Cannot read properties of undefined (reading 'role')
 		expect(() => sessionEntryToContextMessages(lazy)).not.toThrow();
@@ -114,13 +115,13 @@ describe("lazy guards: compaction", () => {
 		// 分支停在 c2 之前：getBranch 不含最后 compaction，cut 窗口会扫到 lazy 的 bigMid
 		sm.branch("m3");
 		const branch = sm.getBranch();
-		expect(branch.some((e) => (e as { __lazy?: boolean }).__lazy)).toBe(true);
+		expect(branch.some((e) => isLazyEntry(e))).toBe(true);
 		expect(() => prepareCompaction(branch, DEFAULT_COMPACTION_SETTINGS)).not.toThrow();
 	});
 
 	it("findCutPoint does not crash on lazy entries", () => {
 		const entries = loadLazyEntries();
-		expect(entries.some((e) => (e as { __lazy?: boolean }).__lazy)).toBe(true);
+		expect(entries.some((e) => isLazyEntry(e))).toBe(true);
 		expect(() =>
 			findCutPoint(entries, 0, entries.length, DEFAULT_COMPACTION_SETTINGS.keepRecentTokens),
 		).not.toThrow();
@@ -136,7 +137,7 @@ describe("lazy guards: compaction", () => {
 		);
 		const entries = loadEntriesFromFile(file) as SessionEntry[];
 		// compaction 前 assistant（pre）也是 lazy 占位
-		expect((entries.find((e) => e.id === "pre") as { __lazy?: boolean }).__lazy).toBe(true);
+		expect(isLazyEntry(entries.find((e) => e.id === "pre"))).toBe(true);
 		expect(() => getLastAssistantUsage(entries)).not.toThrow();
 		// lazy 占位无 .message → 跳过；compaction 后 assistant（post）full parse → 取到
 		expect(getLastAssistantUsage(entries)).toBeDefined();

@@ -54,8 +54,6 @@ export interface FooterUsageSourceEntry {
 	usage?: Usage;
 	/** Compaction entry：截至 compaction 的累计 usage（含其前全部条目），旧会话无此字段。 */
 	cumulativeUsage?: Usage;
-	/** Lazy 占位标记（compaction 前大行，无 .message）。 */
-	__lazy?: boolean;
 }
 
 /** computeFooterUsage 的结果。costTotal 为 usage.cost.total 的累计。 */

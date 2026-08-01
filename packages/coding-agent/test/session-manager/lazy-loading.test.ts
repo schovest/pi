@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { loadEntriesFromFile, peekEntryFields, SessionManager } from "../../src/core/session-manager.ts";
+import { isLazyEntry, loadEntriesFromFile, peekEntryFields, SessionManager } from "../../src/core/session-manager.ts";
 import { userMsg } from "../utilities.ts";
 
 // v3：lazy 纯按 compaction 边界，无大小阈值（LAZY_ENTRY_THRESHOLD 已移除）。
@@ -88,11 +88,8 @@ describe("loadEntriesFromFile compaction-boundary lazy (v3, no size threshold)",
 			`${makeHeader()}\n${makeMsg("big1", null, BIG)}\n${makeCompaction("c1", "big1", "big1")}\n${makeMsg("after", "c1", SMALL)}\n`,
 		);
 		const entries = loadEntriesFromFile(file);
-		const big1 = entries.find((e) => (e as { id?: string }).id === "big1") as {
-			__lazy?: boolean;
-			message?: unknown;
-		};
-		expect(big1.__lazy).toBe(true);
+		const big1 = entries.find((e) => (e as { id?: string }).id === "big1") as { message?: unknown };
+		expect(isLazyEntry(big1)).toBe(true);
 		expect(big1.message).toBeUndefined();
 	});
 
@@ -104,11 +101,8 @@ describe("loadEntriesFromFile compaction-boundary lazy (v3, no size threshold)",
 			`${makeHeader()}\n${makeMsg("small1", null, SMALL)}\n${makeCompaction("c1", "small1", "small1")}\n${makeMsg("after", "c1", SMALL)}\n`,
 		);
 		const entries = loadEntriesFromFile(file);
-		const small1 = entries.find((e) => (e as { id?: string }).id === "small1") as {
-			__lazy?: boolean;
-			message?: unknown;
-		};
-		expect(small1.__lazy).toBe(true);
+		const small1 = entries.find((e) => (e as { id?: string }).id === "small1") as { message?: unknown };
+		expect(isLazyEntry(small1)).toBe(true);
 		expect(small1.message).toBeUndefined();
 	});
 
@@ -122,7 +116,7 @@ describe("loadEntriesFromFile compaction-boundary lazy (v3, no size threshold)",
 		const entries = loadEntriesFromFile(file);
 		for (const e of entries) {
 			if ((e as { id?: string }).id === "big2" || (e as { id?: string }).id === "small2") {
-				expect((e as { __lazy?: boolean }).__lazy).not.toBe(true);
+				expect(isLazyEntry(e)).toBe(false);
 				expect((e as { message?: unknown }).message).toBeDefined(); // 已 full parse
 			}
 		}
@@ -135,7 +129,7 @@ describe("loadEntriesFromFile compaction-boundary lazy (v3, no size threshold)",
 		const entries = loadEntriesFromFile(file);
 		for (const e of entries) {
 			if ((e as { id?: string }).id === "big3" || (e as { id?: string }).id === "small3") {
-				expect((e as { __lazy?: boolean }).__lazy).not.toBe(true);
+				expect(isLazyEntry(e)).toBe(false);
 				expect((e as { message?: unknown }).message).toBeDefined(); // 已 full parse
 			}
 		}
@@ -191,11 +185,11 @@ describe("SessionManager.materialize", () => {
 		writeFileSync(file, `${makeHeader()}\n${big}\n${makeCompaction("c1", "bigM", "bigM")}\n`);
 		const sm = SessionManager.create("/tmp", dir);
 		sm.setSessionFile(file);
-		expect((sm.getEntry("bigM") as { __lazy?: boolean }).__lazy).toBe(true);
+		expect(isLazyEntry(sm.getEntry("bigM"))).toBe(true);
 		const m = sm.materialize("bigM");
 		expect(m).toBeDefined();
 		expect((m as { message: { content: unknown[] } }).message.content).toEqual(JSON.parse(big).message.content);
-		expect((sm.getEntry("bigM") as { __lazy?: boolean }).__lazy).not.toBe(true);
+		expect(isLazyEntry(sm.getEntry("bigM"))).toBe(false);
 	});
 
 	it("returns undefined for unknown id and passthrough for non-lazy entries", () => {
@@ -223,7 +217,7 @@ describe("lazy entries and .message deref guards (B)", () => {
 		);
 		const sm = SessionManager.create("/tmp", dir);
 		sm.setSessionFile(file);
-		expect((sm.getEntry("m2") as { __lazy?: boolean }).__lazy).toBe(true);
+		expect(isLazyEntry(sm.getEntry("m2"))).toBe(true);
 		const ctx = sm.buildSessionContext();
 		// compaction summary + kept m1 + kept m2（修复前 lazy 被 guard 跳过，只剩 summary）
 		expect(ctx.entryIds).toEqual(["c1", "m1", "m2"]);
@@ -241,7 +235,7 @@ describe("lazy entries and .message deref guards (B)", () => {
 		);
 		const sm = SessionManager.create("/tmp", dir);
 		sm.setSessionFile(file);
-		expect((sm.getEntry("bigC") as { __lazy?: boolean }).__lazy).toBe(true);
+		expect(isLazyEntry(sm.getEntry("bigC"))).toBe(true);
 		const ctx = sm.buildSessionContext();
 		// compaction summary + kept bigC（经 materializer 恢复）+ after
 		// （kept 内容不再被跳过：lazy 占位在 SessionManager 路径下被读回）
@@ -259,7 +253,7 @@ describe("lazy entries and .message deref guards (B)", () => {
 		writeFileSync(file, `${makeHeader()}\n${big}\n${makeCompaction("c1", "bigP", "bigP")}\n${assistantLine}\n`);
 		const sm = SessionManager.create("/tmp", dir);
 		sm.setSessionFile(file);
-		expect((sm.getEntry("bigP") as { __lazy?: boolean }).__lazy).toBe(true);
+		expect(isLazyEntry(sm.getEntry("bigP"))).toBe(true);
 		const id = sm.appendMessage(userMsg("new question"));
 		expect(sm.getEntry(id)).toBeDefined();
 		const content = readFileSync(file, "utf8");
@@ -304,7 +298,7 @@ describe("lazy serialization (C)", () => {
 		expect(content).toContain("x".repeat(BIG));
 		// 重写后 lazy 仍可加载、可 materialize
 		const sm2 = SessionManager.open(file);
-		expect((sm2.getEntry("bigM") as { __lazy?: boolean }).__lazy).toBe(true);
+		expect(isLazyEntry(sm2.getEntry("bigM"))).toBe(true);
 		const m = sm2.materialize("bigM");
 		expect((m as { message: { content: { text: string }[] } }).message.content[0].text).toContain("x".repeat(BIG));
 	});
@@ -319,7 +313,7 @@ describe("lazy serialization (C)", () => {
 		);
 		const forkDir = mkdtempSync(join(tmpdir(), "pi-fork-"));
 		const sm = SessionManager.forkFrom(file, "/tmp/forked-cwd", forkDir);
-		expect((sm.getEntry("bigF") as { __lazy?: boolean }).__lazy).toBe(true);
+		expect(isLazyEntry(sm.getEntry("bigF"))).toBe(true);
 		const m = sm.materialize("bigF");
 		expect(m).toBeDefined();
 		expect((m as { message: { content: { text: string }[] } }).message.content[0].text).toContain("x".repeat(BIG));

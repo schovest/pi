@@ -5,7 +5,7 @@ import type { Usage } from "@earendil-works/pi-ai/compat";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { AgentSession } from "../src/core/agent-session.ts";
 import type { ReadonlyFooterDataProvider } from "../src/core/footer-data-provider.ts";
-import { SessionManager } from "../src/core/session-manager.ts";
+import { isLazyEntry, SessionManager } from "../src/core/session-manager.ts";
 import {
 	computeFooterUsage,
 	FooterComponent,
@@ -31,8 +31,9 @@ function toolResult(input: number, output: number): FooterUsageSourceEntry {
 	return { type: "message", message: { role: "toolResult", usage: makeUsage(input, output) } };
 }
 function lazyPlaceholder(): FooterUsageSourceEntry {
-	// compaction 前大行占位：无 .message，访问 message.usage 为 undefined
-	return { type: "message", __lazy: true };
+	// compaction 前大行占位：无 .message（无 __lazy 标记，computeFooterUsage 从不读取），
+	// 访问 message.usage 为 undefined，靠 optional chaining 自然跳过
+	return { type: "message" };
 }
 function compaction(input: number, output: number, cumulativeUsage?: Usage): FooterUsageSourceEntry {
 	const entry: FooterUsageSourceEntry = { type: "compaction", usage: makeUsage(input, output) };
@@ -160,7 +161,7 @@ describe("computeFooterUsage", () => {
 		writeFileSync(file, `${[header, big, comp, after].join("\n")}\n`);
 
 		const sm = SessionManager.open(file);
-		expect((sm.getEntry("big") as { __lazy?: boolean }).__lazy).toBe(true);
+		expect(isLazyEntry(sm.getEntry("big"))).toBe(true);
 		const totals = computeFooterUsage(sm.getEntries());
 		expect(totals.input).toBe(75); // 35 基线（含 lazy 前的 30）+ 40
 		expect(totals.output).toBe(14); // 6 + 8

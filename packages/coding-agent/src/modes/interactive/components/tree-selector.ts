@@ -9,7 +9,7 @@ import {
 	TruncatedText,
 	truncateToWidth,
 } from "@schovest/pi-tui";
-import type { SessionEntry, SessionTreeNode } from "../../../core/session-manager.ts";
+import { isLazyEntry, type SessionEntry, type SessionTreeNode } from "../../../core/session-manager.ts";
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { keyHint, keyText } from "./keybinding-hints.ts";
@@ -512,7 +512,7 @@ class TreeList implements Component {
 	 */
 	private resolveEntry(node: SessionTreeNode): SessionEntry {
 		const entry = node.entry;
-		if ((entry as { __lazy?: boolean }).__lazy && this.materialize) {
+		if (isLazyEntry(entry) && this.materialize) {
 			const full = this.materialize(entry.id);
 			if (full) node.entry = full;
 		}

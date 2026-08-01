@@ -104,6 +104,7 @@ import type { BranchSummaryEntry, CompactionEntry, SessionEntry } from "./sessio
 import {
 	CURRENT_SESSION_VERSION,
 	getLatestCompactionEntry,
+	isLazyEntry,
 	type SessionHeader,
 	SessionManager,
 } from "./session-manager.ts";
@@ -1996,11 +1997,13 @@ export class AgentSession {
 	 * getBranch() / collectEntriesForBranchSummary() 返回的 LazyEntry 占位（compaction 前
 	 * kept message）无 .message：汇总/压缩需要完整内容。materialize 后返回，保证 resume 后的
 	 * 二次 compaction / 分支汇总不丢 kept 内容。非 lazy 条目原样返回。
+	 *
+	 * @remarks 调用 `sessionManager.materialize()` 会**就地替换 byId 和 fileEntries 中的
+	 * lazy 占位**（持久状态变更，并非只读副本）：materialize 后的条目以完整 message 形态
+	 * 存在，kept messages 进入 LLM 上下文是预期行为。
 	 */
 	private _materializeBranchEntries(entries: SessionEntry[]): SessionEntry[] {
-		return entries.map((e) =>
-			(e as { __lazy?: boolean }).__lazy ? (this.sessionManager.materialize((e as { id: string }).id) ?? e) : e,
-		);
+		return entries.map((e) => (isLazyEntry(e) ? (this.sessionManager.materialize(e.id) ?? e) : e));
 	}
 
 	/**

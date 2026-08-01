@@ -180,6 +180,15 @@ export interface LazyEntry {
 	length: number;
 }
 
+/**
+ * 类型守卫：检测 LazyEntry 占位（compaction 前 message 的内存占位）。
+ * 全仓统一经此判定，替代 `(e as { __lazy?: boolean }).__lazy` duck-typing；
+ * 守卫通过后类型收窄为 LazyEntry，可直接访问 id/offset/length。
+ */
+export function isLazyEntry(e: unknown): e is LazyEntry {
+	return (e as { __lazy?: boolean })?.__lazy === true;
+}
+
 /** Session entry - has id/parentId for tree structure (returned by "read" methods in SessionManager) */
 export type SessionEntry =
 	| SessionMessageEntry
@@ -526,7 +535,7 @@ export function buildSessionContext(
 	const appendMessage = (entry: SessionEntry) => {
 		// LazyEntry（compaction 前 kept message 占位）无 .message：有 materializer 时
 		// 读回完整 entry 再 emit（kept 内容不丢失）；无 materializer 维持跳过占位。
-		const resolved = (entry as { __lazy?: boolean }).__lazy && materializer ? materializer(entry.id) : undefined;
+		const resolved = isLazyEntry(entry) && materializer ? materializer(entry.id) : undefined;
 		const full = resolved ?? entry;
 		if (full.type === "message" && full.message) {
 			messages.push(full.message);
@@ -1116,10 +1125,9 @@ export class SessionManager {
 		const cache = new Map<string, string>();
 		if (!this.sessionFile) return cache;
 		for (const entry of this.fileEntries) {
-			if ((entry as { __lazy?: boolean }).__lazy) {
-				const l = entry as unknown as LazyEntry;
+			if (isLazyEntry(entry)) {
 				try {
-					cache.set(l.id, readRawLine(this.sessionFile, l.offset, l.length));
+					cache.set(entry.id, readRawLine(this.sessionFile, entry.offset, entry.length));
 				} catch {
 					// 源文件不可读（例如 createBranchedSession 的 !flushed 全量写路径：
 					// lazy 已在切换前 materialize，正常不会触发）；缓存缺失时
@@ -1135,13 +1143,12 @@ export class SessionManager {
 	 * 非 lazy 走 JSON.stringify。返回写入后的新字节 offset。
 	 */
 	private _writeEntryRaw(fd: number, entry: FileEntry, newOffset: number, lazyRawCache: Map<string, string>): number {
-		if ((entry as { __lazy?: boolean }).__lazy) {
-			const lazy = entry as unknown as LazyEntry;
-			const raw = lazyRawCache.get(lazy.id);
+		if (isLazyEntry(entry)) {
+			const raw = lazyRawCache.get(entry.id);
 			if (raw !== undefined) {
 				writeFileSync(fd, `${raw}\n`);
-				lazy.offset = newOffset;
-				return newOffset + lazy.length + 1;
+				entry.offset = newOffset;
+				return newOffset + entry.length + 1;
 			}
 			// 缓存缺失：写入占位（不应发生，见 _lazyRawCache 注释）
 		}
@@ -1201,16 +1208,13 @@ export class SessionManager {
 	materialize(id: string): SessionEntry | undefined {
 		const entry = this.byId.get(id);
 		if (!entry) return undefined;
-		if (!(entry as { __lazy?: boolean }).__lazy) return entry;
+		if (!isLazyEntry(entry)) return entry;
 		if (!this.sessionFile) return entry;
-		const lazy = entry as unknown as LazyEntry;
-		const raw = readRawLine(this.sessionFile, lazy.offset, lazy.length);
+		const raw = readRawLine(this.sessionFile, entry.offset, entry.length);
 		const full = parseSessionEntryLine(raw);
 		if (!full || full.type === "session") return entry;
 		this.byId.set(id, full);
-		const idx = this.fileEntries.findIndex(
-			(e) => (e as { id?: string }).id === id && (e as { __lazy?: boolean }).__lazy,
-		);
+		const idx = this.fileEntries.findIndex((e) => isLazyEntry(e) && e.id === id);
 		if (idx !== -1) this.fileEntries[idx] = full;
 		return full;
 	}
@@ -1244,7 +1248,7 @@ export class SessionManager {
 			if (
 				entry.type === "message" &&
 				entry.parentId === subagentEntryId &&
-				!(entry as { __lazy?: boolean }).__lazy // lazy 占位无 .message，跳过
+				!isLazyEntry(entry) // lazy 占位无 .message，跳过
 			) {
 				messages.push({
 					ts: new Date(entry.timestamp).getTime(),
@@ -1898,8 +1902,8 @@ export class SessionManager {
 			// lazy 条目的 offset 指向旧文件：在切换到新 sessionFile 前必须 materialize，
 			// 否则新文件全量写入（_rewriteFile / _persist !flushed）会写占位丢内容。
 			for (const e of this.fileEntries) {
-				if ((e as { __lazy?: boolean }).__lazy) {
-					this.materialize((e as { id: string }).id);
+				if (isLazyEntry(e)) {
+					this.materialize(e.id);
 				}
 			}
 			this.sessionFile = newSessionFile;
@@ -2051,10 +2055,9 @@ export class SessionManager {
 		// Copy all non-header entries from source
 		for (const entry of sourceEntries) {
 			if (entry.type !== "session") {
-				if ((entry as { __lazy?: boolean }).__lazy) {
+				if (isLazyEntry(entry)) {
 					// lazy 条目：从源文件 offset 读 raw 原样 append（避免 JSON.stringify 写占位）
-					const l = entry as unknown as LazyEntry;
-					appendFileSync(newSessionFile, `${readRawLine(resolvedSourcePath, l.offset, l.length)}\n`);
+					appendFileSync(newSessionFile, `${readRawLine(resolvedSourcePath, entry.offset, entry.length)}\n`);
 				} else {
 					appendFileSync(newSessionFile, `${JSON.stringify(entry)}\n`);
 				}

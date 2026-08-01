@@ -9,7 +9,7 @@ import {
 } from "@earendil-works/pi-ai";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_COMPACTION_SETTINGS, estimateTokens, prepareCompaction } from "../../src/core/compaction/index.ts";
-import { SessionManager } from "../../src/core/session-manager.ts";
+import { isLazyEntry, SessionManager } from "../../src/core/session-manager.ts";
 import type { ExtensionAPI } from "../../src/index.ts";
 import { createHarness, type Harness } from "./harness.ts";
 
@@ -140,12 +140,10 @@ describe("AgentSession compaction characterization", () => {
 
 		const sm = SessionManager.open(file);
 		// compaction 前 kept（u1/a1）→ lazy 占位（v3）
-		expect((sm.getEntry("a1") as { __lazy?: boolean }).__lazy).toBe(true);
+		expect(isLazyEntry(sm.getEntry("a1"))).toBe(true);
 
 		// 对应 AgentSession._materializeBranchEntries：materialize 后二次压缩拿到完整 kept
-		const pathEntries = sm
-			.getBranch()
-			.map((e) => ((e as { __lazy?: boolean }).__lazy ? (sm.materialize((e as { id: string }).id) ?? e) : e));
+		const pathEntries = sm.getBranch().map((e) => (isLazyEntry(e) ? (sm.materialize(e.id) ?? e) : e));
 		const prep = prepareCompaction(pathEntries, { ...DEFAULT_COMPACTION_SETTINGS, keepRecentTokens: 1 });
 		expect(prep).toBeDefined();
 		if (!prep) return; // 防未定义（上面已断言）
