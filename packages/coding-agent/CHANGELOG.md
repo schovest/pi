@@ -15,6 +15,7 @@
 
 ### Fixed
 
+- git snapshot 跨会话总数限制：`gitSnapshotMaxCount` 现限制同一 cwd 下所有 session 的 snapshot 总数（而非每个 session 独立上限）。snapshot 改存 cwd 级全局索引 `snapshots.jsonl`（跨 session 共享），全局索引写操作经 lockfile 串行化防并发丢失；git ref 改用 full UUID（`refs/pi-snapshots/<refId>`）根除跨 session ref 冲突；session tree 保留 refId 锦点（revert 兼容迁移前的旧格式数据）；启动时批量迁移旧 in-tree 条目（失败不中断启动）。移除已无生产调用的 `countCustomEntries`/`trimOldestCustomEntries`
 - LazyEntry 占位条目导致的 `.message` 解引用崩溃：`buildSessionContext` / `_persist` / `createBranchedSession` 对无 `.message` 的 message 条目增加 optional chaining guard
 - LazyEntry 全量重写丢内容：`_rewriteFile` / `_persist` 首次 flush 分支 / `forkFrom` 对 lazy 条目原样写回磁盘 raw 而非 `JSON.stringify` 占位；`createBranchedSession` 切换 sessionFile 前先 materialize lazy 条目
 - 全仓剩余 `.message` 解引用点 lazy guard：`sessionEntryToContextMessages` / compaction（`findCutPoint` / `getLastAssistantUsage`）/ `branchSummarizeBranch` / fork（`agent-session-runtime`）/ `getUserMessagesForForking` / `getSessionStats` / 上下文 token 估算 / footer 用量统计 / `getUsageCostBreakdown` / cache-stats / tree-selector 渲染与复制 / `getSubagentMessages` / export-html（preRenderCustomTools + template.js）/ examples 扩展，遇无 `.message` 的 LazyEntry 不再崩溃（lazy 条目不参与上下文与统计累计）

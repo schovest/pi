@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type CustomEntry, type LabelEntry, SessionManager } from "../../src/core/session-manager.ts";
+import { type LabelEntry, SessionManager } from "../../src/core/session-manager.ts";
 import { assistantMsg, userMsg } from "../utilities.ts";
 
 describe("SessionManager pruneOrphanedEntries", () => {
@@ -115,69 +115,5 @@ describe("SessionManager pruneOrphanedEntries", () => {
 		// Prune to current leaf - nothing should be removed
 		const removedIds = session.pruneOrphanedEntries(assistant1Id);
 		expect(removedIds.size).toBe(0);
-	});
-});
-
-describe("SessionManager countCustomEntries / trimOldestCustomEntries", () => {
-	it("counts custom entries by type", () => {
-		const session = SessionManager.inMemory();
-
-		expect(session.countCustomEntries("git_snapshot")).toBe(0);
-
-		session.appendCustomEntry("git_snapshot", { head: "abc", stashCommit: null, clean: true });
-		session.appendCustomEntry("git_snapshot", { head: "def", stashCommit: null, clean: true });
-		session.appendCustomEntry("other_type", {});
-
-		expect(session.countCustomEntries("git_snapshot")).toBe(2);
-		expect(session.countCustomEntries("other_type")).toBe(1);
-	});
-
-	it("trims oldest custom entries when exceeding maxCount", () => {
-		const session = SessionManager.inMemory();
-
-		// Add 5 snapshots
-		const entry1Id = session.appendCustomEntry("git_snapshot", {
-			head: "oldest",
-			stashCommit: null,
-			clean: true,
-		});
-		// Hack timestamp to make it oldest
-		const entries1 = session
-			.getEntries()
-			.filter((e): e is CustomEntry => e.type === "custom" && (e as CustomEntry).customType === "git_snapshot");
-		entries1[0]!.timestamp = "2024-01-01T00:00:00.000Z";
-
-		session.appendCustomEntry("git_snapshot", { head: "mid1", stashCommit: null, clean: true });
-		session.appendCustomEntry("git_snapshot", { head: "mid2", stashCommit: null, clean: true });
-		session.appendCustomEntry("git_snapshot", { head: "mid3", stashCommit: null, clean: true });
-		const entry5IdFlat = session.appendCustomEntry("git_snapshot", {
-			head: "newest",
-			stashCommit: null,
-			clean: true,
-		});
-
-		expect(session.countCustomEntries("git_snapshot")).toBe(5);
-
-		// Trim to max 3 - should remove the 2 oldest
-		const removedIds = session.trimOldestCustomEntries("git_snapshot", 3);
-
-		expect(removedIds.size).toBe(2);
-		expect(removedIds.has(entry1Id)).toBe(true);
-
-		expect(session.countCustomEntries("git_snapshot")).toBe(3);
-
-		// entry5 (newest) should still exist
-		expect(session.getEntries().some((e) => e.id === entry5IdFlat)).toBe(true);
-	});
-
-	it("returns empty set when count is within limit", () => {
-		const session = SessionManager.inMemory();
-
-		session.appendCustomEntry("git_snapshot", { head: "abc", stashCommit: null, clean: true });
-		session.appendCustomEntry("git_snapshot", { head: "def", stashCommit: null, clean: true });
-
-		const removedIds = session.trimOldestCustomEntries("git_snapshot", 5);
-		expect(removedIds.size).toBe(0);
-		expect(session.countCustomEntries("git_snapshot")).toBe(2);
 	});
 });

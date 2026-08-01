@@ -99,11 +99,13 @@ export async function takeSnapshot(
 
 /**
  * Protect a snapshot's git object from garbage collection by creating a ref.
- * Creates refs/pi-snapshots/<entryId> pointing to the stash commit.
+ * Creates refs/pi-snapshots/<refId> pointing to the stash commit.
+ *
+ * @param refId Globally-unique snapshot id (full UUID) from the cwd-scoped index.
  */
-export async function protectSnapshot(cwd: string, entryId: string, stashCommit: string): Promise<void> {
+export async function protectSnapshot(cwd: string, refId: string, stashCommit: string): Promise<void> {
 	try {
-		await execFileAsync("git", ["update-ref", `refs/pi-snapshots/${entryId}`, stashCommit], {
+		await execFileAsync("git", ["update-ref", `refs/pi-snapshots/${refId}`, stashCommit], {
 			cwd,
 			maxBuffer: MAX_BUFFER,
 		});
@@ -114,11 +116,13 @@ export async function protectSnapshot(cwd: string, entryId: string, stashCommit:
 
 /**
  * Remove the git ref protecting a snapshot, allowing git gc to reclaim the stash object.
- * Deletes refs/pi-snapshots/<entryId>.
+ * Deletes refs/pi-snapshots/<refId>.
+ *
+ * @param refId Globally-unique snapshot id (full UUID) from the cwd-scoped index.
  */
-export async function unprotectSnapshot(cwd: string, entryId: string): Promise<void> {
+export async function unprotectSnapshot(cwd: string, refId: string): Promise<void> {
 	try {
-		await execFileAsync("git", ["update-ref", "-d", `refs/pi-snapshots/${entryId}`], {
+		await execFileAsync("git", ["update-ref", "-d", `refs/pi-snapshots/${refId}`], {
 			cwd,
 			maxBuffer: MAX_BUFFER,
 		});

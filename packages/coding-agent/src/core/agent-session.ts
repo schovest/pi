@@ -111,6 +111,7 @@ import {
 import type { SettingsManager } from "./settings-manager.ts";
 import type { Skill } from "./skills.ts";
 import type { SlashCommandInfo } from "./slash-commands.ts";
+import { appendSnapshot, createSnapshotRefId, trimSnapshotsToMax } from "./snapshot-store.ts";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.ts";
 import type {
 	SubagentDefinition,
@@ -1435,7 +1436,9 @@ export class AgentSession {
 			return;
 		}
 
-		// Take git snapshot before processing the prompt (for revert functionality)
+		// Take git snapshot before processing the prompt (for revert functionality).
+		// Snapshots are stored in a cwd-scoped global index (shared across sessions),
+		// so maxCount limits the total across all sessions in this cwd, not per-session.
 		const maxCount = this.settingsManager.getGitSnapshotMaxCount();
 		// Skip snapshots entirely when maxCount is 0 or session opted out (subagent child sessions)
 		if (!this._skipGitSnapshot && maxCount > 0) {
@@ -1443,15 +1446,24 @@ export class AgentSession {
 				const cwd = this.sessionManager.getCwd();
 				const snapshot = await takeSnapshot(cwd, this.settingsManager.getGitSnapshotMode());
 				if (snapshot) {
-					const entryId = this.sessionManager.appendCustomEntry("git_snapshot", snapshot);
+					const sessionDir = this.sessionManager.getSessionDir();
+					const refId = createSnapshotRefId();
+					await appendSnapshot(sessionDir, {
+						refId,
+						sessionId: this.sessionManager.getSessionId(),
+						timestamp: new Date().toISOString(),
+						snapshot,
+					});
+					// Anchor in the session tree: data is just the refId reference.
+					this.sessionManager.appendCustomEntry("git_snapshot", { refId });
 					// Protect stash object from gc if working tree was dirty
 					if (snapshot.stashCommit) {
-						await protectSnapshot(cwd, entryId, snapshot.stashCommit);
+						await protectSnapshot(cwd, refId, snapshot.stashCommit);
 					}
 
-					// Enforce maxCount limit: trim oldest snapshots and their git refs
-					const removedIds = this.sessionManager.trimOldestCustomEntries("git_snapshot", maxCount);
-					for (const id of removedIds) {
+					// Enforce maxCount across all sessions in this cwd
+					const removedRefIds = await trimSnapshotsToMax(sessionDir, maxCount);
+					for (const id of removedRefIds) {
 						await unprotectSnapshot(cwd, id);
 					}
 				}

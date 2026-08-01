@@ -1789,53 +1789,28 @@ export class SessionManager {
 	}
 
 	/**
-	 * Count the number of custom entries of a given type in the session.
+	 * Apply data updates to multiple custom entries, then rewrite the session file once.
+	 * Used by snapshot migration to rewrite legacy in-tree snapshot anchors to { refId }.
+	 * @returns the number of entries actually updated.
 	 */
-	countCustomEntries(customType: string): number {
-		let count = 0;
+	updateCustomEntriesData(updates: { entryId: string; data: unknown }[]): number {
+		if (updates.length === 0) return 0;
+		const updateMap = new Map<string, unknown>();
+		for (const u of updates) updateMap.set(u.entryId, u.data);
+		let changed = false;
 		for (const entry of this.fileEntries) {
-			if (entry.type === "custom" && (entry as CustomEntry).customType === customType) {
-				count++;
+			if (entry.type === "custom" && updateMap.has(entry.id)) {
+				(entry as CustomEntry).data = updateMap.get(entry.id);
+				changed = true;
 			}
 		}
-		return count;
-	}
-
-	/**
-	 * Remove the oldest custom entries of a given type until the count is at most maxCount.
-	 * Returns the set of removed entry IDs.
-	 */
-	trimOldestCustomEntries(customType: string, maxCount: number): Set<string> {
-		const entries: CustomEntry[] = [];
-		for (const entry of this.fileEntries) {
-			if (entry.type === "custom" && (entry as CustomEntry).customType === customType) {
-				entries.push(entry as CustomEntry);
-			}
-		}
-
-		if (entries.length <= maxCount) {
-			return new Set();
-		}
-
-		// Sort by timestamp, oldest first
-		entries.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
-
-		const toRemove = entries.slice(0, entries.length - maxCount);
-		const removeIds = new Set(toRemove.map((e) => e.id));
-
-		if (removeIds.size > 0) {
+		if (changed) {
 			const header = this.fileEntries.find((e) => e.type === "session");
-			this.fileEntries = this.fileEntries.filter((entry) => {
-				if (entry.type === "session") return true;
-				return !removeIds.has(entry.id);
-			});
-			this._buildIndex();
 			if (header) {
 				this._rewriteFile();
 			}
 		}
-
-		return removeIds;
+		return updateMap.size;
 	}
 
 	/**

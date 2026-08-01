@@ -53,3 +53,42 @@ describe("SessionManager.saveCustomEntry", () => {
 		expect(ctx.messages).toHaveLength(2); // only message entries
 	});
 });
+
+describe("SessionManager.updateCustomEntriesData", () => {
+	it("updates data of multiple custom entries in one pass", () => {
+		const session = SessionManager.inMemory();
+		const a = session.appendCustomEntry("git_snapshot", { legacy: true });
+		const b = session.appendCustomEntry("git_snapshot", { legacy: true });
+		const c = session.appendCustomEntry("other", { keep: 1 });
+
+		const updated = session.updateCustomEntriesData([
+			{ entryId: a, data: { refId: "ref-a" } },
+			{ entryId: b, data: { refId: "ref-b" } },
+		]);
+
+		expect(updated).toBe(2);
+		const entries = session.getEntries();
+		expect((entries.find((e) => e.id === a) as CustomEntry).data).toEqual({ refId: "ref-a" });
+		expect((entries.find((e) => e.id === b) as CustomEntry).data).toEqual({ refId: "ref-b" });
+		// Unrelated custom entries are untouched.
+		expect((entries.find((e) => e.id === c) as CustomEntry).data).toEqual({ keep: 1 });
+	});
+
+	it("returns 0 and does nothing for empty updates", () => {
+		const session = SessionManager.inMemory();
+		session.appendCustomEntry("git_snapshot", { legacy: true });
+		expect(session.updateCustomEntriesData([])).toBe(0);
+	});
+
+	it("ignores entryIds that do not exist without creating entries", () => {
+		const session = SessionManager.inMemory();
+		const a = session.appendCustomEntry("git_snapshot", { legacy: true });
+		const updated = session.updateCustomEntriesData([
+			{ entryId: a, data: { refId: "ref-a" } },
+			{ entryId: "nonexistent", data: { refId: "x" } },
+		]);
+		expect(updated).toBe(2); // returns the number of requested updates
+		expect((session.getEntries().find((e) => e.id === a) as CustomEntry).data).toEqual({ refId: "ref-a" });
+		expect(session.getEntries()).toHaveLength(1); // no entry created for the unknown id
+	});
+});

@@ -87,8 +87,20 @@ import { DefaultPackageManager } from "../../core/package-manager.ts";
 import { discoverPrimaryAgentsSync } from "../../core/primary-agents/index.ts";
 import type { ResourceDiagnostic } from "../../core/resource-loader.ts";
 import { formatMissingSessionCwdPrompt, MissingSessionCwdError } from "../../core/session-cwd.ts";
-import { type SessionContext, SessionManager, type SessionMessageEntry } from "../../core/session-manager.ts";
+import {
+	type CustomEntry,
+	type SessionContext,
+	SessionManager,
+	type SessionMessageEntry,
+} from "../../core/session-manager.ts";
 import { BUILTIN_SLASH_COMMANDS } from "../../core/slash-commands.ts";
+import {
+	countSnapshots,
+	getSnapshot,
+	type LegacySnapshotRecord,
+	migrateLegacySnapshots,
+	removeSnapshots,
+} from "../../core/snapshot-store.ts";
 import type { SourceInfo } from "../../core/source-info.ts";
 import { discoverSubagentsSync } from "../../core/subagents/index.ts";
 import { isInstallTelemetryEnabled } from "../../core/telemetry.ts";
@@ -836,6 +848,14 @@ export class InteractiveMode {
 	 */
 	async run(): Promise<void> {
 		await this.init();
+
+		// Migrate legacy in-tree git snapshots to the cwd-scoped global index.
+		// Best-effort: must not block startup if migration fails.
+		try {
+			await this.migrateLegacyGitSnapshots();
+		} catch (error) {
+			this.showWarning(`Git snapshot migration skipped: ${error instanceof Error ? error.message : String(error)}`);
+		}
 
 		// Start package update check asynchronously
 		this.checkForPackageUpdates().then((updates) => {
@@ -5492,7 +5512,11 @@ export class InteractiveMode {
 			return;
 		}
 
-		const snapshot = snapshotResult.data as GitSnapshotData;
+		const snapshot = this.resolveSnapshot(snapshotResult);
+		if (!snapshot) {
+			this.showStatus("Git snapshot for this node has been pruned");
+			return;
+		}
 
 		// Check for uncommitted changes
 		const cwd = this.sessionManager.getCwd();
@@ -5561,7 +5585,11 @@ export class InteractiveMode {
 			return;
 		}
 
-		const snapshot = snapshotResult.data as GitSnapshotData;
+		const snapshot = this.resolveSnapshot(snapshotResult);
+		if (!snapshot) {
+			this.showStatus("Git snapshot for this node has been pruned");
+			return;
+		}
 
 		// Check for uncommitted changes
 		const cwd = this.sessionManager.getCwd();
@@ -5600,9 +5628,9 @@ export class InteractiveMode {
 				return;
 			}
 
-			// The snapshot entry we reverted to is now stale — the next prompt
-			// will create a new snapshot. Move the leaf to the snapshot's parent
-			// so pruneOrphanedEntries also removes the stale snapshot entry.
+			// The snapshot anchor we reverted to is now stale — the next prompt
+			// will create a new snapshot. Move the leaf to the anchor's parent
+			// so pruneOrphanedEntries also removes the stale anchor.
 			let keepLeafId: string | null = this.sessionManager.getLeafId();
 			if (keepLeafId === snapshotResult.entryId) {
 				const parentEntry = this.sessionManager.getEntry(snapshotResult.entryId);
@@ -5614,13 +5642,32 @@ export class InteractiveMode {
 				keepLeafId = this.sessionManager.getLeafId();
 			}
 
+			// Map every git_snapshot anchor to its refId before pruning, so we can
+			// clean up the global index + git refs for pruned anchors.
+			const refIdByEntryId = new Map<string, string>();
+			for (const entry of this.sessionManager.getEntries()) {
+				if (entry.type !== "custom") continue;
+				const custom = entry as CustomEntry;
+				if (custom.customType !== "git_snapshot") continue;
+				const refId = (custom.data as { refId?: string } | undefined)?.refId;
+				if (refId) refIdByEntryId.set(entry.id, refId);
+			}
+
 			// Prune orphaned entries (destructive: removes abandoned branch,
-			// including the stale snapshot entry itself)
+			// including the stale anchor itself)
 			const removedIds = this.sessionManager.pruneOrphanedEntries(keepLeafId);
 
-			// Clean up git refs for removed snapshot entries
+			// Clean up git refs + global index for removed snapshot anchors
+			const removedRefIds: string[] = [];
 			for (const id of removedIds) {
-				await unprotectSnapshot(cwd, id);
+				const refId = refIdByEntryId.get(id);
+				if (refId) {
+					removedRefIds.push(refId);
+					await unprotectSnapshot(cwd, refId);
+				}
+			}
+			if (removedRefIds.length > 0) {
+				await removeSnapshots(this.sessionManager.getSessionDir(), removedRefIds);
 			}
 
 			// Update UI
@@ -6725,7 +6772,7 @@ export class InteractiveMode {
 	private async handleGitSnapshotCommand(): Promise<void> {
 		const cwd = this.sessionManager.getCwd();
 		const maxCount = this.settingsManager.getGitSnapshotMaxCount();
-		const totalCount = this.sessionManager.countCustomEntries("git_snapshot");
+		const totalCount = countSnapshots(this.sessionManager.getSessionDir());
 		const snapMode = this.settingsManager.getGitSnapshotMode();
 
 		let info = `${theme.bold("Git Snapshot Info")}\n\n`;
@@ -6760,6 +6807,60 @@ export class InteractiveMode {
 		this.chatContainer.addChild(new Spacer(1));
 		this.chatContainer.addChild(new Text(info, 1, 0));
 		this.ui.requestRender();
+	}
+
+	/**
+	 * Migrate legacy in-tree git_snapshot entries (data = full GitSnapshotData)
+	 * to the cwd-scoped global index (data = { refId }).
+	 *
+	 * Legacy entries predate the global snapshot index. Runs once on startup;
+	 * migrated entries are skipped on subsequent runs (data has refId, no head).
+	 */
+	private async migrateLegacyGitSnapshots(): Promise<void> {
+		const legacyEntries: LegacySnapshotRecord[] = [];
+		for (const entry of this.sessionManager.getEntries()) {
+			if (entry.type !== "custom") continue;
+			const custom = entry as CustomEntry;
+			if (custom.customType !== "git_snapshot") continue;
+			const data = custom.data as { head?: unknown; refId?: string } | undefined;
+			// Legacy format: data is the full GitSnapshotData (has `head`). New format: { refId }.
+			if (data && typeof data.head === "string") {
+				legacyEntries.push({
+					id: entry.id,
+					timestamp: entry.timestamp,
+					snapshot: data as unknown as GitSnapshotData,
+				});
+			}
+		}
+		if (legacyEntries.length === 0) return;
+		await migrateLegacySnapshots({
+			sessionDir: this.sessionManager.getSessionDir(),
+			sessionId: this.sessionManager.getSessionId(),
+			cwd: this.sessionManager.getCwd(),
+			legacyEntries,
+			updateEntriesData: (updates) => this.sessionManager.updateCustomEntriesData(updates),
+		});
+	}
+
+	/**
+	 * Resolve the real GitSnapshotData for a git_snapshot anchor.
+	 *
+	 * Anchor data is normally { refId }, resolved from the cwd-scoped global index.
+	 * Legacy (pre-migration) anchors store the full GitSnapshotData inline; those
+	 * are used directly so revert still works if migration failed or hasn't run.
+	 * Returns null when the anchor points at a pruned index entry.
+	 */
+	private resolveSnapshot(snapshotResult: { data: unknown }): GitSnapshotData | null {
+		const data = snapshotResult.data as
+			| { refId?: string; head?: unknown; stashCommit?: unknown; clean?: unknown }
+			| undefined;
+		if (data && typeof data.refId === "string") {
+			return getSnapshot(this.sessionManager.getSessionDir(), data.refId);
+		}
+		if (data && typeof data.head === "string" && typeof data.clean === "boolean") {
+			return data as unknown as GitSnapshotData;
+		}
+		return null;
 	}
 
 	private handleChangelogCommand(): void {
