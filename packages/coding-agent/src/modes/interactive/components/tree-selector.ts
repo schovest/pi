@@ -197,7 +197,7 @@ class TreeList implements Component {
 
 			// Extract tool calls from assistant messages for later lookup
 			const entry = node.entry;
-			if (entry.type === "message" && entry.message.role === "assistant") {
+			if (entry.type === "message" && entry.message?.role === "assistant") {
 				const content = (entry.message as { content?: unknown }).content;
 				if (Array.isArray(content)) {
 					for (const block of content) {
@@ -286,7 +286,7 @@ class TreeList implements Component {
 
 			// Skip assistant messages with only tool calls (no text) unless error/aborted
 			// Always show current leaf so active position is visible
-			if (entry.type === "message" && entry.message.role === "assistant" && !isCurrentLeaf) {
+			if (entry.type === "message" && entry.message?.role === "assistant" && !isCurrentLeaf) {
 				const msg = entry.message as { stopReason?: string; content?: unknown };
 				const hasText = this.hasTextContent(msg.content);
 				const isErrorOrAborted = msg.stopReason && msg.stopReason !== "stop" && msg.stopReason !== "toolUse";
@@ -309,11 +309,11 @@ class TreeList implements Component {
 			switch (this.filterMode) {
 				case "user-only":
 					// Just user messages
-					passesFilter = entry.type === "message" && entry.message.role === "user";
+					passesFilter = entry.type === "message" && entry.message?.role === "user";
 					break;
 				case "no-tools":
 					// Default minus tool results
-					passesFilter = !isSettingsEntry && !(entry.type === "message" && entry.message.role === "toolResult");
+					passesFilter = !isSettingsEntry && !(entry.type === "message" && entry.message?.role === "toolResult");
 					break;
 				case "labeled-only":
 					// Just labeled entries
@@ -512,6 +512,7 @@ class TreeList implements Component {
 		switch (entry.type) {
 			case "message": {
 				const msg = entry.message;
+				if (!msg) break;
 				parts.push(msg.role);
 				if ("content" in msg && msg.content) {
 					parts.push(this.extractContent(msg.content));
@@ -713,6 +714,11 @@ class TreeList implements Component {
 		switch (entry.type) {
 			case "message": {
 				const msg = entry.message;
+				if (!msg) {
+					// LazyEntry 占位：无 .message，显示占位文本
+					result = theme.fg("dim", "[lazy message]");
+					break;
+				}
 				const role = msg.role;
 				if (role === "user") {
 					const msgWithContent = msg as { content?: unknown };
@@ -837,16 +843,19 @@ class TreeList implements Component {
 		let text: string | undefined;
 
 		switch (entry.type) {
-			case "message":
-				if (entry.message.role === "bashExecution") {
-					text = entry.message.command;
-				} else if ("content" in entry.message) {
-					text = this.extractFullContent(entry.message.content);
-					if (!text && entry.message.role === "assistant") {
-						text = entry.message.errorMessage;
+			case "message": {
+				const msg = entry.message;
+				if (!msg) break;
+				if (msg.role === "bashExecution") {
+					text = msg.command;
+				} else if ("content" in msg) {
+					text = this.extractFullContent(msg.content);
+					if (!text && msg.role === "assistant") {
+						text = msg.errorMessage;
 					}
 				}
 				break;
+			}
 			case "custom_message":
 				text = this.extractFullContent(entry.content);
 				break;

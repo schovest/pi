@@ -141,7 +141,7 @@ function getAssistantUsage(msg: AgentMessage): Usage | undefined {
 export function getLastAssistantUsage(entries: SessionEntry[]): Usage | undefined {
 	for (let i = entries.length - 1; i >= 0; i--) {
 		const entry = entries[i];
-		if (entry.type === "message") {
+		if (entry.type === "message" && entry.message) {
 			const usage = getAssistantUsage(entry.message);
 			if (usage) return usage;
 		}

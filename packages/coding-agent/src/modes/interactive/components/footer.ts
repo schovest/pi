@@ -212,13 +212,13 @@ export class FooterComponent implements Component {
 				| { input: number; output: number; cacheRead: number; cacheWrite: number; cost: { total: number } }
 				| undefined;
 
-			if (entry.type === "message" && entry.message.role === "assistant") {
+			if (entry.type === "message" && entry.message?.role === "assistant") {
 				usage = entry.message.usage;
 
 				// Cache hit rate only from assistant messages
 				const latestPromptTokens = usage.input + usage.cacheRead + usage.cacheWrite;
 				latestCacheHitRate = latestPromptTokens > 0 ? (usage.cacheRead / latestPromptTokens) * 100 : undefined;
-			} else if (entry.type === "message" && entry.message.role === "toolResult" && entry.message.usage) {
+			} else if (entry.type === "message" && entry.message?.role === "toolResult" && entry.message.usage) {
 				usage = entry.message.usage;
 			} else if ((entry.type === "branch_summary" || entry.type === "compaction") && entry.usage) {
 				usage = entry.usage;

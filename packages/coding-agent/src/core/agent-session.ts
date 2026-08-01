@@ -3295,7 +3295,7 @@ export class AgentSession {
 			let newLeafId: string | null;
 			let editorText: string | undefined;
 
-			if (targetEntry.type === "message" && targetEntry.message.role === "user") {
+			if (targetEntry.type === "message" && targetEntry.message?.role === "user") {
 				// User message: leaf = parent (null if root), text goes to editor
 				newLeafId = targetEntry.parentId;
 				editorText = this._extractUserMessageText(targetEntry.message.content);
@@ -3374,7 +3374,7 @@ export class AgentSession {
 
 		for (const entry of entries) {
 			if (entry.type !== "message") continue;
-			if (entry.message.role !== "user") continue;
+			if (entry.message?.role !== "user") continue;
 
 			const text = this._extractUserMessageText(entry.message.content);
 			if (text) {
@@ -3412,7 +3412,7 @@ export class AgentSession {
 		let totalCost = 0;
 
 		for (const entry of this.sessionManager.getEntries()) {
-			if (entry.type !== "message") continue;
+			if (entry.type !== "message" || !entry.message) continue;
 			totalMessages++;
 			const message = entry.message;
 			if (message.role === "user") {
@@ -3509,7 +3509,7 @@ export class AgentSession {
 			let hasPostCompactionUsage = false;
 			for (let i = branchEntries.length - 1; i > compactionIndex; i--) {
 				const entry = branchEntries[i];
-				if (entry.type === "message" && entry.message.role === "assistant") {
+				if (entry.type === "message" && entry.message?.role === "assistant") {
 					const assistant = entry.message;
 					if (assistant.stopReason !== "aborted" && assistant.stopReason !== "error") {
 						const contextTokens = calculateContextTokens(assistant.usage);

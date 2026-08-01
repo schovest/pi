@@ -10,6 +10,7 @@
 
 - LazyEntry 占位条目导致的 `.message` 解引用崩溃：`buildSessionContext` / `_persist` / `createBranchedSession` 对无 `.message` 的 message 条目增加 optional chaining guard
 - LazyEntry 全量重写丢内容：`_rewriteFile` / `_persist` 首次 flush 分支 / `forkFrom` 对 lazy 条目原样写回磁盘 raw 而非 `JSON.stringify` 占位；`createBranchedSession` 切换 sessionFile 前先 materialize lazy 条目
+- 全仓剩余 `.message` 解引用点 lazy guard：`sessionEntryToContextMessages` / compaction（`findCutPoint` / `getLastAssistantUsage`）/ `branchSummarizeBranch` / fork（`agent-session-runtime`）/ `getUserMessagesForForking` / `getSessionStats` / 上下文 token 估算 / footer 用量统计 / `getUsageCostBreakdown` / cache-stats / tree-selector 渲染与复制 / `getSubagentMessages` / export-html（preRenderCustomTools + template.js）/ examples 扩展，遇无 `.message` 的 LazyEntry 不再崩溃（lazy 条目不参与上下文与统计累计）
 
 ## [0.12.8] - 2026-07-31
 

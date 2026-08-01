@@ -151,7 +151,7 @@ function getMessageFromEntry(entry: SessionEntry): AgentMessage | undefined {
 	switch (entry.type) {
 		case "message":
 			// Skip tool results - context is in assistant's tool call
-			if (entry.message.role === "toolResult") return undefined;
+			if (entry.message?.role === "toolResult") return undefined;
 			return entry.message;
 
 		case "custom_message":

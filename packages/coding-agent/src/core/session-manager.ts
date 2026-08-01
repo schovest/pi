@@ -366,7 +366,8 @@ export function getLatestCompactionEntry(entries: SessionEntry[]): CompactionEnt
  * to LLM context directly (e.g., thinking_level_change, subagent_run).
  */
 export function sessionEntryToContextMessages(entry: SessionEntry): AgentMessage[] {
-	if (entry.type === "message") {
+	// LazyEntry（compaction 前大行占位）无 .message，不贡献上下文
+	if (entry.type === "message" && entry.message) {
 		const message = entry.message;
 		if (
 			(message.role === "user" || message.role === "assistant" || message.role === "toolResult") &&
@@ -1164,7 +1165,11 @@ export class SessionManager {
 	getSubagentMessages(subagentEntryId: string): AgentMessage[] {
 		const messages: { ts: number; msg: AgentMessage }[] = [];
 		for (const entry of this.fileEntries) {
-			if (entry.type === "message" && entry.parentId === subagentEntryId) {
+			if (
+				entry.type === "message" &&
+				entry.parentId === subagentEntryId &&
+				!(entry as { __lazy?: boolean }).__lazy // lazy 占位无 .message，跳过
+			) {
 				messages.push({
 					ts: new Date(entry.timestamp).getTime(),
 					msg: (entry as SessionMessageEntry).message,

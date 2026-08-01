@@ -209,7 +209,7 @@ function preRenderCustomTools(
 	const renderedTools: Record<string, RenderedToolHtml> = {};
 
 	for (const entry of entries) {
-		if (entry.type !== "message") continue;
+		if (entry.type !== "message" || !entry.message) continue; // lazy 占位无 .message
 		const msg = entry.message;
 
 		// Find tool calls in assistant messages

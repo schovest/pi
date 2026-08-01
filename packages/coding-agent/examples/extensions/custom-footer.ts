@@ -33,7 +33,7 @@ export default function (pi: ExtensionAPI) {
 								output = 0,
 								cost = 0;
 							for (const e of ctx.sessionManager.getBranch()) {
-								if (e.type === "message" && e.message.role === "assistant") {
+								if (e.type === "message" && e.message?.role === "assistant") {
 									const m = e.message as AssistantMessage;
 									input += m.usage.input;
 									output += m.usage.output;
