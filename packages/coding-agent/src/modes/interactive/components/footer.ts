@@ -1,4 +1,5 @@
 import { isAbsolute, relative, resolve, sep } from "node:path";
+import type { Usage } from "@earendil-works/pi-ai/compat";
 import type { EditorComponent } from "@schovest/pi-tui";
 import { type Component, truncateToWidth, visibleWidth } from "@schovest/pi-tui";
 import type { AgentSession } from "../../../core/agent-session.ts";
@@ -41,6 +42,84 @@ export function formatCwdForFooter(cwd: string, home: string | undefined): strin
 
 	if (!isInsideHome) return cwd;
 	return relativeToHome === "" ? "~" : `~${sep}${relativeToHome}`;
+}
+
+/**
+ * computeFooterUsage 的轻量输入条目类型：兼容 SessionEntry 与 LazyEntry 运行时变体。
+ * LazyEntry 占位（compaction 前大行）无 .message，靠 optional chaining 自然跳过。
+ */
+export interface FooterUsageSourceEntry {
+	type: string;
+	message?: { role?: string; usage?: Usage };
+	usage?: Usage;
+	/** Compaction entry：截至 compaction 的累计 usage（含其前全部条目），旧会话无此字段。 */
+	cumulativeUsage?: Usage;
+	/** Lazy 占位标记（compaction 前大行，无 .message）。 */
+	__lazy?: boolean;
+}
+
+/** computeFooterUsage 的结果。costTotal 为 usage.cost.total 的累计。 */
+export interface FooterUsageTotals {
+	input: number;
+	output: number;
+	cacheRead: number;
+	cacheWrite: number;
+	costTotal: number;
+	/** 最近一条带 usage 的 assistant 消息的 cache hit rate（%），无则 undefined。 */
+	latestCacheHitRate: number | undefined;
+}
+
+/**
+ * 计算 footer 展示的累计 token/花费用量。
+ * 以最后一个携带 cumulativeUsage 的 compaction 作基线（其值已含 compaction 前全部
+ * usage，包括被 lazy 占位跳过的部分），再累加其后条目的 usage；无此类 compaction
+ * （旧会话文件 / 无 compaction）时退化为线性累加全部条目。
+ */
+export function computeFooterUsage(entries: readonly FooterUsageSourceEntry[]): FooterUsageTotals {
+	let input = 0;
+	let output = 0;
+	let cacheRead = 0;
+	let cacheWrite = 0;
+	let costTotal = 0;
+	let latestCacheHitRate: number | undefined;
+
+	for (const entry of entries) {
+		// 带 cumulativeUsage 的 compaction：以它为基线（含其前全部 usage），继续累加其后条目。
+		if (entry.type === "compaction" && entry.cumulativeUsage) {
+			const cum = entry.cumulativeUsage;
+			input = cum.input;
+			output = cum.output;
+			cacheRead = cum.cacheRead;
+			cacheWrite = cum.cacheWrite;
+			costTotal = cum.cost.total;
+			continue;
+		}
+
+		let usage: Usage | undefined;
+		if (entry.type === "message" && entry.message?.role === "assistant") {
+			const u = entry.message.usage;
+			if (u) {
+				usage = u;
+				// Cache hit rate only from assistant messages
+				const latestPromptTokens = u.input + u.cacheRead + u.cacheWrite;
+				latestCacheHitRate = latestPromptTokens > 0 ? (u.cacheRead / latestPromptTokens) * 100 : undefined;
+			}
+		} else if (entry.type === "message" && entry.message?.role === "toolResult" && entry.message.usage) {
+			usage = entry.message.usage;
+		} else if ((entry.type === "branch_summary" || entry.type === "compaction") && entry.usage) {
+			usage = entry.usage;
+		}
+
+		if (usage) {
+			input += usage.input;
+			output += usage.output;
+			cacheRead += usage.cacheRead;
+			cacheWrite += usage.cacheWrite;
+			costTotal += usage.cost.total;
+		}
+	}
+
+	return { input, output, cacheRead, cacheWrite, costTotal, latestCacheHitRate };
 }
 
 /**
@@ -200,38 +279,13 @@ export class FooterComponent implements Component {
 		this.syncEditorBorderTitles();
 
 		// Calculate cumulative usage from ALL session entries (not just post-compaction messages)
-		let totalInput = 0;
-		let totalOutput = 0;
-		let totalCacheRead = 0;
-		let totalCacheWrite = 0;
-		let totalCost = 0;
-		let latestCacheHitRate: number | undefined;
-
-		for (const entry of this.session.sessionManager.getEntries()) {
-			let usage:
-				| { input: number; output: number; cacheRead: number; cacheWrite: number; cost: { total: number } }
-				| undefined;
-
-			if (entry.type === "message" && entry.message?.role === "assistant") {
-				usage = entry.message.usage;
-
-				// Cache hit rate only from assistant messages
-				const latestPromptTokens = usage.input + usage.cacheRead + usage.cacheWrite;
-				latestCacheHitRate = latestPromptTokens > 0 ? (usage.cacheRead / latestPromptTokens) * 100 : undefined;
-			} else if (entry.type === "message" && entry.message?.role === "toolResult" && entry.message.usage) {
-				usage = entry.message.usage;
-			} else if ((entry.type === "branch_summary" || entry.type === "compaction") && entry.usage) {
-				usage = entry.usage;
-			}
-
-			if (usage) {
-				totalInput += usage.input;
-				totalOutput += usage.output;
-				totalCacheRead += usage.cacheRead;
-				totalCacheWrite += usage.cacheWrite;
-				totalCost += usage.cost.total;
-			}
-		}
+		const totals = computeFooterUsage(this.session.sessionManager.getEntries());
+		const totalInput = totals.input;
+		const totalOutput = totals.output;
+		const totalCacheRead = totals.cacheRead;
+		const totalCacheWrite = totals.cacheWrite;
+		const totalCost = totals.costTotal;
+		const latestCacheHitRate = totals.latestCacheHitRate;
 
 		// Calculate context usage from session (handles compaction correctly).
 		// After compaction, tokens are unknown until the next LLM response.
