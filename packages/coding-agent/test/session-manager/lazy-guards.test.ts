@@ -9,12 +9,14 @@ import {
 	prepareCompaction,
 } from "../../src/core/compaction/index.ts";
 import {
-	LAZY_ENTRY_THRESHOLD,
 	loadEntriesFromFile,
 	type SessionEntry,
 	SessionManager,
 	sessionEntryToContextMessages,
 } from "../../src/core/session-manager.ts";
+
+// v3：lazy 纯按 compaction 边界（无大小阈值），用固定大字节数构造 compaction 前大行。
+const BIG = 200_000;
 
 function makeHeader(): string {
 	return JSON.stringify({
@@ -73,10 +75,10 @@ function makeAssistantWithUsage(id: string, parentId: string | null): string {
 function makeLazySessionFile(): string {
 	const lines = [
 		makeHeader(),
-		makeMsg("bigMsg", null, LAZY_ENTRY_THRESHOLD + 100), // 64KB+ toolResult → lazy
+		makeMsg("bigMsg", null, BIG), // compaction 前 toolResult → lazy（大小无关）
 		makeCompaction("c1", "m1", "bigMsg"),
 		makeMsg("m1", "c1", 20, "user"),
-		makeMsg("bigMid", "m1", LAZY_ENTRY_THRESHOLD + 200), // 64KB+，位于 c1 与 c2 之间 → lazy
+		makeMsg("bigMid", "m1", BIG), // c1 与 c2 之间 → lazy
 		makeAssistantWithUsage("m3", "bigMid"),
 		makeCompaction("c2", "m3", "m3"), // 文件最后 compaction 行 → bigMid 判 lazy
 	];
@@ -124,10 +126,19 @@ describe("lazy guards: compaction", () => {
 		).not.toThrow();
 	});
 
-	it("getLastAssistantUsage skips lazy entries without crashing", () => {
-		const entries = loadLazyEntries();
+	it("getLastAssistantUsage skips lazy entries and finds post-compaction assistant", () => {
+		// v3：compaction 前全 lazy（含 assistant）；compaction 后 assistant full parse。
+		const dir = mkdtempSync(join(tmpdir(), "pi-lazy-"));
+		const file = join(dir, "s.jsonl");
+		writeFileSync(
+			file,
+			`${makeHeader()}\n${makeMsg("bigMsg", null, BIG)}\n${makeCompaction("c1", "m1", "bigMsg")}\n${makeMsg("m1", "c1", 20, "user")}\n${makeAssistantWithUsage("pre", "c1")}\n${makeCompaction("c2", "pre", "pre")}\n${makeAssistantWithUsage("post", "c2")}\n`,
+		);
+		const entries = loadEntriesFromFile(file) as SessionEntry[];
+		// compaction 前 assistant（pre）也是 lazy 占位
+		expect((entries.find((e) => e.id === "pre") as { __lazy?: boolean }).__lazy).toBe(true);
 		expect(() => getLastAssistantUsage(entries)).not.toThrow();
-		// bigMid 是 lazy toolResult，m3 是真实 assistant → 取到 m3 的 usage
+		// lazy 占位无 .message → 跳过；compaction 后 assistant（post）full parse → 取到
 		expect(getLastAssistantUsage(entries)).toBeDefined();
 	});
 });

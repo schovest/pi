@@ -147,11 +147,9 @@ export interface CustomMessageEntry<T = unknown> extends SessionEntryBase {
 	display: boolean;
 }
 
-/** 字节阈值：超过此长度的 message 行加载时不全量 parse。 */
-export const LAZY_ENTRY_THRESHOLD = 64 * 1024;
-
 /**
- * 两阶段加载的中间态：大行只 peek 元数据，读完后据最后 compaction offset 决策。
+ * 两阶段加载的中间态：行只 peek 元数据（v3：无大小阈值，lazy 纯按 compaction 边界），
+ * 读完后据最后 compaction offset 决策。
  * 显式 `__pending` 标记用于在第二阶段与 full-parse 的 FileEntry 区分
  * （不靠模糊的 in/类型判定）。
  */
@@ -166,7 +164,7 @@ export interface PendingEntry {
 }
 
 /**
- * compaction 前、超阈值 message 条目的内存占位。仅元数据 + 磁盘偏移；
+ * compaction 前 message 条目的内存占位。仅元数据 + 磁盘偏移；
  * 访问 .message 前必须 materialize。字段顺序依赖 type/id/parentId/timestamp
  * 在序列化时位于 message 之前（peekEntryFields regex 依赖）。
  * 注意：该类型不加入 SessionEntry union，运行时以 FileEntry 形态存在于
@@ -202,7 +200,7 @@ export type FileEntry = SessionHeader | SessionEntry;
  * 线性累加所有 entry 的 usage：message.usage + compaction/branch_summary.usage。
  * 不读 cumulativeUsage（避免重复计数）；appendCompaction 用它写 cumulativeUsage，
  * footer 侧再以最后一个带 cumulativeUsage 的 compaction 作基线恢复累计。
- * LazyEntry 占位（compaction 前大行）无 .message，自然跳过。
+ * LazyEntry 占位（compaction 前行）无 .message，自然跳过。
  */
 function sumEntriesUsage(entries: readonly FileEntry[]): Usage {
 	let input = 0;
@@ -426,7 +424,7 @@ export function getLatestCompactionEntry(entries: SessionEntry[]): CompactionEnt
  * to LLM context directly (e.g., thinking_level_change, subagent_run).
  */
 export function sessionEntryToContextMessages(entry: SessionEntry): AgentMessage[] {
-	// LazyEntry（compaction 前大行占位）无 .message，不贡献上下文
+	// LazyEntry（compaction 前行占位）无 .message，不贡献上下文
 	if (entry.type === "message" && entry.message) {
 		const message = entry.message;
 		if (
@@ -622,9 +620,10 @@ export function readRawLine(filePath: string, offset: number, length: number): s
 }
 
 /**
- * 读取会话文件。两阶段：
- * 1. 流式读：小行 full parse；大行 peek 存 PendingEntry（不保留 raw，省内存）；记录最后一个 compaction 行 offset。
- * 2. 据最后 compaction offset 决策：compaction 前大行 → LazyEntry（占位，materialize 时读回）；
+ * 读取会话文件。两阶段（v3：lazy 纯按 compaction 边界，无大小阈值）：
+ * 1. 流式读：每行 peek type——session/compaction 行 full parse（记录最后一个 compaction 行 offset）；
+ *    其他行 peek 元数据存 PendingEntry（不 parse body、不保留 raw，省内存）。
+ * 2. 据最后 compaction offset 决策：compaction 前行 → LazyEntry（占位，materialize 时读回）；
  *    否则（compaction 后 / 无 compaction）→ readRawLine full parse（活跃或零回归）。
  */
 export function loadEntriesFromFile(filePath: string): FileEntry[] {
@@ -646,9 +645,11 @@ export function loadEntriesFromFile(filePath: string): FileEntry[] {
 			const byteLen = Buffer.byteLength(line, "utf8");
 			consumedBytes += byteLen + 1; // +1 for \n
 			if (byteLen === 0) return; // 空行：推进字节游标（保持 offset 与磁盘一致）但不解析
-			if (byteLen > LAZY_ENTRY_THRESHOLD) {
-				const f = peekEntryFields(line);
-				if (f.type === "message" && f.id !== undefined && f.parentId !== undefined) {
+			// v3：每行 peek type（无大小阈值）。header/compaction 需完整字段 → full parse；
+			// 其余行 peek 元数据存 PendingEntry，阶段 2 据 compaction 边界决策。
+			const f = peekEntryFields(line);
+			if (f.type !== undefined && f.type !== "session" && f.type !== "compaction") {
+				if (f.id !== undefined && f.parentId !== undefined) {
 					slots.push({
 						type: "message",
 						id: f.id,
@@ -660,7 +661,7 @@ export function loadEntriesFromFile(filePath: string): FileEntry[] {
 					});
 					return;
 				}
-				// peek 失败 → fallback full parse（零丢失）
+				// peek 失败（如 id 为数字）→ fallback full parse（零丢失）
 			}
 			const entry = parseSessionEntryLine(line);
 			if (entry) {
@@ -696,7 +697,7 @@ export function loadEntriesFromFile(filePath: string): FileEntry[] {
 		if ((slot as PendingEntry).__pending) {
 			const p = slot as PendingEntry;
 			if (lastCompactionOffset !== null && p.offset < lastCompactionOffset) {
-				// compaction 前大行 → LazyEntry 占位
+				// compaction 前行 → LazyEntry 占位
 				entries.push({
 					type: "message",
 					id: p.id,

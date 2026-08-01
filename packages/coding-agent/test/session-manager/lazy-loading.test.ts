@@ -2,13 +2,13 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import {
-	LAZY_ENTRY_THRESHOLD,
-	loadEntriesFromFile,
-	peekEntryFields,
-	SessionManager,
-} from "../../src/core/session-manager.ts";
+import { loadEntriesFromFile, peekEntryFields, SessionManager } from "../../src/core/session-manager.ts";
 import { userMsg } from "../utilities.ts";
+
+// v3：lazy 纯按 compaction 边界，无大小阈值（LAZY_ENTRY_THRESHOLD 已移除）。
+// 大/小行用固定字节数区分，仅为断言"不区分大小"。
+const BIG = 200_000;
+const SMALL = 20;
 
 function makeHeader(version = 3): string {
 	return JSON.stringify({
@@ -55,13 +55,13 @@ describe("peekEntryFields", () => {
 	});
 });
 
-describe("loadEntriesFromFile boundary-aware lazy", () => {
-	it("compaction-前大行 → LazyEntry", () => {
+describe("loadEntriesFromFile compaction-boundary lazy (v3, no size threshold)", () => {
+	it("compaction 前大行 → LazyEntry", () => {
 		const dir = mkdtempSync(join(tmpdir(), "pi-lazy-"));
 		const file = join(dir, "s.jsonl");
 		writeFileSync(
 			file,
-			`${makeHeader()}\n${makeMsg("big1", null, LAZY_ENTRY_THRESHOLD + 1000)}\n${makeCompaction("c1", "big1", "big1")}\n${makeMsg("after", "c1", 50)}\n`,
+			`${makeHeader()}\n${makeMsg("big1", null, BIG)}\n${makeCompaction("c1", "big1", "big1")}\n${makeMsg("after", "c1", SMALL)}\n`,
 		);
 		const entries = loadEntriesFromFile(file);
 		const big1 = entries.find((e) => (e as { id?: string }).id === "big1") as {
@@ -72,47 +72,47 @@ describe("loadEntriesFromFile boundary-aware lazy", () => {
 		expect(big1.message).toBeUndefined();
 	});
 
-	it("compaction-后大行 → full parse（活跃）", () => {
+	it("compaction 前小行也 → LazyEntry（v3 去 64KB）", () => {
 		const dir = mkdtempSync(join(tmpdir(), "pi-lazy-"));
 		const file = join(dir, "s.jsonl");
 		writeFileSync(
 			file,
-			`${makeHeader()}\n${makeCompaction("c1", "h", null)}\n${makeMsg("big2", "c1", LAZY_ENTRY_THRESHOLD + 1000)}\n`,
+			`${makeHeader()}\n${makeMsg("small1", null, SMALL)}\n${makeCompaction("c1", "small1", "small1")}\n${makeMsg("after", "c1", SMALL)}\n`,
 		);
 		const entries = loadEntriesFromFile(file);
-		const big2 = entries.find((e) => (e as { id?: string }).id === "big2") as {
+		const small1 = entries.find((e) => (e as { id?: string }).id === "small1") as {
 			__lazy?: boolean;
 			message?: unknown;
 		};
-		expect(big2.__lazy).not.toBe(true);
-		expect(big2.message).toBeDefined(); // 已 full parse
+		expect(small1.__lazy).toBe(true);
+		expect(small1.message).toBeUndefined();
 	});
 
-	it("无 compaction 大行 → full parse（零回归）", () => {
-		const dir = mkdtempSync(join(tmpdir(), "pi-lazy-"));
-		const file = join(dir, "s.jsonl");
-		writeFileSync(file, `${makeHeader()}\n${makeMsg("big3", null, LAZY_ENTRY_THRESHOLD + 1000)}\n`);
-		const entries = loadEntriesFromFile(file);
-		const big3 = entries.find((e) => (e as { id?: string }).id === "big3") as {
-			__lazy?: boolean;
-			message?: unknown;
-		};
-		expect(big3.__lazy).not.toBe(true);
-		expect(big3.message).toBeDefined(); // 已 full parse
-	});
-
-	it("小行永远 full parse（无论 compaction 前后）", () => {
+	it("compaction 后行 → full parse（活跃，大小无关）", () => {
 		const dir = mkdtempSync(join(tmpdir(), "pi-lazy-"));
 		const file = join(dir, "s.jsonl");
 		writeFileSync(
 			file,
-			`${makeHeader()}\n${makeMsg("small1", null, 10)}\n${makeCompaction("c1", "small1", "small1")}\n${makeMsg("small2", "c1", 10)}\n`,
+			`${makeHeader()}\n${makeCompaction("c1", "h", null)}\n${makeMsg("big2", "c1", BIG)}\n${makeMsg("small2", "c1", SMALL)}\n`,
 		);
 		const entries = loadEntriesFromFile(file);
 		for (const e of entries) {
-			if ((e as { id?: string }).id === "small1" || (e as { id?: string }).id === "small2") {
+			if ((e as { id?: string }).id === "big2" || (e as { id?: string }).id === "small2") {
 				expect((e as { __lazy?: boolean }).__lazy).not.toBe(true);
-				expect((e as { message?: unknown }).message).toBeDefined();
+				expect((e as { message?: unknown }).message).toBeDefined(); // 已 full parse
+			}
+		}
+	});
+
+	it("无 compaction 行 → full parse（零回归，大小无关）", () => {
+		const dir = mkdtempSync(join(tmpdir(), "pi-lazy-"));
+		const file = join(dir, "s.jsonl");
+		writeFileSync(file, `${makeHeader()}\n${makeMsg("big3", null, BIG)}\n${makeMsg("small3", null, SMALL)}\n`);
+		const entries = loadEntriesFromFile(file);
+		for (const e of entries) {
+			if ((e as { id?: string }).id === "big3" || (e as { id?: string }).id === "small3") {
+				expect((e as { __lazy?: boolean }).__lazy).not.toBe(true);
+				expect((e as { message?: unknown }).message).toBeDefined(); // 已 full parse
 			}
 		}
 	});
@@ -120,13 +120,13 @@ describe("loadEntriesFromFile boundary-aware lazy", () => {
 	it("peek 取不到元数据时 fallback full parse（零丢失）", () => {
 		const dir = mkdtempSync(join(tmpdir(), "pi-lazy-"));
 		const file = join(dir, "s.jsonl");
-		// 大行但顶层 id 是数字（非常规序列化）：regex peek 取不到 id → fallback full parse
+		// 顶层 id 是数字（非常规序列化）：regex peek 取不到 id → fallback full parse
 		const oddLine = JSON.stringify({
 			type: "message",
 			id: 42,
 			parentId: null,
 			timestamp: "2026-08-01T00:00:00.000Z",
-			message: { role: "toolResult", content: [{ type: "text", text: "x".repeat(LAZY_ENTRY_THRESHOLD + 100) }] },
+			message: { role: "toolResult", content: [{ type: "text", text: "x".repeat(20_000) }] },
 		});
 		writeFileSync(file, `${makeHeader()}\n${oddLine}\n${makeCompaction("c1", "x", null)}\n`);
 		const entries = loadEntriesFromFile(file);
@@ -139,7 +139,7 @@ describe("SessionManager.materialize", () => {
 	it("restores full content from lazy placeholder", () => {
 		const dir = mkdtempSync(join(tmpdir(), "pi-lazy-"));
 		const file = join(dir, "s.jsonl");
-		const big = makeMsg("bigM", null, LAZY_ENTRY_THRESHOLD + 500);
+		const big = makeMsg("bigM", null, BIG);
 		writeFileSync(file, `${makeHeader()}\n${big}\n${makeCompaction("c1", "bigM", "bigM")}\n`);
 		const sm = SessionManager.create("/tmp", dir);
 		sm.setSessionFile(file);
@@ -153,7 +153,7 @@ describe("SessionManager.materialize", () => {
 	it("returns undefined for unknown id and passthrough for non-lazy entries", () => {
 		const dir = mkdtempSync(join(tmpdir(), "pi-lazy-"));
 		const file = join(dir, "s.jsonl");
-		writeFileSync(file, `${makeHeader()}\n${makeMsg("small", null, 10)}\n`);
+		writeFileSync(file, `${makeHeader()}\n${makeMsg("small", null, SMALL)}\n`);
 		const sm = SessionManager.create("/tmp", dir);
 		sm.setSessionFile(file);
 		expect(sm.materialize("nope")).toBeUndefined();
@@ -167,10 +167,10 @@ describe("lazy entries and .message deref guards (B)", () => {
 	it("buildSessionContext does not crash on lazy entries", () => {
 		const dir = mkdtempSync(join(tmpdir(), "pi-lazy-"));
 		const file = join(dir, "s.jsonl");
-		const big = makeMsg("bigC", null, LAZY_ENTRY_THRESHOLD + 100);
+		const big = makeMsg("bigC", null, BIG);
 		writeFileSync(
 			file,
-			`${makeHeader()}\n${big}\n${makeCompaction("c1", "bigC", "bigC")}\n${makeMsg("after", "c1", 10, "user")}\n`,
+			`${makeHeader()}\n${big}\n${makeCompaction("c1", "bigC", "bigC")}\n${makeMsg("after", "c1", SMALL, "user")}\n`,
 		);
 		const sm = SessionManager.create("/tmp", dir);
 		sm.setSessionFile(file);
@@ -185,8 +185,8 @@ describe("lazy entries and .message deref guards (B)", () => {
 	it("resume then append does not crash and preserves lazy line (hasAssistant guard)", () => {
 		const dir = mkdtempSync(join(tmpdir(), "pi-lazy-"));
 		const file = join(dir, "s.jsonl");
-		const big = makeMsg("bigP", null, LAZY_ENTRY_THRESHOLD + 200);
-		const assistantLine = makeMsg("asst", "c1", 20, "assistant");
+		const big = makeMsg("bigP", null, BIG);
+		const assistantLine = makeMsg("asst", "c1", SMALL, "assistant");
 		writeFileSync(file, `${makeHeader()}\n${big}\n${makeCompaction("c1", "bigP", "bigP")}\n${assistantLine}\n`);
 		const sm = SessionManager.create("/tmp", dir);
 		sm.setSessionFile(file);
@@ -196,7 +196,7 @@ describe("lazy entries and .message deref guards (B)", () => {
 		const content = readFileSync(file, "utf8");
 		expect(content).toContain("new question");
 		// lazy 行原样保留（未被破坏）
-		expect(content).toContain("x".repeat(LAZY_ENTRY_THRESHOLD + 200));
+		expect(content).toContain("x".repeat(BIG));
 	});
 
 	it("createBranchedSession hasAssistant check does not crash on lazy entries", () => {
@@ -205,7 +205,7 @@ describe("lazy entries and .message deref guards (B)", () => {
 		// lazy toolResult + assistant（确保 hasAssistant=true 分支也经过 lazy guard）
 		writeFileSync(
 			file,
-			`${makeHeader()}\n${makeMsg("bigB", null, LAZY_ENTRY_THRESHOLD + 400)}\n${makeCompaction("c1", "bigB", "bigB")}\n${makeMsg("asst", "c1", 20, "assistant")}\n`,
+			`${makeHeader()}\n${makeMsg("bigB", null, BIG)}\n${makeCompaction("c1", "bigB", "bigB")}\n${makeMsg("asst", "c1", SMALL, "assistant")}\n`,
 		);
 		const sm = SessionManager.create("/tmp", dir);
 		sm.setSessionFile(file);
@@ -215,9 +215,7 @@ describe("lazy entries and .message deref guards (B)", () => {
 		const sm2 = SessionManager.open(newPath!);
 		const m = sm2.materialize("bigB");
 		expect(m).toBeDefined();
-		expect((m as { message: { content: { text: string }[] } }).message.content[0].text).toContain(
-			"x".repeat(LAZY_ENTRY_THRESHOLD + 400),
-		);
+		expect((m as { message: { content: { text: string }[] } }).message.content[0].text).toContain("x".repeat(BIG));
 	});
 });
 
@@ -225,40 +223,36 @@ describe("lazy serialization (C)", () => {
 	it("rewriteFile during migration preserves lazy raw content", () => {
 		const dir = mkdtempSync(join(tmpdir(), "pi-lazy-"));
 		const file = join(dir, "s.jsonl");
-		const big = makeMsg("bigM", null, LAZY_ENTRY_THRESHOLD + 500);
+		const big = makeMsg("bigM", null, BIG);
 		// v2 文件：setSessionFile 触发 migrate → _rewriteFile
 		writeFileSync(
 			file,
-			`${makeHeader(2)}\n${big}\n${makeCompaction("c1", "bigM", "bigM")}\n${makeMsg("after", "c1", 10)}\n`,
+			`${makeHeader(2)}\n${big}\n${makeCompaction("c1", "bigM", "bigM")}\n${makeMsg("after", "c1", SMALL)}\n`,
 		);
 		const sm = SessionManager.create("/tmp", dir);
 		sm.setSessionFile(file);
 		const content = readFileSync(file, "utf8");
-		expect(content).toContain("x".repeat(LAZY_ENTRY_THRESHOLD + 500));
+		expect(content).toContain("x".repeat(BIG));
 		// 重写后 lazy 仍可加载、可 materialize
 		const sm2 = SessionManager.open(file);
 		expect((sm2.getEntry("bigM") as { __lazy?: boolean }).__lazy).toBe(true);
 		const m = sm2.materialize("bigM");
-		expect((m as { message: { content: { text: string }[] } }).message.content[0].text).toContain(
-			"x".repeat(LAZY_ENTRY_THRESHOLD + 500),
-		);
+		expect((m as { message: { content: { text: string }[] } }).message.content[0].text).toContain("x".repeat(BIG));
 	});
 
 	it("forkFrom preserves lazy raw content", () => {
 		const dir = mkdtempSync(join(tmpdir(), "pi-lazy-"));
 		const file = join(dir, "s.jsonl");
-		const big = makeMsg("bigF", null, LAZY_ENTRY_THRESHOLD + 300);
+		const big = makeMsg("bigF", null, BIG);
 		writeFileSync(
 			file,
-			`${makeHeader()}\n${big}\n${makeCompaction("c1", "bigF", "bigF")}\n${makeMsg("after", "c1", 10)}\n`,
+			`${makeHeader()}\n${big}\n${makeCompaction("c1", "bigF", "bigF")}\n${makeMsg("after", "c1", SMALL)}\n`,
 		);
 		const forkDir = mkdtempSync(join(tmpdir(), "pi-fork-"));
 		const sm = SessionManager.forkFrom(file, "/tmp/forked-cwd", forkDir);
 		expect((sm.getEntry("bigF") as { __lazy?: boolean }).__lazy).toBe(true);
 		const m = sm.materialize("bigF");
 		expect(m).toBeDefined();
-		expect((m as { message: { content: { text: string }[] } }).message.content[0].text).toContain(
-			"x".repeat(LAZY_ENTRY_THRESHOLD + 300),
-		);
+		expect((m as { message: { content: { text: string }[] } }).message.content[0].text).toContain("x".repeat(BIG));
 	});
 });

@@ -4,8 +4,12 @@
 
 ### Added
 
-- Session resume 性能优化：`loadEntriesFromFile` 两阶段加载，compaction 前超 64KB 的 message 行懒加载为 `LazyEntry` 占位（`materialize` 按需读回），避免大 tool 输出行全量 parse 阻塞 resume
+- Session resume 性能优化：`loadEntriesFromFile` 两阶段加载，compaction 前的 message 行懒加载为 `LazyEntry` 占位（`materialize` 按需读回），避免大 tool 输出行全量 parse 阻塞 resume
 - Compaction entry 新增 `cumulativeUsage` 字段（`appendCompaction` 写入截至 compaction 的全部 usage 累计）：resume 后 footer 以最后一个 compaction 的 `cumulativeUsage` 作基线累加其后条目，compaction 前被 lazy 占位跳过的大行用量不再缺失（`computeFooterUsage` 抽为可测纯函数，无 `cumulativeUsage` 时退化为线性累加）
+
+### Changed
+
+- 懒加载去 64KB 阈值（v3）：`loadEntriesFromFile` 对非 header/compaction 行一律 peek 元数据（不再按大小判断），compaction 前全部行（含小行）懒加载为 `LazyEntry` 占位；compaction 后 / 无 compaction 的行仍 full parse（零回归）。移除 `LAZY_ENTRY_THRESHOLD` 常量
 
 ### Fixed
 

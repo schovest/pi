@@ -5,7 +5,7 @@ import type { Usage } from "@earendil-works/pi-ai/compat";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { AgentSession } from "../src/core/agent-session.ts";
 import type { ReadonlyFooterDataProvider } from "../src/core/footer-data-provider.ts";
-import { LAZY_ENTRY_THRESHOLD, SessionManager } from "../src/core/session-manager.ts";
+import { SessionManager } from "../src/core/session-manager.ts";
 import {
 	computeFooterUsage,
 	FooterComponent,
@@ -105,7 +105,7 @@ describe("computeFooterUsage", () => {
 	});
 
 	it("recovers full totals on resume: lazy pre-compaction line + persisted cumulativeUsage", () => {
-		// 真实 resume 路径：磁盘文件中 compaction 前有一条 >64KB 大行（加载为 LazyEntry 占位），
+		// 真实 resume 路径：磁盘文件中 compaction 前有一条大行（v3 无大小阈值，加载为 LazyEntry 占位），
 		// compaction 行携带 appendCompaction 写入的 cumulativeUsage。
 		const dir = mkdtempSync(join(tmpdir(), "pi-footer-cum-"));
 		const file = join(dir, "s.jsonl");
@@ -125,7 +125,7 @@ describe("computeFooterUsage", () => {
 				role: "toolResult",
 				toolCallId: "t",
 				toolName: "x",
-				content: [{ type: "text", text: "x".repeat(LAZY_ENTRY_THRESHOLD + 100) }],
+				content: [{ type: "text", text: "x".repeat(200_000) }],
 				isError: false,
 				timestamp: 0,
 			},
