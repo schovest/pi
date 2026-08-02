@@ -818,10 +818,11 @@ export class TUI extends Container {
 			this.selection.focusCol = col;
 			if (event.row <= 1) {
 				this.startAutoScroll(-1);
-			} else if (event.row >= this.lastScrollableViewport) {
-				// Trigger downward autoScroll at the bottom of the scrollable area,
-				// not the terminal bottom — the latter would require crossing any fixed
-				// bottom region (e.g. the input box) before scrolling kicks in.
+			} else if (event.row >= this.terminal.rows) {
+				// Trigger downward autoScroll only when the pointer reaches the
+				// terminal bottom (the footer's last row). The whole footer region
+				// (input box etc.) acts as a dead zone, so the user can rest the
+				// selection edge just above the footer without accidental scrolling.
 				this.startAutoScroll(1);
 			} else {
 				this.clearAutoScrollTimer();

@@ -11,6 +11,7 @@
 
 ### Changed
 
+- 复制选区时向下自动滚动改为仅在指针拖到 footer 区域底部（终端底行）时触发：整个 footer（输入框等固定底部）成为死区，避免选区刚到 footer 上方就意外滚走（无 footer 时行为不变）
 - subagent 卡片工具行（heading/工具调用/输出摘要/错误）改用 `TruncatedText` 按窗口宽度截断，移除固定 80 字符截断：长命令/路径在窄终端单行 `…` 截断而非换行撑高卡片
 - `/running-subagents` 面板懒加载：`updateSubagentDetails` 只在 overlay 打开时 `loadSubagentRunEntries` 加载历史，`pi --resume` 遍历历史时不再为每个 subagent 结果重读历史（overlay/panel 未开时仅缓存 `latestSubagentDetails`）
 - 懒加载去 64KB 阈值（v3）：`loadEntriesFromFile` 对非 header/compaction 行一律 peek 元数据（不再按大小判断），compaction 前全部行（含小行）懒加载为 `LazyEntry` 占位；compaction 后 / 无 compaction 的行仍 full parse（零回归）。移除 `LAZY_ENTRY_THRESHOLD` 常量
