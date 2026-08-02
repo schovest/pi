@@ -49,7 +49,7 @@ Pi reports diagnostics for Claude runtime fields that it does not execute, inclu
 
 ## Codex-Compatible Plugins
 
-Pi 也可以安装 codex 生态的插件（`pi codex-plugin` 命令族），与原生 Pi packages 和 `claude-plugin` 分开管理。
+Pi 也可以安装 codex 生态的插件（`pi codex-plugin` 命令族），与原生 Pi packages 和 `claude-plugin` 分开管理。交互模式下输入 `/codex-plugin` 可打开图形化管理器（搜索市场/安装/卸载/更新/市场管理），行为与 `/claude-plugin` 对称。
 
 ```bash
 pi codex-plugin marketplace add my-market https://github.com/example/codex-marketplace
