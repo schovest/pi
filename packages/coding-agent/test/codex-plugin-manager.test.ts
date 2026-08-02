@@ -1,7 +1,9 @@
+import { execFile, execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { promisify } from "node:util";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	CodexPluginManager,
 	normalizeCodexHookEventName,
@@ -9,6 +11,18 @@ import {
 	readCodexPluginManifest,
 } from "../src/core/codex-plugin-manager.ts";
 import { SettingsManager } from "../src/core/settings-manager.ts";
+import type { GitSource } from "../src/utils/git.ts";
+
+const execFileAsync = promisify(execFile);
+
+function initGitRepo(root: string): string {
+	execFileSync("git", ["init"], { cwd: root, stdio: "ignore" });
+	execFileSync("git", ["config", "user.email", "test@example.com"], { cwd: root, stdio: "ignore" });
+	execFileSync("git", ["config", "user.name", "Test"], { cwd: root, stdio: "ignore" });
+	execFileSync("git", ["add", "."], { cwd: root, stdio: "ignore" });
+	execFileSync("git", ["commit", "-m", "initial"], { cwd: root, stdio: "ignore" });
+	return execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf-8" }).trim();
+}
 
 describe("codex marketplace catalog", () => {
 	let tempDir: string;
@@ -237,5 +251,87 @@ describe("CodexPluginManager", () => {
 		};
 		expect(mcpRaw.mcpServers["gone-docs"]).toBeUndefined();
 		expect(sm.getCodexPlugins()).toHaveLength(0);
+	});
+
+	it("installs an npm plugin from a local tarball, materializing hooks into the storage copy", async () => {
+		const pluginSrc = join(tempDir, "npm-plugin-src");
+		writeCodexPlugin(pluginSrc, "npm-demo", { hooks: true });
+		writeFileSync(join(pluginSrc, "package.json"), JSON.stringify({ name: "npm-demo", version: "1.0.0" }));
+
+		const tarballDir = join(tempDir, "tarball");
+		mkdirSync(tarballDir, { recursive: true });
+		await execFileAsync("npm", ["pack", pluginSrc, "--pack-destination", tarballDir, "--ignore-scripts"], {
+			cwd: tempDir,
+		});
+		const tarball = join(tarballDir, "npm-demo-1.0.0.tgz");
+		expect(existsSync(tarball)).toBe(true);
+
+		const marketplaceDir = join(tempDir, "npm-marketplace");
+		mkdirSync(marketplaceDir, { recursive: true });
+		writeFileSync(
+			join(marketplaceDir, "marketplace.json"),
+			JSON.stringify({
+				name: "npm-mkt",
+				plugins: [{ name: "npm-demo", source: { source: "npm", package: tarball } }],
+			}),
+		);
+		manager.addMarketplace("npm-mkt", marketplaceDir);
+
+		const installed = await manager.install("npm-demo@npm-mkt");
+		expect(installed.name).toBe("npm-demo");
+		expect(installed.installedPath).toBeDefined();
+		expect(installed.installedPath).not.toBe(pluginSrc);
+		expect(existsSync(join(installed.installedPath!, ".codex-plugin", "plugin.json"))).toBe(true);
+		const stored = sm.getCodexPlugins()[0];
+		expect(stored?.hooks?.pre_tool_use?.[0]?.handlers[0]?.command).toBe(`echo '${installed.installedPath}'`);
+	});
+
+	it("persists git-subdir path in settings and restores it on update", async () => {
+		const pluginRepo = join(tempDir, "git-repo");
+		const subdir = join(pluginRepo, "plugins", "demo");
+		mkdirSync(subdir, { recursive: true });
+		writeCodexPlugin(subdir, "git-demo", { hooks: true });
+		writeFileSync(join(pluginRepo, "package.json"), JSON.stringify({ name: "git-repo", version: "0.0.0" }));
+		initGitRepo(pluginRepo);
+
+		const marketplaceDir = join(tempDir, "git-marketplace");
+		mkdirSync(marketplaceDir, { recursive: true });
+		writeFileSync(
+			join(marketplaceDir, "marketplace.json"),
+			JSON.stringify({
+				name: "git-mkt",
+				plugins: [
+					{
+						name: "git-demo",
+						source: {
+							source: "git-subdir",
+							url: "https://example.invalid/user/git-demo.git",
+							path: "./plugins/demo",
+						},
+					},
+				],
+			}),
+		);
+		manager.addMarketplace("git-mkt", marketplaceDir);
+
+		// CodexPluginManager clones via network; spy on the private cloneOrUpdate to
+		// clone the local fixture repo instead, keeping the subdir/materialize flow real.
+		const cloneSpy = vi.spyOn(
+			manager as unknown as { cloneOrUpdate(source: GitSource, target: string): Promise<void> },
+			"cloneOrUpdate",
+		);
+		cloneSpy.mockImplementation(async (_source, target) => {
+			await execFileAsync("git", ["clone", pluginRepo, target]);
+		});
+
+		const installed = await manager.install("git-demo@git-mkt");
+		expect(installed.name).toBe("git-demo");
+		const stored = sm.getCodexPlugins()[0];
+		expect(stored?.path).toBe("./plugins/demo");
+
+		await manager.update("git-demo");
+		const after = sm.getCodexPlugins()[0];
+		expect(after?.path).toBe("./plugins/demo");
+		expect(cloneSpy).toHaveBeenCalledTimes(2);
 	});
 });

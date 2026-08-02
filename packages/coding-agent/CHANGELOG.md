@@ -7,6 +7,10 @@
 - codex 插件兼容：`CodexPluginManager` 管理类（市场别名 add/remove/list/search、安装 local/git/npm 来源、hooks/commands 物化（`${PLUGIN_ROOT}`/`${PLUGIN_DATA}` 等替换为绝对路径）、MCP 注册进 mcp.json（`<plugin>-` 前缀）、skills 资源收集（`origin: "codex-plugin"`）），支持用户级 `agentDir/codex-plugins` 与项目级 `.pi/codex-plugins` 存储
 - codex 插件兼容：marketplace/manifest/hooks 解析层（`readCodexMarketplaceCatalog` / `readCodexPluginManifest` / `normalizeCodexHooks` / `normalizeCodexHookEventName` / `parseCodexInstallSpec`），支持新格式 `.codex-plugin/plugin.json` 与旧格式根 `plugin.json`，`CodexEventName` 新增 `turn_start`
 
+### Fixed
+
+- codex 插件兼容：npm 来源安装修复（`npm pack` 加 `--ignore-scripts` 不跑 lifecycle，`tar -xzf` 在临时目录 cwd 内解包）；git-subdir 来源插件的子目录 `path` 持久化到 settings（`InstalledCodexPluginSettings` 新增 `path` 字段），`update()` 可恢复子目录重新物化
+
 ## [0.13.0] - 2026-08-02
 
 ### Added

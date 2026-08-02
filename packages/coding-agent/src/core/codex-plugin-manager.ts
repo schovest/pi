@@ -551,6 +551,7 @@ export class CodexPluginManager {
 			enabled: true,
 			...(parsed.type === "marketplace" ? { marketplace: parsed.marketplace } : {}),
 			...(source.kind === "git" && source.ref ? { ref: source.ref } : {}),
+			...(source.kind === "git" && source.path ? { path: source.path } : {}),
 			hooks: materializeHooks(manifest.hooks, pluginRoot, dataDir),
 			commands: materializeCommands(manifest.commands, pluginRoot),
 		};
@@ -608,6 +609,7 @@ export class CodexPluginManager {
 				enabled: plugin.enabled,
 				...(plugin.marketplace ? { marketplace: plugin.marketplace } : {}),
 				...(plugin.ref ? { ref: plugin.ref } : {}),
+				...(plugin.path ? { path: plugin.path } : {}),
 				hooks: materializeHooks(manifest.hooks, pluginRoot, dataDir),
 				commands: materializeCommands(manifest.commands, pluginRoot),
 			};
@@ -769,7 +771,7 @@ export class CodexPluginManager {
 		const tempDir = this.getTemporaryDir("codex-plugin-npm");
 		try {
 			const spec = source.version ? `${source.package}@${source.version}` : source.package;
-			const packArgs = ["pack", spec];
+			const packArgs = ["pack", "--ignore-scripts", spec];
 			if (source.registry) {
 				packArgs.push("--registry", source.registry);
 			}
@@ -778,7 +780,7 @@ export class CodexPluginManager {
 			if (tarball === undefined) {
 				throw new Error(`npm pack produced no tarball for ${spec}`);
 			}
-			await execFileAsync("tar", ["-xzf", tarball, "-C", tempDir]);
+			await execFileAsync("tar", ["-xzf", tarball, "-C", tempDir], { cwd: tempDir });
 			const extracted = join(tempDir, "package");
 			const pluginRoot = existsSync(extracted) ? extracted : tempDir;
 			const manifest = readCodexPluginManifest(pluginRoot);
@@ -844,7 +846,12 @@ export class CodexPluginManager {
 	private parseConfiguredSource(plugin: ConfiguredCodexPlugin): CodexPluginSource {
 		const parsedGit = parseGitUrl(plugin.source);
 		if (parsedGit) {
-			return { kind: "git", url: parsedGit.repo, ref: plugin.ref ?? parsedGit.ref ?? undefined };
+			return {
+				kind: "git",
+				url: parsedGit.repo,
+				ref: plugin.ref ?? parsedGit.ref ?? undefined,
+				...(plugin.path ? { path: plugin.path } : {}),
+			};
 		}
 		if (existsSync(resolvePath(plugin.source, this.cwd, { trim: true }))) {
 			return { kind: "local", path: plugin.source };

@@ -141,6 +141,8 @@ export interface InstalledCodexPluginSettings {
 	marketplace?: string;
 	enabled?: boolean;
 	ref?: string;
+	/** git 来源（git-subdir）时仓库内子目录，update 时用于恢复插件根 */
+	path?: string;
 	/** 安装/更新时物化的 hooks 配置（已替换 ${PLUGIN_ROOT} 等为绝对路径） */
 	hooks?: CodexHooksSpec;
 	/** 安装/更新时物化的旧格式 commands（供斜杠命令注册） */
