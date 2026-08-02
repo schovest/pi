@@ -56,7 +56,7 @@ describe("plugin CLI search", () => {
 		const marketplaceRoot = join(tempDir, "marketplace");
 		writeMarketplace(marketplaceRoot);
 		const settingsManager = SettingsManager.create(cwd, agentDir);
-		settingsManager.setPluginMarketplaces({ claude: { source: marketplaceRoot } });
+		settingsManager.setClaudePluginMarketplaces({ claude: { source: marketplaceRoot } });
 		await settingsManager.flush();
 
 		await handlePluginCommand(["claude-plugin", "search", "super"]);
@@ -79,7 +79,7 @@ describe("plugin CLI search", () => {
 		const marketplaceRoot = join(tempDir, "marketplace");
 		writeMarketplace(marketplaceRoot);
 		const settingsManager = SettingsManager.create(cwd, agentDir);
-		settingsManager.setPluginMarketplaces({ claude: { source: marketplaceRoot } });
+		settingsManager.setClaudePluginMarketplaces({ claude: { source: marketplaceRoot } });
 		await settingsManager.flush();
 
 		await handlePluginCommand(["claude-plugin", "search", "missing"]);

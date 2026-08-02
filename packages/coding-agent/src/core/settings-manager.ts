@@ -85,7 +85,7 @@ export interface PluginMarketplaceSettings {
 	source: string;
 }
 
-export interface InstalledPluginSettings {
+export interface InstalledClaudePluginSettings {
 	name: string;
 	source: string;
 	marketplace?: string;
@@ -176,8 +176,8 @@ export interface Settings {
 	enableAnalytics?: boolean; // default: false - opt-in analytics data sharing
 	trackingId?: string; // analytics tracking identifier, generated when analytics is enabled
 	packages?: PackageSource[]; // Array of npm/git package sources (string or object with filtering)
-	pluginMarketplaces?: Record<string, PluginMarketplaceSettings>; // Claude-compatible plugin marketplace aliases
-	plugins?: InstalledPluginSettings[]; // Claude-compatible plugins, independent from Pi packages
+	claudePluginMarketplaces?: Record<string, PluginMarketplaceSettings>; // Claude-compatible plugin marketplace aliases
+	claudePlugins?: InstalledClaudePluginSettings[]; // Claude-compatible plugins, independent from Pi packages
 	codexPlugins?: InstalledCodexPluginSettings[]; // Codex-compatible plugins, independent from Pi packages
 	codexPluginMarketplaces?: Record<string, PluginMarketplaceSettings>; // Codex-compatible plugin marketplace aliases
 	extensions?: string[]; // Array of local extension file paths or directories
@@ -463,6 +463,16 @@ export class SettingsManager {
 		if ("queueMode" in settings && !("steeringMode" in settings)) {
 			settings.steeringMode = settings.queueMode;
 			delete settings.queueMode;
+		}
+
+		// Migrate legacy claude-plugin field names -> claudePluginMarketplaces / claudePlugins
+		if ("pluginMarketplaces" in settings && !("claudePluginMarketplaces" in settings)) {
+			settings.claudePluginMarketplaces = settings.pluginMarketplaces;
+			delete settings.pluginMarketplaces;
+		}
+		if ("plugins" in settings && !("claudePlugins" in settings)) {
+			settings.claudePlugins = settings.plugins;
+			delete settings.plugins;
 		}
 
 		// Migrate legacy websockets boolean -> transport enum
@@ -1047,37 +1057,37 @@ export class SettingsManager {
 		});
 	}
 
-	getPluginMarketplaces(): Record<string, PluginMarketplaceSettings> {
-		return structuredClone(this.settings.pluginMarketplaces ?? {});
+	getClaudePluginMarketplaces(): Record<string, PluginMarketplaceSettings> {
+		return structuredClone(this.settings.claudePluginMarketplaces ?? {});
 	}
 
-	setPluginMarketplaces(marketplaces: Record<string, PluginMarketplaceSettings>): void {
-		this.globalSettings.pluginMarketplaces = structuredClone(marketplaces);
-		this.markModified("pluginMarketplaces");
+	setClaudePluginMarketplaces(marketplaces: Record<string, PluginMarketplaceSettings>): void {
+		this.globalSettings.claudePluginMarketplaces = structuredClone(marketplaces);
+		this.markModified("claudePluginMarketplaces");
 		this.save();
 	}
 
-	setProjectPluginMarketplaces(marketplaces: Record<string, PluginMarketplaceSettings>): void {
+	setProjectClaudePluginMarketplaces(marketplaces: Record<string, PluginMarketplaceSettings>): void {
 		const projectSettings = structuredClone(this.projectSettings);
-		projectSettings.pluginMarketplaces = structuredClone(marketplaces);
-		this.markProjectModified("pluginMarketplaces");
+		projectSettings.claudePluginMarketplaces = structuredClone(marketplaces);
+		this.markProjectModified("claudePluginMarketplaces");
 		this.saveProjectSettings(projectSettings);
 	}
 
-	getPlugins(): InstalledPluginSettings[] {
-		return structuredClone(this.settings.plugins ?? []);
+	getClaudePlugins(): InstalledClaudePluginSettings[] {
+		return structuredClone(this.settings.claudePlugins ?? []);
 	}
 
-	setPlugins(plugins: InstalledPluginSettings[]): void {
-		this.globalSettings.plugins = structuredClone(plugins);
-		this.markModified("plugins");
+	setClaudePlugins(plugins: InstalledClaudePluginSettings[]): void {
+		this.globalSettings.claudePlugins = structuredClone(plugins);
+		this.markModified("claudePlugins");
 		this.save();
 	}
 
-	setProjectPlugins(plugins: InstalledPluginSettings[]): void {
+	setProjectClaudePlugins(plugins: InstalledClaudePluginSettings[]): void {
 		const projectSettings = structuredClone(this.projectSettings);
-		projectSettings.plugins = structuredClone(plugins);
-		this.markProjectModified("plugins");
+		projectSettings.claudePlugins = structuredClone(plugins);
+		this.markProjectModified("claudePlugins");
 		this.saveProjectSettings(projectSettings);
 	}
 

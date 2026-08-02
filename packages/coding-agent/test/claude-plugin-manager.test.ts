@@ -247,7 +247,7 @@ describe("Claude PluginManager", () => {
 
 		const globalSettings = settingsManager.getGlobalSettings();
 		expect(globalSettings.packages).toBeUndefined();
-		expect(globalSettings.plugins?.[0]).toMatchObject({
+		expect(globalSettings.claudePlugins?.[0]).toMatchObject({
 			name: "superpowers-chrome",
 			source: pluginRepo,
 			marketplace: "claude",
