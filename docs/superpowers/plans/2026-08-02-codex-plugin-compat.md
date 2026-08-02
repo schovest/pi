@@ -20,6 +20,27 @@
 
 ---
 
+## 执行后修订记录（2026-08-02，Task 1-6 均按计划执行并审查通过后，追加两项变更）
+
+### 修订 A：hooks 桥接内置化（Task 7，用户要求：非可选扩展，内置代码）
+
+- **Task 5 变更**：`dist-assets/extensions/codex-hooks.ts` **不再创建**；改为新建 `core/codex-hooks-bridge.ts`，逻辑迁移并改为依赖注入：`createCodexHooksHandlers(pi, deps: {pluginManager, agentDir})` + `createCodexHooksExtensionFactory(deps)`；`readEnabledCodexPlugins`（settings 文件自解析）删除，插件来源改为 `deps.pluginManager.listConfiguredPlugins()`（实时读，含 `installedPath`），删除 mtime 缓存
+- **Task 6 变更**：resource-loader 构造器把 `createCodexHooksExtensionFactory({pluginManager, agentDir})` 追加进 `extensionFactories`（inline factory，随每次 reload 重新注册，与 tps 等既有 inline factory 同机制）；install.sh **移除** codex-hooks 条目（13→12 项）并在升级时 `rm -f "$ext_dir/codex-hooks.ts"` 清理旧残留防双份注册
+- **Task 1 变更**：`InstalledCodexPluginSettings` 增加 `installedPath?: string`（git/npm 来源落盘路径，Task 3 物化时写入；扩展执行 hooks 时优先用作 PLUGIN_ROOT）
+- **Task 3 补充**：npm pack 加 `--ignore-scripts`；git-subdir 的 `path` 持久化到 settings；`InstalledCodexPluginSettings.path?: string`
+- **最终审查修复**：默认 `hooks/hooks.json` 回退逻辑提升到 if/else 之外（manifest 无 hooks 字段时也回退）；`stopContinued` 仅 `input` 事件 `source !== "extension"` 时重置（防 sendUserMessage 注入击穿防递归）
+- resource-loader.test.ts 的 untrusted 断言过滤 `<inline:` 前缀适配
+
+### 修订 B：交互式命令（Task 8，用户要求：按 claude-plugin 配置交互式命令）
+
+- `core/slash-commands.ts`：`BUILTIN_SLASH_COMMANDS` 加 `{ name: "codex-plugin", description: "Manage Codex-compatible plugins" }`
+- `modes/interactive/components/codex-plugin-manager.ts`（新建）：复制改造 `PluginManagerComponent` 为 `CodexPluginManagerComponent`（view 状态机/按键/渲染逐字保留，类型换 Codex，去 ref 分支，标题 "Codex Plugins"）
+- `interactive-mode.ts`：注册 `slash.codex-plugin`（label `/codex-plugin`）+ `setupEditorSubmitHandler` 分支 + `handleCodexPluginsCommand()` + `showCodexPluginsManager()`（`new CodexPluginManager` + `new CodexPluginManagerComponent`，onReload 挂 `reloadPluginResources`）
+- 测试：`test/interactive-mode-codex-plugin-command.test.ts`（BUILTIN 注册 / prototype call / 组件 mutation / mount）
+- `docs/plugins.md` 补 `/codex-plugin` 交互命令说明
+
+---
+
 ### Task 1: settings 与共享类型扩展
 
 **Files:**
