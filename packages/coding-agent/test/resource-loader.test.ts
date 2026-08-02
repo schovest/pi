@@ -420,7 +420,9 @@ Project skill content`,
 				true,
 			);
 			expect(loader.getAgentsFiles().agentsFiles.some((file) => file.path === join(cwd, "AGENTS.md"))).toBe(true);
-			expect(loader.getExtensions().extensions).toHaveLength(0);
+			// codex hooks bridge 为 core 内置 inline factory（<inline:1>），untrusted 项目下也注册；
+			// 项目级 codex 插件数据已由 SettingsManager 的 trust 机制隔离
+			expect(fileExtensions(loader.getExtensions().extensions)).toHaveLength(0);
 			expect(loader.getExtensions().errors).toEqual([]);
 			expect(loader.getSkills().skills.some((skill) => skill.name === "project-skill")).toBe(false);
 			expect(loader.getPrompts().prompts.some((prompt) => prompt.name === "project")).toBe(false);
