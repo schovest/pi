@@ -1,23 +1,23 @@
 /**
- * Codex 插件兼容桥接扩展：把已安装 codex 插件的 hooks 配置桥接到 Pi 事件系统，
+ * Codex 插件 hooks 桥接（内置核心代码）：把已安装 codex 插件的 hooks 配置桥接到 Pi 事件系统，
  * 并注册 `/codex:<plugin>:<command>` 斜杠命令。
  *
- * 自包含：只依赖 node 内置模块与 `@schovest/pi-coding-agent`。
+ * 与安装插件一样随二进制内置，不依赖 dist-assets 可选扩展安装。插件来源经依赖注入
+ * （CodexPluginManager），不再自解析 settings 文件。
  */
 
-import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { type ChildProcess, spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
-import {
-	getAgentDir,
-	type CodexEventName,
-	type CodexHookGroupSpec,
-	type CodexHookHandlerSpec,
-	type CodexPluginCommandSpec,
-	type ExtensionAPI,
-	type ExtensionContext,
-	type InstalledCodexPluginSettings,
-} from "@schovest/pi-coding-agent";
+import type { CodexPluginManager, ConfiguredCodexPlugin } from "./codex-plugin-manager.ts";
+import type { ExtensionAPI, ExtensionContext, ExtensionFactory } from "./extensions/types.ts";
+import type {
+	CodexEventName,
+	CodexHookGroupSpec,
+	CodexHookHandlerSpec,
+	CodexPluginCommandSpec,
+	InstalledCodexPluginSettings,
+} from "./settings-manager.ts";
 
 /** 单个 codex hook 的执行结果。 */
 export interface HookRunResult {
@@ -63,67 +63,8 @@ let pendingContext: string[] = [];
 /** stop hook 防递归标志；`input` 事件里重置。 */
 let stopContinued = false;
 
-interface SettingsCacheEntry {
-	agentDir: string;
-	cwd: string;
-	mtimeMs: number;
-	plugins: InstalledCodexPluginSettings[];
-}
-
-/** settings 文件 mtime 缓存，避免每个事件都重读磁盘。 */
-let settingsCache: SettingsCacheEntry | null = null;
-
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function getFileMtime(file: string): number {
-	try {
-		return statSync(file).mtimeMs;
-	} catch {
-		return 0;
-	}
-}
-
-function appendPluginsFromSettings(target: InstalledCodexPluginSettings[], file: string): void {
-	try {
-		const raw = JSON.parse(readFileSync(file, "utf8")) as unknown;
-		if (!isRecord(raw) || !Array.isArray(raw.codexPlugins)) return;
-		for (const entry of raw.codexPlugins) {
-			if (!isRecord(entry) || typeof entry.name !== "string" || typeof entry.source !== "string") continue;
-			target.push(entry as unknown as InstalledCodexPluginSettings);
-		}
-	} catch {
-		// 缺失或非法的 settings 文件直接忽略
-	}
-}
-
-/** 读取 agentDir/settings.json 与 <cwd>/.pi/settings.json 中 codexPlugins，项目覆盖同名，过滤 enabled!==false。 */
-export function readEnabledCodexPlugins(agentDir: string, cwd: string): InstalledCodexPluginSettings[] {
-	const all: InstalledCodexPluginSettings[] = [];
-	appendPluginsFromSettings(all, join(agentDir, "settings.json"));
-	appendPluginsFromSettings(all, join(cwd, ".pi", "settings.json"));
-	const byName = new Map<string, InstalledCodexPluginSettings>();
-	for (const plugin of all) {
-		// 项目级同名插件覆盖用户级
-		byName.set(plugin.name, plugin);
-	}
-	return [...byName.values()].filter((plugin) => plugin.enabled !== false);
-}
-
-/** 带 mtime 缓存的插件读取（handler 每事件调用，settings 变更才重读）。 */
-function readPluginsCached(agentDir: string, cwd: string): InstalledCodexPluginSettings[] {
-	const mtimeMs = Math.max(
-		getFileMtime(join(agentDir, "settings.json")),
-		getFileMtime(join(cwd, ".pi", "settings.json")),
-	);
-	const cached = settingsCache;
-	if (cached !== null && cached.agentDir === agentDir && cached.cwd === cwd && cached.mtimeMs === mtimeMs) {
-		return cached.plugins;
-	}
-	const plugins = readEnabledCodexPlugins(agentDir, cwd);
-	settingsCache = { agentDir, cwd, mtimeMs, plugins };
-	return plugins;
 }
 
 /** matcher 正则匹配；matcher 为空、* 或省略 → true（正则非法返回 false）。 */
@@ -167,7 +108,7 @@ function parseHookOutput(json: string): HookRunResult | undefined {
 	const result: HookRunResult = {
 		ok: true,
 		blocked,
-		continue: value.continue === false ? false : true,
+		continue: value.continue !== false,
 	};
 
 	const reason = pickString(value.reason, specific.reason, specificDecision.reason);
@@ -242,12 +183,15 @@ export function runCodexHookCommand(
 		child.stderr?.on("error", () => {});
 
 		let settled = false;
-		const timer = setTimeout(() => {
-			if (settled) return;
-			settled = true;
-			child.kill("SIGKILL");
-			resolve({ ok: false, blocked: false, reason: "codex hook timed out", continue: true });
-		}, (handler.timeout ?? opts.timeoutFallback) * 1000);
+		const timer = setTimeout(
+			() => {
+				if (settled) return;
+				settled = true;
+				child.kill("SIGKILL");
+				resolve({ ok: false, blocked: false, reason: "codex hook timed out", continue: true });
+			},
+			(handler.timeout ?? opts.timeoutFallback) * 1000,
+		);
 
 		child.on("error", (error) => {
 			if (settled) return;
@@ -289,9 +233,15 @@ export function runCodexHookCommand(
 			resolve({ ok: false, blocked: false, reason: stderr.trim() || `codex hook exited ${code}`, continue: true });
 		});
 
-		child.stdin?.write(JSON.stringify(input) + "\n");
+		child.stdin?.write(`${JSON.stringify(input)}\n`);
 		child.stdin?.end();
 	});
+}
+
+/** hooks 桥接依赖注入：插件来源（CodexPluginManager）与 PLUGIN_DATA 根目录。 */
+export interface CodexHooksBridgeDeps {
+	pluginManager: CodexPluginManager;
+	agentDir: string;
 }
 
 interface CollectedHookHandler {
@@ -301,10 +251,10 @@ interface CollectedHookHandler {
 }
 
 /**
- * 插件根目录：优先 settings 中物化时持久化的 installedPath（git/npm 来源的存储副本），
- * 回退到 source 为绝对本地路径时直接使用；两者都不可用时跳过该插件。
+ * 插件根目录：优先 listConfiguredPlugins 物化的 installedPath（git/npm 来源的存储副本、
+ * local 来源为源路径），回退到 source 为绝对本地路径时直接使用；两者都不可用时跳过该插件。
  */
-function resolvePluginRoot(plugin: InstalledCodexPluginSettings): string | undefined {
+function resolvePluginRoot(plugin: ConfiguredCodexPlugin): string | undefined {
 	if (plugin.installedPath !== undefined && existsSync(plugin.installedPath)) {
 		return plugin.installedPath;
 	}
@@ -314,15 +264,15 @@ function resolvePluginRoot(plugin: InstalledCodexPluginSettings): string | undef
 	return undefined;
 }
 
-/** 读取插件并过滤出组/处理级 matcher 都匹配的 handlers。 */
+/** 读取已启用插件并过滤出组/处理级 matcher 都匹配的 handlers。 */
 function collectHookHandlers(
-	agentDir: string,
-	cwd: string,
+	plugins: ConfiguredCodexPlugin[],
 	eventName: CodexEventName,
 	matcherValue: string | undefined,
 ): CollectedHookHandler[] {
 	const collected: CollectedHookHandler[] = [];
-	for (const plugin of readPluginsCached(agentDir, cwd)) {
+	for (const plugin of plugins) {
+		if (!plugin.enabled) continue;
 		const pluginRoot = resolvePluginRoot(plugin);
 		if (pluginRoot === undefined) continue;
 		const groups: CodexHookGroupSpec[] | undefined = plugin.hooks?.[eventName];
@@ -355,19 +305,20 @@ function buildHookInput(
 
 /** 跑匹配事件的所有 hooks，返回各 hook 结果（按 settings 顺序）。 */
 function runCodexHooks(
-	agentDir: string,
+	deps: CodexHooksBridgeDeps,
 	ctx: ExtensionContext,
 	eventName: CodexEventName,
 	matcherValue: string | undefined,
 	inputExtra: Record<string, unknown>,
 	timeoutFallback: number,
 ): Promise<HookRunResult[]> {
-	const collected = collectHookHandlers(agentDir, ctx.cwd, eventName, matcherValue);
+	const plugins = deps.pluginManager.listConfiguredPlugins();
+	const collected = collectHookHandlers(plugins, eventName, matcherValue);
 	return Promise.all(
 		collected.map(({ plugin, pluginRoot, handler }) =>
 			runCodexHookCommand(handler, buildHookInput(ctx, eventName, inputExtra), {
 				pluginRoot,
-				pluginData: join(agentDir, "codex-plugin-data", plugin.name),
+				pluginData: join(deps.agentDir, "codex-plugin-data", plugin.name),
 				cwd: ctx.cwd,
 				timeoutFallback,
 			}),
@@ -398,12 +349,13 @@ function runPluginCommand(
 	});
 }
 
-/** 注册 `/codex:<plugin>:<command>` 斜杠命令。 */
-function registerCodexCommands(pi: ExtensionAPI, agentDir: string): void {
-	for (const plugin of readPluginsCached(agentDir, process.cwd())) {
+/** 注册 `/codex:<plugin>:<command>` 斜杠命令（factory 执行时遍历已配置插件）。 */
+function registerCodexCommands(pi: ExtensionAPI, deps: CodexHooksBridgeDeps): void {
+	for (const plugin of deps.pluginManager.listConfiguredPlugins()) {
+		if (!plugin.enabled) continue;
 		const pluginRoot = resolvePluginRoot(plugin);
 		if (pluginRoot === undefined || plugin.commands === undefined) continue;
-		const pluginData = join(agentDir, "codex-plugin-data", plugin.name);
+		const pluginData = join(deps.agentDir, "codex-plugin-data", plugin.name);
 		for (const command of plugin.commands) {
 			pi.registerCommand(`codex:${plugin.name}:${command.name}`, {
 				...(command.description !== undefined ? { description: command.description } : {}),
@@ -439,19 +391,18 @@ type RichExtensionAPI = ExtensionAPI & {
 
 /**
  * 注册全部 Pi 事件 handler（事件映射见计划简报）与 `/codex:<plugin>:<command>` 斜杠命令。
- * `opts.agentDir` 缺省时用 getAgentDir()。
+ * 插件来源与 PLUGIN_DATA 根目录经 deps 注入。
  */
-export function createCodexHooksHandlers(pi: ExtensionAPI, opts?: { agentDir?: string }): void {
-	const agentDir = opts?.agentDir ?? getAgentDir();
+export function createCodexHooksHandlers(pi: ExtensionAPI, deps: CodexHooksBridgeDeps): void {
 	const api = pi as RichExtensionAPI;
 
-	registerCodexCommands(pi, agentDir);
+	registerCodexCommands(pi, deps);
 
 	// session_start：source 映射（startup/new/reload → startup，resume/fork → resume）
 	api.on("session_start", async (event: unknown, ctx) => {
 		const reason = (event as { reason?: string }).reason;
 		const source = reason === "resume" || reason === "fork" ? "resume" : "startup";
-		const results = await runCodexHooks(agentDir, ctx, "session_start", source, { source }, 30);
+		const results = await runCodexHooks(deps, ctx, "session_start", source, { source }, 30);
 		for (const result of results) {
 			if (result.additionalContext !== undefined) pendingContext.push(result.additionalContext);
 		}
@@ -459,14 +410,14 @@ export function createCodexHooksHandlers(pi: ExtensionAPI, opts?: { agentDir?: s
 
 	// session_end：reason 恒 "other"，忽略输出，超时 3s
 	api.on("session_shutdown", async (_event: unknown, ctx) => {
-		await runCodexHooks(agentDir, ctx, "session_end", undefined, { reason: "other" }, 3);
+		await runCodexHooks(deps, ctx, "session_end", undefined, { reason: "other" }, 3);
 	});
 
 	// user_prompt_submit：matcher 忽略；blocked → handled；additionalContext 注入 pendingContext；仅真实用户输入（非扩展注入）重置 stopContinued
 	api.on("input", async (event: unknown, ctx) => {
 		if ((event as { source?: string }).source !== "extension") stopContinued = false;
 		const text = (event as { text?: string }).text ?? "";
-		const results = await runCodexHooks(agentDir, ctx, "user_prompt_submit", undefined, { prompt: text }, 30);
+		const results = await runCodexHooks(deps, ctx, "user_prompt_submit", undefined, { prompt: text }, 30);
 		let blocked = false;
 		for (const result of results) {
 			if (result.additionalContext !== undefined) pendingContext.push(result.additionalContext);
@@ -481,7 +432,7 @@ export function createCodexHooksHandlers(pi: ExtensionAPI, opts?: { agentDir?: s
 		const e = event as { toolName: string; input: Record<string, unknown> };
 		const inputExtra: Record<string, unknown> = { tool_name: e.toolName, tool_input: e.input };
 
-		const preResults = await runCodexHooks(agentDir, ctx, "pre_tool_use", e.toolName, inputExtra, 30);
+		const preResults = await runCodexHooks(deps, ctx, "pre_tool_use", e.toolName, inputExtra, 30);
 		for (const result of preResults) {
 			if (result.updatedInput !== undefined) Object.assign(e.input, result.updatedInput);
 			if (result.additionalContext !== undefined) ctx.ui.notify(result.additionalContext, "info");
@@ -496,7 +447,7 @@ export function createCodexHooksHandlers(pi: ExtensionAPI, opts?: { agentDir?: s
 		}
 
 		// permission_request 仅在 pre_tool_use 未 deny 时跑（同输入）
-		const permissionResults = await runCodexHooks(agentDir, ctx, "permission_request", e.toolName, inputExtra, 30);
+		const permissionResults = await runCodexHooks(deps, ctx, "permission_request", e.toolName, inputExtra, 30);
 		for (const result of permissionResults) {
 			if (result.updatedInput !== undefined) Object.assign(e.input, result.updatedInput);
 			if (result.additionalContext !== undefined) ctx.ui.notify(result.additionalContext, "info");
@@ -513,7 +464,7 @@ export function createCodexHooksHandlers(pi: ExtensionAPI, opts?: { agentDir?: s
 	api.on("tool_result", async (event: unknown, ctx) => {
 		const e = event as { toolName: string; input: Record<string, unknown>; content: Array<Record<string, unknown>> };
 		const results = await runCodexHooks(
-			agentDir,
+			deps,
 			ctx,
 			"post_tool_use",
 			e.toolName,
@@ -544,7 +495,7 @@ export function createCodexHooksHandlers(pi: ExtensionAPI, opts?: { agentDir?: s
 	api.on("session_before_compact", async (event: unknown, ctx) => {
 		const reason = (event as { reason?: string }).reason;
 		const trigger = reason === "manual" ? "manual" : "auto";
-		const results = await runCodexHooks(agentDir, ctx, "pre_compact", trigger, { trigger }, 30);
+		const results = await runCodexHooks(deps, ctx, "pre_compact", trigger, { trigger }, 30);
 		if (results.some((r) => r.continue === false)) {
 			return { cancel: true };
 		}
@@ -555,12 +506,12 @@ export function createCodexHooksHandlers(pi: ExtensionAPI, opts?: { agentDir?: s
 	api.on("session_compact", async (event: unknown, ctx) => {
 		const reason = (event as { reason?: string }).reason;
 		const trigger = reason === "manual" ? "manual" : "auto";
-		await runCodexHooks(agentDir, ctx, "post_compact", trigger, { trigger }, 30);
+		await runCodexHooks(deps, ctx, "post_compact", trigger, { trigger }, 30);
 	});
 
 	// subagent_start：agent_type 无；matcher 为空才触发；additionalContext 注入 pendingContext
 	api.on("agent_start", async (_event: unknown, ctx) => {
-		const results = await runCodexHooks(agentDir, ctx, "subagent_start", undefined, { agent_type: undefined }, 30);
+		const results = await runCodexHooks(deps, ctx, "subagent_start", undefined, { agent_type: undefined }, 30);
 		for (const result of results) {
 			if (result.additionalContext !== undefined) pendingContext.push(result.additionalContext);
 		}
@@ -572,12 +523,12 @@ export function createCodexHooksHandlers(pi: ExtensionAPI, opts?: { agentDir?: s
 		const extra: Record<string, unknown> = {};
 		const lastAssistant = getLastAssistantText(messages);
 		if (lastAssistant !== undefined) extra.last_assistant_message = lastAssistant;
-		await runCodexHooks(agentDir, ctx, "subagent_stop", undefined, extra, 30);
+		await runCodexHooks(deps, ctx, "subagent_stop", undefined, extra, 30);
 	});
 
 	// stop：stop_hook_active = stopContinued；block 且未继续 → sendUserMessage + 防递归
 	api.on("turn_end", async (_event: unknown, ctx) => {
-		const results = await runCodexHooks(agentDir, ctx, "stop", undefined, { stop_hook_active: stopContinued }, 30);
+		const results = await runCodexHooks(deps, ctx, "stop", undefined, { stop_hook_active: stopContinued }, 30);
 		const blockedResult = results.find((r) => r.blocked);
 		if (blockedResult !== undefined && !stopContinued) {
 			stopContinued = true;
@@ -587,7 +538,7 @@ export function createCodexHooksHandlers(pi: ExtensionAPI, opts?: { agentDir?: s
 
 	// turn_start（旧格式 AgentConversationHook）：additionalContext 注入 pendingContext
 	api.on("turn_start", async (_event: unknown, ctx) => {
-		const results = await runCodexHooks(agentDir, ctx, "turn_start", undefined, {}, 30);
+		const results = await runCodexHooks(deps, ctx, "turn_start", undefined, {}, 30);
 		for (const result of results) {
 			if (result.additionalContext !== undefined) pendingContext.push(result.additionalContext);
 		}
@@ -598,11 +549,13 @@ export function createCodexHooksHandlers(pi: ExtensionAPI, opts?: { agentDir?: s
 		if (pendingContext.length === 0) return undefined;
 		const context = pendingContext;
 		pendingContext = [];
-		return { systemPrompt: ctx.getSystemPrompt() + "\n\n" + context.join("\n\n") };
+		return { systemPrompt: `${ctx.getSystemPrompt()}\n\n${context.join("\n\n")}` };
 	});
 }
 
-/** 扩展入口。 */
-export default function codexHooksPlugin(pi: ExtensionAPI): void {
-	createCodexHooksHandlers(pi);
+/** 生成内置 inline 扩展工厂，随 resource-loader 每次扩展加载（含 reload）执行注册。 */
+export function createCodexHooksExtensionFactory(deps: CodexHooksBridgeDeps): ExtensionFactory {
+	return (pi: ExtensionAPI) => {
+		createCodexHooksHandlers(pi, deps);
+	};
 }

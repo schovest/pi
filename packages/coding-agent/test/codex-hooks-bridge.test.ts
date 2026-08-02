@@ -3,47 +3,79 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+	type CodexHooksBridgeDeps,
+	createCodexHooksExtensionFactory,
 	createCodexHooksHandlers,
 	matchHookMatcher,
-	readEnabledCodexPlugins,
 	runCodexHookCommand,
-} from "../dist-assets/extensions/codex-hooks.ts";
-import { ENV_AGENT_DIR } from "../src/config.ts";
+} from "../src/core/codex-hooks-bridge.ts";
+import { CodexPluginManager } from "../src/core/codex-plugin-manager.ts";
+import { SettingsManager } from "../src/core/settings-manager.ts";
 
-describe("codex hooks extension primitives", () => {
+describe("codex hooks bridge primitives", () => {
 	let tempDir: string;
 	let agentDir: string;
 	let cwd: string;
-	let originalAgentDir: string | undefined;
+	let sm: SettingsManager;
+	let manager: CodexPluginManager;
+	let deps: CodexHooksBridgeDeps;
 
 	beforeEach(() => {
-		tempDir = join(tmpdir(), `codex-ext-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		tempDir = join(tmpdir(), `codex-bridge-${Date.now()}-${Math.random().toString(36).slice(2)}`);
 		agentDir = join(tempDir, "agent");
 		cwd = join(tempDir, "project");
 		mkdirSync(agentDir, { recursive: true });
 		mkdirSync(cwd, { recursive: true });
-		originalAgentDir = process.env[ENV_AGENT_DIR];
-		process.env[ENV_AGENT_DIR] = agentDir;
+		sm = SettingsManager.create(cwd, agentDir);
+		manager = new CodexPluginManager({ cwd, agentDir, settingsManager: sm });
+		deps = { pluginManager: manager, agentDir };
 	});
 	afterEach(() => {
-		if (originalAgentDir === undefined) delete process.env[ENV_AGENT_DIR];
-		else process.env[ENV_AGENT_DIR] = originalAgentDir;
 		rmSync(tempDir, { recursive: true, force: true });
 	});
 
-	it("reads enabled codex plugins from user and project settings", () => {
-		mkdirSync(join(agentDir), { recursive: true });
+	const makeFakePi = (handlers: Map<string, (event: unknown, ctx: unknown) => unknown>) => ({
+		on: (event: string, handler: (event: unknown, ctx: unknown) => unknown) => {
+			handlers.set(event, handler);
+		},
+		registerCommand: () => {},
+		sendUserMessage: () => {},
+	});
+
+	const makeFakeCtx = (dir: string = cwd) => ({
+		cwd: dir,
+		sessionManager: { getSessionId: () => "sess-1" },
+		model: { id: "test-model" },
+		ui: { notify: () => {} },
+		getSystemPrompt: () => "BASE_SYSTEM_PROMPT",
+	});
+
+	it("enabled plugins persisted to settings are picked up by handlers", async () => {
+		const contextScript = join(tempDir, "context-hook.js");
 		writeFileSync(
-			join(agentDir, "settings.json"),
-			JSON.stringify({ codexPlugins: [{ name: "a", source: "/x", enabled: true }] }),
+			contextScript,
+			"let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{process.stdout.write(JSON.stringify({additionalContext:'from settings'}));});",
 		);
-		mkdirSync(join(cwd, ".pi"), { recursive: true });
-		writeFileSync(
-			join(cwd, ".pi", "settings.json"),
-			JSON.stringify({ codexPlugins: [{ name: "b", source: "/y", enabled: false }] }),
-		);
-		const plugins = readEnabledCodexPlugins(agentDir, cwd);
-		expect(plugins.map((p) => p.name)).toEqual(["a"]);
+		sm.setCodexPlugins([
+			{
+				name: "persisted",
+				source: tempDir,
+				enabled: true,
+				hooks: {
+					session_start: [{ handlers: [{ type: "command", command: process.execPath, args: [contextScript] }] }],
+				},
+			},
+		]);
+		const handlers = new Map<string, (event: unknown, ctx: unknown) => unknown>();
+		createCodexHooksHandlers(makeFakePi(handlers) as never, deps);
+		const sessionStart = handlers.get("session_start");
+		const beforeAgentStart = handlers.get("before_agent_start");
+		expect(sessionStart).toBeDefined();
+		expect(beforeAgentStart).toBeDefined();
+
+		await sessionStart!({ reason: "startup" }, makeFakeCtx(cwd));
+		const injected = await beforeAgentStart!({}, makeFakeCtx(cwd));
+		expect(injected).toEqual({ systemPrompt: "BASE_SYSTEM_PROMPT\n\nfrom settings" });
 	});
 
 	it("matcher treats empty/star/omitted as match-all", () => {
@@ -104,21 +136,15 @@ describe("codex hooks extension primitives", () => {
 				registeredCommands.push({ name, description: opts.description });
 			},
 		};
-		mkdirSync(join(agentDir), { recursive: true });
-		writeFileSync(
-			join(agentDir, "settings.json"),
-			JSON.stringify({
-				codexPlugins: [
-					{
-						name: "legacy",
-						source: tempDir,
-						enabled: true,
-						commands: [{ name: "review", description: "Review", command: "echo hi" }],
-					},
-				],
-			}),
-		);
-		createCodexHooksHandlers(fakePi as never, { agentDir });
+		sm.setCodexPlugins([
+			{
+				name: "legacy",
+				source: tempDir,
+				enabled: true,
+				commands: [{ name: "review", description: "Review", command: "echo hi" }],
+			},
+		]);
+		createCodexHooksHandlers(fakePi as never, deps);
 		for (const expected of [
 			"session_start",
 			"session_shutdown",
@@ -138,6 +164,21 @@ describe("codex hooks extension primitives", () => {
 		expect(registeredCommands.map((c) => c.name)).toContain("codex:legacy:review");
 	});
 
+	it("extension factory registers handlers when executed", () => {
+		const registered: string[] = [];
+		const fakePi = {
+			on: (event: string) => {
+				registered.push(event);
+			},
+			registerCommand: () => {},
+			sendUserMessage: () => {},
+		};
+		const factory = createCodexHooksExtensionFactory(deps);
+		factory(fakePi as never);
+		expect(registered).toContain("session_start");
+		expect(registered).toContain("tool_call");
+	});
+
 	describe("event mapping behavior", () => {
 		const writeScript = (name: string, body: string): string => {
 			const script = join(tempDir, name);
@@ -145,47 +186,29 @@ describe("codex hooks extension primitives", () => {
 			return script;
 		};
 
-		const writePlugins = (settings: Record<string, unknown>): void => {
-			writeFileSync(join(agentDir, "settings.json"), JSON.stringify(settings));
+		const writePlugins = (plugins: Array<Record<string, unknown>>): void => {
+			sm.setCodexPlugins(plugins as never);
 		};
-
-		const makeFakePi = (handlers: Map<string, (event: unknown, ctx: unknown) => unknown>) => ({
-			on: (event: string, handler: (event: unknown, ctx: unknown) => unknown) => {
-				handlers.set(event, handler);
-			},
-			registerCommand: () => {},
-			sendUserMessage: () => {},
-		});
-
-		const makeFakeCtx = () => ({
-			cwd,
-			sessionManager: { getSessionId: () => "sess-1" },
-			model: { id: "test-model" },
-			ui: { notify: () => {} },
-			getSystemPrompt: () => "BASE_SYSTEM_PROMPT",
-		});
 
 		it("tool_call handler blocks on pre_tool_use deny with reason", async () => {
 			const denyScript = writeScript("deny-hook.js", "process.stderr.write('tool not allowed');process.exit(2);");
-			writePlugins({
-				codexPlugins: [
-					{
-						name: "guard",
-						source: tempDir,
-						enabled: true,
-						hooks: {
-							pre_tool_use: [
-								{
-									matcher: "^Bash$",
-									handlers: [{ type: "command", command: process.execPath, args: [denyScript] }],
-								},
-							],
-						},
+			writePlugins([
+				{
+					name: "guard",
+					source: tempDir,
+					enabled: true,
+					hooks: {
+						pre_tool_use: [
+							{
+								matcher: "^Bash$",
+								handlers: [{ type: "command", command: process.execPath, args: [denyScript] }],
+							},
+						],
 					},
-				],
-			});
+				},
+			]);
 			const handlers = new Map<string, (event: unknown, ctx: unknown) => unknown>();
-			createCodexHooksHandlers(makeFakePi(handlers) as never, { agentDir });
+			createCodexHooksHandlers(makeFakePi(handlers) as never, deps);
 			const toolCall = handlers.get("tool_call");
 			expect(toolCall).toBeDefined();
 
@@ -200,22 +223,18 @@ describe("codex hooks extension primitives", () => {
 				"update-hook.js",
 				"let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{process.stdout.write(JSON.stringify({updatedInput:{injected:'yes'}}));});",
 			);
-			writePlugins({
-				codexPlugins: [
-					{
-						name: "editor",
-						source: tempDir,
-						enabled: true,
-						hooks: {
-							pre_tool_use: [
-								{ handlers: [{ type: "command", command: process.execPath, args: [updateScript] }] },
-							],
-						},
+			writePlugins([
+				{
+					name: "editor",
+					source: tempDir,
+					enabled: true,
+					hooks: {
+						pre_tool_use: [{ handlers: [{ type: "command", command: process.execPath, args: [updateScript] }] }],
 					},
-				],
-			});
+				},
+			]);
 			const handlers = new Map<string, (event: unknown, ctx: unknown) => unknown>();
-			createCodexHooksHandlers(makeFakePi(handlers) as never, { agentDir });
+			createCodexHooksHandlers(makeFakePi(handlers) as never, deps);
 			const toolCall = handlers.get("tool_call");
 			expect(toolCall).toBeDefined();
 
@@ -227,22 +246,20 @@ describe("codex hooks extension primitives", () => {
 
 		it("input handler returns handled when user_prompt_submit blocks", async () => {
 			const blockScript = writeScript("block-prompt.js", "process.stderr.write('prompt rejected');process.exit(2);");
-			writePlugins({
-				codexPlugins: [
-					{
-						name: "filter",
-						source: tempDir,
-						enabled: true,
-						hooks: {
-							user_prompt_submit: [
-								{ handlers: [{ type: "command", command: process.execPath, args: [blockScript] }] },
-							],
-						},
+			writePlugins([
+				{
+					name: "filter",
+					source: tempDir,
+					enabled: true,
+					hooks: {
+						user_prompt_submit: [
+							{ handlers: [{ type: "command", command: process.execPath, args: [blockScript] }] },
+						],
 					},
-				],
-			});
+				},
+			]);
 			const handlers = new Map<string, (event: unknown, ctx: unknown) => unknown>();
-			createCodexHooksHandlers(makeFakePi(handlers) as never, { agentDir });
+			createCodexHooksHandlers(makeFakePi(handlers) as never, deps);
 			const inputHandler = handlers.get("input");
 			expect(inputHandler).toBeDefined();
 
@@ -255,22 +272,20 @@ describe("codex hooks extension primitives", () => {
 				"context-hook.js",
 				"let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{process.stdout.write(JSON.stringify({additionalContext:'injected context'}));});",
 			);
-			writePlugins({
-				codexPlugins: [
-					{
-						name: "ctx",
-						source: tempDir,
-						enabled: true,
-						hooks: {
-							session_start: [
-								{ handlers: [{ type: "command", command: process.execPath, args: [contextScript] }] },
-							],
-						},
+			writePlugins([
+				{
+					name: "ctx",
+					source: tempDir,
+					enabled: true,
+					hooks: {
+						session_start: [
+							{ handlers: [{ type: "command", command: process.execPath, args: [contextScript] }] },
+						],
 					},
-				],
-			});
+				},
+			]);
 			const handlers = new Map<string, (event: unknown, ctx: unknown) => unknown>();
-			createCodexHooksHandlers(makeFakePi(handlers) as never, { agentDir });
+			createCodexHooksHandlers(makeFakePi(handlers) as never, deps);
 			const sessionStart = handlers.get("session_start");
 			const beforeAgentStart = handlers.get("before_agent_start");
 			expect(sessionStart).toBeDefined();
@@ -285,27 +300,28 @@ describe("codex hooks extension primitives", () => {
 		});
 
 		it("runs hooks for non-local source plugins via installedPath with PLUGIN_ROOT env", async () => {
-			const envScript = writeScript(
-				"env-hook.js",
+			// git/npm 来源插件安装到 agentDir/codex-plugins/<name>，listConfiguredPlugins 据此物化 installedPath
+			const pluginRoot = join(agentDir, "codex-plugins", "remote");
+			mkdirSync(pluginRoot, { recursive: true });
+			const envScript = join(pluginRoot, "env-hook.js");
+			writeFileSync(
+				envScript,
 				"let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{process.stdout.write(JSON.stringify({additionalContext:'root='+process.env.PLUGIN_ROOT}));});",
 			);
-			writePlugins({
-				codexPlugins: [
-					{
-						name: "remote",
-						source: "https://github.com/example/remote-plugin.git",
-						enabled: true,
-						installedPath: tempDir,
-						hooks: {
-							user_prompt_submit: [
-								{ handlers: [{ type: "command", command: process.execPath, args: [envScript] }] },
-							],
-						},
+			writePlugins([
+				{
+					name: "remote",
+					source: "https://github.com/example/remote-plugin.git",
+					enabled: true,
+					hooks: {
+						user_prompt_submit: [
+							{ handlers: [{ type: "command", command: process.execPath, args: [envScript] }] },
+						],
 					},
-				],
-			});
+				},
+			]);
 			const handlers = new Map<string, (event: unknown, ctx: unknown) => unknown>();
-			createCodexHooksHandlers(makeFakePi(handlers) as never, { agentDir });
+			createCodexHooksHandlers(makeFakePi(handlers) as never, deps);
 			const inputHandler = handlers.get("input");
 			const beforeAgentStart = handlers.get("before_agent_start");
 			expect(inputHandler).toBeDefined();
@@ -313,23 +329,21 @@ describe("codex hooks extension primitives", () => {
 
 			await inputHandler!({ text: "hi" }, makeFakeCtx());
 			const injected = await beforeAgentStart!({}, makeFakeCtx());
-			expect(injected).toEqual({ systemPrompt: `BASE_SYSTEM_PROMPT\n\nroot=${tempDir}` });
+			expect(injected).toEqual({ systemPrompt: `BASE_SYSTEM_PROMPT\n\nroot=${pluginRoot}` });
 		});
 
 		it("input handler does not reset stopContinued for extension-sourced inputs", async () => {
 			const stopScript = writeScript("stop-hook.js", "process.stderr.write('stop requested');process.exit(2);");
-			writePlugins({
-				codexPlugins: [
-					{
-						name: "stopper",
-						source: tempDir,
-						enabled: true,
-						hooks: {
-							stop: [{ handlers: [{ type: "command", command: process.execPath, args: [stopScript] }] }],
-						},
+			writePlugins([
+				{
+					name: "stopper",
+					source: tempDir,
+					enabled: true,
+					hooks: {
+						stop: [{ handlers: [{ type: "command", command: process.execPath, args: [stopScript] }] }],
 					},
-				],
-			});
+				},
+			]);
 			const sendCalls: string[] = [];
 			const handlers = new Map<string, (event: unknown, ctx: unknown) => unknown>();
 			createCodexHooksHandlers(
@@ -342,7 +356,7 @@ describe("codex hooks extension primitives", () => {
 						sendCalls.push(msg);
 					},
 				} as never,
-				{ agentDir },
+				deps,
 			);
 			const inputHandler = handlers.get("input");
 			const turnEnd = handlers.get("turn_end");

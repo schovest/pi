@@ -7,8 +7,12 @@
 - codex 插件兼容：CLI `codex-plugin` 子命令族（`marketplace add/list/remove`、`search [--marketplace]`、`install/list/remove/update`（`-l/--local`）、`hooks list/disable/enable`），install 成功后打印 hooks 摘要（每事件一行 `hooks: <event> <command>`，无 hooks 打印 `hooks: none`）
 - codex 插件兼容：`CodexPluginManager` 管理类（市场别名 add/remove/list/search、安装 local/git/npm 来源、hooks/commands 物化（`${PLUGIN_ROOT}`/`${PLUGIN_DATA}` 等替换为绝对路径）、MCP 注册进 mcp.json（`<plugin>-` 前缀）、skills 资源收集（`origin: "codex-plugin"`）），支持用户级 `agentDir/codex-plugins` 与项目级 `.pi/codex-plugins` 存储
 - codex 插件兼容：marketplace/manifest/hooks 解析层（`readCodexMarketplaceCatalog` / `readCodexPluginManifest` / `normalizeCodexHooks` / `normalizeCodexHookEventName` / `parseCodexInstallSpec`），支持新格式 `.codex-plugin/plugin.json` 与旧格式根 `plugin.json`，`CodexEventName` 新增 `turn_start`
-- codex 插件兼容：内置 hooks 桥接扩展 `dist-assets/extensions/codex-hooks.ts`：12 个 codex 事件映射到 Pi 事件（`session_start`/`session_end`/`user_prompt_submit`/`pre_tool_use`/`permission_request`/`post_tool_use`/`pre_compact`/`post_compact`/`subagent_start`/`subagent_stop`/`stop`/`turn_start`），`additionalContext` 经 `before_agent_start` 注入 systemPrompt；子进程协议（无 args 走 `sh -c` 完整命令行、有 args 走 spawn 数组、stdin JSON、exit 2=block、超时默认 30s 且 `session_end` 3s、注入 `PLUGIN_ROOT`/`PLUGIN_DATA`/`CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA` env）；注册 `/codex:<plugin>:<command>` 斜杠命令；settings 读取带 mtime 缓存（disable 即时生效）
-- codex 插件兼容：resource-loader 集成——已启用 codex 插件的 skills 自动纳入技能资源解析（metadata `origin: "codex-plugin"`，诊断以 warning 合并进技能诊断），安装脚本默认安装内置 codex-hooks 桥接扩展（`file:` 复制到 `~/.pi/agent/extensions/`）
+- codex 插件兼容：内置 hooks 桥接（`core/codex-hooks-bridge.ts`）：12 个 codex 事件映射到 Pi 事件（`session_start`/`session_end`/`user_prompt_submit`/`pre_tool_use`/`permission_request`/`post_tool_use`/`pre_compact`/`post_compact`/`subagent_start`/`subagent_stop`/`stop`/`turn_start`），`additionalContext` 经 `before_agent_start` 注入 systemPrompt；子进程协议（无 args 走 `sh -c` 完整命令行、有 args 走 spawn 数组、stdin JSON、exit 2=block、超时默认 30s 且 `session_end` 3s、注入 `PLUGIN_ROOT`/`PLUGIN_DATA`/`CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA` env）；注册 `/codex:<plugin>:<command>` 斜杠命令；插件来源经 `CodexPluginManager.listConfiguredPlugins()` 实时读取（disable 即时生效）
+- codex 插件兼容：resource-loader 集成——已启用 codex 插件的 skills 自动纳入技能资源解析（metadata `origin: "codex-plugin"`，诊断以 warning 合并进技能诊断），构造器内置注入 codex hooks 桥接 inline factory（随每次扩展加载/reload 注册，不依赖可选安装）
+
+### Changed
+
+- codex 插件兼容：hooks 桥接从可选 dist-assets 扩展（`install.sh` 的 `file:codex-hooks.ts`）改为内置核心代码，随二进制始终生效；`install.sh` 移除 codex-hooks 安装选项并在升级时自动删除旧扩展残留，防止与内置双份注册 hooks/斜杠命令
 
 ### Fixed
 

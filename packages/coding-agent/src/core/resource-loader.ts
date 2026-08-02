@@ -9,6 +9,7 @@ export type { ResourceCollision, ResourceDiagnostic } from "./diagnostics.ts";
 
 import { canonicalizePath, isLocalPath, resolvePath } from "../utils/paths.ts";
 import { PluginManager } from "./claude-plugin-manager.ts";
+import { createCodexHooksExtensionFactory } from "./codex-hooks-bridge.ts";
 import { CodexPluginManager } from "./codex-plugin-manager.ts";
 import { createEventBus, type EventBus } from "./event-bus.ts";
 import {
@@ -234,11 +235,14 @@ export class DefaultResourceLoader implements ResourceLoader {
 			agentDir: this.agentDir,
 			settingsManager: this.settingsManager,
 		});
+		this.extensionFactories = [
+			...(options.extensionFactories ?? []),
+			createCodexHooksExtensionFactory({ pluginManager: this.codexPluginManager, agentDir: this.agentDir }),
+		];
 		this.additionalExtensionPaths = options.additionalExtensionPaths ?? [];
 		this.additionalSkillPaths = options.additionalSkillPaths ?? [];
 		this.additionalPromptTemplatePaths = options.additionalPromptTemplatePaths ?? [];
 		this.additionalThemePaths = options.additionalThemePaths ?? [];
-		this.extensionFactories = options.extensionFactories ?? [];
 		this.noExtensions = options.noExtensions ?? false;
 		this.noSkills = options.noSkills ?? false;
 		this.noPromptTemplates = options.noPromptTemplates ?? false;

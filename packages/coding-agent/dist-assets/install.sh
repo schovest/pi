@@ -87,7 +87,6 @@ EXT_NAMES=(
 	"pi-plugin-manager"
 	"pi-lens"
 	"pi-hermes-memory"
-	"codex-hooks"
 )
 # shellcheck disable=SC2034 # used via nameref in run_menu
 EXT_DESCS=(
@@ -103,10 +102,9 @@ EXT_DESCS=(
 	"插件管理器"
 	"代码智能分析"
 	"持久记忆与学习循环"
-	"Codex 插件 hooks 桥接"
 )
 # shellcheck disable=SC2034 # used via nameref in run_menu
-EXT_DEFAULTS=(1 1 1 0 0 0 0 0 0 1 0 0 1)
+EXT_DEFAULTS=(1 1 1 0 0 0 0 0 0 1 0 0)
 # shellcheck disable=SC2034 # used via nameref in run_menu
 EXT_INSTALLS=(
 	"npm:@schovest/pi-mcp-adapter"
@@ -121,7 +119,6 @@ EXT_INSTALLS=(
 	"npm:pi-plugin-manager"
 	"npm:pi-lens"
 	"npm:pi-hermes-memory"
-	"file:codex-hooks.ts"
 )
 
 # Primary Agent definitions
@@ -344,6 +341,13 @@ AGENT_SELECTED=("${MN_SELECTED[@]}")
 
 echo ""
 any_installed=0
+
+# codex hooks 桥接已内置（core/codex-hooks-bridge.ts），删除旧版本可选扩展残留，
+# 防止与内置 inline factory 双份注册 hooks/斜杠命令
+if [ -f "$HOME/.pi/agent/extensions/codex-hooks.ts" ]; then
+	rm -f "$HOME/.pi/agent/extensions/codex-hooks.ts"
+	echo "  removed legacy codex-hooks extension (now built-in)"
+fi
 
 for i in $(seq 0 $((EXT_NUM - 1))); do
 	if [ "${EXT_SELECTED[$i]}" -ne 1 ]; then
