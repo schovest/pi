@@ -14,6 +14,7 @@
 ### Changed
 
 - codex 插件兼容：hooks 桥接从可选 dist-assets 扩展（`install.sh` 的 `file:codex-hooks.ts`）改为内置核心代码，随二进制始终生效；`install.sh` 移除 codex-hooks 安装选项并在升级时自动删除旧扩展残留，防止与内置双份注册 hooks/斜杠命令
+- git snapshot 新增 `tracked-only` 模式（默认）：只记录/回滚 git 跟踪的文件，untracked 文件不捕获、revert 时也保留不动（不再执行 `clean -fd`）；`gitSnapshotMode` 三值共存 `tracked-only` / `include-untracked` / `all`，默认从 `include-untracked` 改为 `tracked-only`（snapshot 记录带 `mode` 字段，旧记录按 `include-untracked` 兼容）
 
 ### Fixed
 

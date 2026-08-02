@@ -5,6 +5,7 @@ import { dirname, join } from "path";
 import lockfile from "proper-lockfile";
 import { CONFIG_DIR_NAME, getAgentDir } from "../config.ts";
 import { normalizePath, resolvePath } from "../utils/paths.ts";
+import type { GitSnapshotMode } from "./git-snapshot.ts";
 import { DEFAULT_HTTP_IDLE_TIMEOUT_MS, parseHttpIdleTimeoutMs } from "./http-dispatcher.ts";
 
 export interface CompactionSettings {
@@ -201,8 +202,8 @@ export interface Settings {
 	httpProxy?: string; // Proxy URL applied as HTTP_PROXY and HTTPS_PROXY for Pi-managed HTTP clients
 	websocketConnectTimeoutMs?: number; // WebSocket connect/open handshake timeout in milliseconds; 0 disables it
 	bashBackgroundTimeout?: number; // Default timeout in seconds before a bash command is moved to background (default: 120)
-	/** Git snapshot mode: "include-untracked" captures untracked files only; "all" also captures .gitignore'd files. Default: "include-untracked" */
-	gitSnapshotMode?: "include-untracked" | "all";
+	/** Git snapshot mode: "tracked-only" captures tracked changes only (default); "include-untracked" also captures non-ignored untracked files; "all" also captures .gitignore'd files. */
+	gitSnapshotMode?: GitSnapshotMode;
 	/** Maximum number of git snapshot checkpoints to retain across all sessions in the cwd. Oldest are pruned when exceeded. Set to 0 to disable snapshots entirely. Default: 100 */
 	gitSnapshotMaxCount?: number;
 }
@@ -1361,11 +1362,13 @@ export class SettingsManager {
 		this.save();
 	}
 
-	getGitSnapshotMode(): "include-untracked" | "all" {
-		return this.settings.gitSnapshotMode ?? "include-untracked";
+	getGitSnapshotMode(): GitSnapshotMode {
+		const mode = this.settings.gitSnapshotMode;
+		const valid: GitSnapshotMode[] = ["tracked-only", "include-untracked", "all"];
+		return mode && valid.includes(mode) ? mode : "tracked-only";
 	}
 
-	setGitSnapshotMode(mode: "include-untracked" | "all"): void {
+	setGitSnapshotMode(mode: GitSnapshotMode): void {
 		this.globalSettings.gitSnapshotMode = mode;
 		this.markModified("gitSnapshotMode");
 		this.save();

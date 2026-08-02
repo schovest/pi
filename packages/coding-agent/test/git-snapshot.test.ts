@@ -57,7 +57,7 @@ describe("git-snapshot", () => {
 			expect(snapshot!.head).toMatch(/^[0-9a-f]{40}$/);
 		});
 
-		it("captures uncommitted changes in stashCommit", async () => {
+		it("captures uncommitted changes in stashCommit (default mode=tracked-only)", async () => {
 			writeFileSync(join(repoDir, "file.txt"), "modified content");
 			const snapshot = await takeSnapshot(repoDir);
 			expect(snapshot).not.toBeNull();
@@ -69,7 +69,7 @@ describe("git-snapshot", () => {
 		it("captures untracked files in stashCommit when combined with tracked modifications", async () => {
 			writeFileSync(join(repoDir, "file.txt"), "modified");
 			writeFileSync(join(repoDir, "new-file.txt"), "new file");
-			const snapshot = await takeSnapshot(repoDir);
+			const snapshot = await takeSnapshot(repoDir, "include-untracked");
 			expect(snapshot).not.toBeNull();
 			expect(snapshot!.clean).toBe(false);
 			expect(snapshot!.stashCommit).not.toBeNull();
@@ -77,7 +77,7 @@ describe("git-snapshot", () => {
 
 		it("captures untracked-only changes (no tracked modifications)", async () => {
 			writeFileSync(join(repoDir, "new-file.txt"), "new file");
-			const snapshot = await takeSnapshot(repoDir);
+			const snapshot = await takeSnapshot(repoDir, "include-untracked");
 			expect(snapshot).not.toBeNull();
 			expect(snapshot!.clean).toBe(false);
 			expect(snapshot!.stashCommit).not.toBeNull();
@@ -100,6 +100,24 @@ describe("git-snapshot", () => {
 			// .gitignore itself is untracked and counts, so clean=false but ignored.txt won't be in stash
 			expect(snapshot).not.toBeNull();
 			expect(snapshot!.clean).toBe(false);
+		});
+
+		it("mode=tracked-only captures tracked modifications", async () => {
+			writeFileSync(join(repoDir, "file.txt"), "modified");
+			const snapshot = await takeSnapshot(repoDir, "tracked-only");
+			expect(snapshot).not.toBeNull();
+			expect(snapshot!.clean).toBe(false);
+			expect(snapshot!.stashCommit).not.toBeNull();
+			expect(snapshot!.mode).toBe("tracked-only");
+		});
+
+		it("mode=tracked-only treats untracked-only working tree as clean", async () => {
+			writeFileSync(join(repoDir, "new-untracked.txt"), "untracked only");
+			const snapshot = await takeSnapshot(repoDir, "tracked-only");
+			expect(snapshot).not.toBeNull();
+			expect(snapshot!.clean).toBe(true);
+			expect(snapshot!.stashCommit).toBeNull();
+			expect(snapshot!.mode).toBe("tracked-only");
 		});
 
 		it("returns null for non-git directory", async () => {
@@ -141,7 +159,7 @@ describe("git-snapshot", () => {
 		it("restores untracked files", async () => {
 			// Add untracked file, take snapshot
 			writeFileSync(join(repoDir, "new.txt"), "new content");
-			const snapshot = await takeSnapshot(repoDir);
+			const snapshot = await takeSnapshot(repoDir, "include-untracked");
 
 			// Remove it
 			unlinkSync(join(repoDir, "new.txt"));
@@ -188,6 +206,48 @@ describe("git-snapshot", () => {
 			// Verify gitignored file is restored
 			expect(existsSync(join(repoDir, "ignored.txt"))).toBe(true);
 			expect(readFileSync(join(repoDir, "ignored.txt"), "utf-8")).toBe("captured");
+		});
+
+		it("mode=tracked-only restores tracked changes and keeps untracked files", async () => {
+			// Snapshot: tracked modification + untracked file (not captured by tracked-only)
+			writeFileSync(join(repoDir, "file.txt"), "snapshot state");
+			writeFileSync(join(repoDir, "new-untracked.txt"), "untracked content");
+			const snapshot = await takeSnapshot(repoDir, "tracked-only");
+			expect(snapshot).not.toBeNull();
+			expect(snapshot!.mode).toBe("tracked-only");
+			expect(snapshot!.clean).toBe(false);
+			expect(snapshot!.stashCommit).not.toBeNull();
+
+			// After snapshot: tracked modified again + another new untracked file
+			writeFileSync(join(repoDir, "file.txt"), "newer state");
+			writeFileSync(join(repoDir, "another-untracked.txt"), "keep me");
+
+			// Restore
+			await restoreSnapshot(repoDir, snapshot!);
+
+			// Tracked file is restored to snapshot state
+			expect(readFileSync(join(repoDir, "file.txt"), "utf-8")).toBe("snapshot state");
+			// Untracked files are kept (never discarded by tracked-only restore)
+			expect(existsSync(join(repoDir, "new-untracked.txt"))).toBe(true);
+			expect(readFileSync(join(repoDir, "new-untracked.txt"), "utf-8")).toBe("untracked content");
+			expect(existsSync(join(repoDir, "another-untracked.txt"))).toBe(true);
+		});
+
+		it("mode=tracked-only restore keeps clean untracked-only snapshot", async () => {
+			// Untracked-only working tree: tracked-only records a clean snapshot (no stash)
+			writeFileSync(join(repoDir, "new-untracked.txt"), "untracked only");
+			const snapshot = await takeSnapshot(repoDir, "tracked-only");
+			expect(snapshot).not.toBeNull();
+			expect(snapshot!.clean).toBe(true);
+			expect(snapshot!.stashCommit).toBeNull();
+
+			// Dirty the tracked file after the snapshot
+			writeFileSync(join(repoDir, "file.txt"), "dirty content");
+
+			// Restore: tracked returns to HEAD, untracked file untouched
+			await restoreSnapshot(repoDir, snapshot!);
+			expect(readFileSync(join(repoDir, "file.txt"), "utf-8")).toBe("initial content");
+			expect(existsSync(join(repoDir, "new-untracked.txt"))).toBe(true);
 		});
 	});
 });
