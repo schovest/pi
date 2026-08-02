@@ -100,16 +100,18 @@ import type { PrimaryAgentDefinition } from "./primary-agents/index.ts";
 import { discoverPrimaryAgents } from "./primary-agents/index.ts";
 import { expandPromptTemplate, type PromptTemplate } from "./prompt-templates.ts";
 import type { ResourceExtensionPaths, ResourceLoader } from "./resource-loader.ts";
-import type { BranchSummaryEntry, CompactionEntry } from "./session-manager.ts";
+import type { BranchSummaryEntry, CompactionEntry, SessionEntry } from "./session-manager.ts";
 import {
 	CURRENT_SESSION_VERSION,
 	getLatestCompactionEntry,
+	isLazyEntry,
 	type SessionHeader,
 	SessionManager,
 } from "./session-manager.ts";
 import type { SettingsManager } from "./settings-manager.ts";
 import type { Skill } from "./skills.ts";
 import type { SlashCommandInfo } from "./slash-commands.ts";
+import { appendSnapshot, createSnapshotRefId, trimSnapshotsToMax } from "./snapshot-store.ts";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.ts";
 import type {
 	SubagentDefinition,
@@ -1434,7 +1436,9 @@ export class AgentSession {
 			return;
 		}
 
-		// Take git snapshot before processing the prompt (for revert functionality)
+		// Take git snapshot before processing the prompt (for revert functionality).
+		// Snapshots are stored in a cwd-scoped global index (shared across sessions),
+		// so maxCount limits the total across all sessions in this cwd, not per-session.
 		const maxCount = this.settingsManager.getGitSnapshotMaxCount();
 		// Skip snapshots entirely when maxCount is 0 or session opted out (subagent child sessions)
 		if (!this._skipGitSnapshot && maxCount > 0) {
@@ -1442,15 +1446,24 @@ export class AgentSession {
 				const cwd = this.sessionManager.getCwd();
 				const snapshot = await takeSnapshot(cwd, this.settingsManager.getGitSnapshotMode());
 				if (snapshot) {
-					const entryId = this.sessionManager.appendCustomEntry("git_snapshot", snapshot);
+					const sessionDir = this.sessionManager.getSessionDir();
+					const refId = createSnapshotRefId();
+					await appendSnapshot(sessionDir, {
+						refId,
+						sessionId: this.sessionManager.getSessionId(),
+						timestamp: new Date().toISOString(),
+						snapshot,
+					});
+					// Anchor in the session tree: data is just the refId reference.
+					this.sessionManager.appendCustomEntry("git_snapshot", { refId });
 					// Protect stash object from gc if working tree was dirty
 					if (snapshot.stashCommit) {
-						await protectSnapshot(cwd, entryId, snapshot.stashCommit);
+						await protectSnapshot(cwd, refId, snapshot.stashCommit);
 					}
 
-					// Enforce maxCount limit: trim oldest snapshots and their git refs
-					const removedIds = this.sessionManager.trimOldestCustomEntries("git_snapshot", maxCount);
-					for (const id of removedIds) {
+					// Enforce maxCount across all sessions in this cwd
+					const removedRefIds = await trimSnapshotsToMax(sessionDir, maxCount);
+					for (const id of removedRefIds) {
 						await unprotectSnapshot(cwd, id);
 					}
 				}
@@ -1993,6 +2006,19 @@ export class AgentSession {
 	// =========================================================================
 
 	/**
+	 * getBranch() / collectEntriesForBranchSummary() 返回的 LazyEntry 占位（compaction 前
+	 * kept message）无 .message：汇总/压缩需要完整内容。materialize 后返回，保证 resume 后的
+	 * 二次 compaction / 分支汇总不丢 kept 内容。非 lazy 条目原样返回。
+	 *
+	 * @remarks 调用 `sessionManager.materialize()` 会**就地替换 byId 和 fileEntries 中的
+	 * lazy 占位**（持久状态变更，并非只读副本）：materialize 后的条目以完整 message 形态
+	 * 存在，kept messages 进入 LLM 上下文是预期行为。
+	 */
+	private _materializeBranchEntries(entries: SessionEntry[]): SessionEntry[] {
+		return entries.map((e) => (isLazyEntry(e) ? (this.sessionManager.materialize(e.id) ?? e) : e));
+	}
+
+	/**
 	 * Manually compact the session context.
 	 * Aborts current agent operation first.
 	 * @param customInstructions Optional instructions for the compaction summary
@@ -2010,7 +2036,7 @@ export class AgentSession {
 
 			const { apiKey, headers, env } = await this._getSummarizationRequestAuth(this.model);
 
-			const pathEntries = this.sessionManager.getBranch();
+			const pathEntries = this._materializeBranchEntries(this.sessionManager.getBranch());
 			const settings = this.settingsManager.getCompactionSettings();
 
 			const preparation = prepareCompaction(pathEntries, settings);
@@ -2306,7 +2332,7 @@ export class AgentSession {
 				({ apiKey, headers, env } = await this._getSummarizationRequestAuth(this.model));
 			}
 
-			const pathEntries = this.sessionManager.getBranch();
+			const pathEntries = this._materializeBranchEntries(this.sessionManager.getBranch());
 
 			const preparation = prepareCompaction(pathEntries, settings);
 			if (!preparation) {
@@ -3199,11 +3225,13 @@ export class AgentSession {
 		}
 
 		// Collect entries to summarize (from old leaf to common ancestor)
-		const { entries: entriesToSummarize, commonAncestorId } = collectEntriesForBranchSummary(
+		const { entries: rawEntriesToSummarize, commonAncestorId } = collectEntriesForBranchSummary(
 			this.sessionManager,
 			oldLeafId,
 			targetId,
 		);
+		// lazy kept 占位无 .message：materialize 后分支汇总才不丢内容
+		const entriesToSummarize = this._materializeBranchEntries(rawEntriesToSummarize);
 
 		// Prepare event data - mutable so extensions can override
 		let customInstructions = options.customInstructions;
@@ -3295,7 +3323,7 @@ export class AgentSession {
 			let newLeafId: string | null;
 			let editorText: string | undefined;
 
-			if (targetEntry.type === "message" && targetEntry.message.role === "user") {
+			if (targetEntry.type === "message" && targetEntry.message?.role === "user") {
 				// User message: leaf = parent (null if root), text goes to editor
 				newLeafId = targetEntry.parentId;
 				editorText = this._extractUserMessageText(targetEntry.message.content);
@@ -3374,7 +3402,7 @@ export class AgentSession {
 
 		for (const entry of entries) {
 			if (entry.type !== "message") continue;
-			if (entry.message.role !== "user") continue;
+			if (entry.message?.role !== "user") continue;
 
 			const text = this._extractUserMessageText(entry.message.content);
 			if (text) {
@@ -3412,7 +3440,7 @@ export class AgentSession {
 		let totalCost = 0;
 
 		for (const entry of this.sessionManager.getEntries()) {
-			if (entry.type !== "message") continue;
+			if (entry.type !== "message" || !entry.message) continue;
 			totalMessages++;
 			const message = entry.message;
 			if (message.role === "user") {
@@ -3509,7 +3537,7 @@ export class AgentSession {
 			let hasPostCompactionUsage = false;
 			for (let i = branchEntries.length - 1; i > compactionIndex; i--) {
 				const entry = branchEntries[i];
-				if (entry.type === "message" && entry.message.role === "assistant") {
+				if (entry.type === "message" && entry.message?.role === "assistant") {
 					const assistant = entry.message;
 					if (assistant.stopReason !== "aborted" && assistant.stopReason !== "error") {
 						const contextTokens = calculateContextTokens(assistant.usage);

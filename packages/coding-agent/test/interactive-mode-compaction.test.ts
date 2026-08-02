@@ -1,5 +1,9 @@
 import { describe, expect, test, vi } from "vitest";
+import { createCompactionSummaryMessage } from "../src/core/messages.ts";
+import { CompactionSummaryMessageComponent } from "../src/modes/interactive/components/compaction-summary-message.ts";
+import { UserMessageComponent } from "../src/modes/interactive/components/user-message.ts";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.ts";
+import { getMarkdownTheme, initTheme } from "../src/modes/interactive/theme/theme.ts";
 
 describe("InteractiveMode compaction events", () => {
 	test("rebuilds chat and appends a synthetic compaction summary at the bottom", async () => {
@@ -46,6 +50,7 @@ describe("InteractiveMode compaction events", () => {
 
 		expect(fakeThis.chatContainer.clear).toHaveBeenCalledTimes(1);
 		expect(fakeThis.rebuildChatFromMessages).toHaveBeenCalledTimes(1);
+		// 恢复 summary 渲染：compaction 摘要是当前上下文的总结，compaction 完成后追加到 chatbox
 		expect(fakeThis.addMessageToChat).toHaveBeenCalledTimes(1);
 		expect(fakeThis.addMessageToChat).toHaveBeenCalledWith(
 			expect.objectContaining({
@@ -55,5 +60,45 @@ describe("InteractiveMode compaction events", () => {
 			}),
 		);
 		expect(fakeThis.flushCompactionQueue).toHaveBeenCalledWith({ willRetry: false });
+	});
+
+	test("renderSessionContext renders compaction summary messages in the chatbox", () => {
+		initTheme("dark");
+		const chatChildren: unknown[] = [];
+		const fakeThis = {
+			pendingTools: new Map(),
+			entryIdToComponent: new Map(),
+			chatContainer: {
+				children: chatChildren,
+				addChild: (child: unknown) => {
+					chatChildren.push(child);
+				},
+			},
+			ui: { requestRender: vi.fn() },
+			toolOutputExpanded: false,
+			addMessageToChat: Reflect.get(InteractiveMode.prototype, "addMessageToChat") as (message: unknown) => void,
+			getMarkdownThemeWithSettings: () => getMarkdownTheme(),
+			getUserMessageText: (message: { role: string; content: string | unknown }) =>
+				typeof message.content === "string" ? message.content : "",
+		};
+
+		const renderSessionContext = Reflect.get(InteractiveMode.prototype, "renderSessionContext") as (
+			this: typeof fakeThis,
+			sessionContext: {
+				messages: unknown[];
+				entryIds: (string | null)[];
+			},
+		) => void;
+
+		renderSessionContext.call(fakeThis, {
+			messages: [
+				createCompactionSummaryMessage("summarized old history", 5000, "2026-08-01T00:00:00.000Z"),
+				{ role: "user", content: "actual question after compaction", timestamp: Date.now() },
+			],
+			entryIds: ["c1", "u1"],
+		});
+
+		expect(chatChildren.some((child) => child instanceof CompactionSummaryMessageComponent)).toBe(true);
+		expect(chatChildren.some((child) => child instanceof UserMessageComponent)).toBe(true);
 	});
 });

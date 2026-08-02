@@ -117,7 +117,7 @@ function scan(
 			prev = undefined;
 			continue;
 		}
-		if (entry.type === "message" && entry.message.role === "assistant") {
+		if (entry.type === "message" && entry.message?.role === "assistant") {
 			const miss = detectMiss(prev, entry.message, models);
 			if (miss) {
 				totals.missedTokens += miss.missedTokens;

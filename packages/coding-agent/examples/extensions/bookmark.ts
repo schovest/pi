@@ -19,7 +19,7 @@ export default function (pi: ExtensionAPI) {
 			const entries = ctx.sessionManager.getEntries();
 			for (let i = entries.length - 1; i >= 0; i--) {
 				const entry = entries[i];
-				if (entry.type === "message" && entry.message.role === "assistant") {
+				if (entry.type === "message" && entry.message?.role === "assistant") {
 					pi.setLabel(entry.id, label);
 					ctx.ui.notify(`Bookmarked as: ${label}`, "info");
 					return;

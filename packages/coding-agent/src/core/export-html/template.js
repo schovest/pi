@@ -41,7 +41,7 @@
       // Tool call lookup (toolCallId -> {name, arguments})
       const toolCallMap = new Map();
       for (const entry of entries) {
-        if (entry.type === 'message' && entry.message.role === 'assistant') {
+        if (entry.type === 'message' && entry.message?.role === 'assistant') {
           const content = entry.message.content;
           if (Array.isArray(content)) {
             for (const block of content) {
@@ -336,6 +336,7 @@
         switch (entry.type) {
           case 'message': {
             const msg = entry.message;
+            if (!msg) break;
             parts.push(msg.role);
             if (msg.content) parts.push(extractContent(msg.content));
             if (msg.role === 'bashExecution' && msg.command) parts.push(msg.command);
@@ -377,7 +378,7 @@
           if (isCurrentLeaf) return true;
 
           // Hide assistant messages with only tool calls (no text) unless error/aborted
-          if (entry.type === 'message' && entry.message.role === 'assistant') {
+          if (entry.type === 'message' && entry.message?.role === 'assistant') {
             const msg = entry.message;
             const hasText = hasTextContent(msg.content);
             const isErrorOrAborted = msg.stopReason && msg.stopReason !== 'stop' && msg.stopReason !== 'toolUse';
@@ -390,10 +391,10 @@
 
           switch (filterMode) {
             case 'user-only':
-              passesFilter = entry.type === 'message' && entry.message.role === 'user';
+              passesFilter = entry.type === 'message' && entry.message?.role === 'user';
               break;
             case 'no-tools':
-              passesFilter = !isSettingsEntry && !(entry.type === 'message' && entry.message.role === 'toolResult');
+              passesFilter = !isSettingsEntry && !(entry.type === 'message' && entry.message?.role === 'toolResult');
               break;
             case 'labeled-only':
               passesFilter = label !== undefined;
@@ -643,6 +644,9 @@
         switch (entry.type) {
           case 'message': {
             const msg = entry.message;
+            if (!msg) {
+              return labelHtml + '<span class="tree-role-user">[lazy message]</span>';
+            }
             if (msg.role === 'user') {
               const rawContent = extractContent(msg.content);
               const skillBlock = parseSkillBlock(rawContent);
@@ -836,7 +840,7 @@
 
       function findToolResult(toolCallId) {
         for (const entry of entries) {
-          if (entry.type === 'message' && entry.message.role === 'toolResult') {
+          if (entry.type === 'message' && entry.message?.role === 'toolResult') {
             if (entry.message.toolCallId === toolCallId) {
               return entry.message;
             }
@@ -1177,7 +1181,7 @@
         const entryDomId = `entry-${escapeHtml(entry.id)}`;
         const copyBtnHtml = renderCopyLinkButton(entry.id);
 
-        if (entry.type === 'message') {
+        if (entry.type === 'message' && entry.message) {
           const msg = entry.message;
 
           if (msg.role === 'user') {
@@ -1328,7 +1332,7 @@
         const models = new Set();
 
         for (const entry of entryList) {
-          if (entry.type === 'message') {
+          if (entry.type === 'message' && entry.message) {
             const msg = entry.message;
             if (msg.role === 'user') userMessages++;
             if (msg.role === 'assistant') {
@@ -1463,7 +1467,7 @@
 
       function getScrollTargetElementId(entryId) {
         const entry = byId.get(entryId);
-        if (entry?.type === 'message' && entry.message.role === 'toolResult' && entry.message.toolCallId) {
+        if (entry?.type === 'message' && entry.message?.role === 'toolResult' && entry.message.toolCallId) {
           // getElementById() matches the parsed DOM id attribute, whose HTML entities
           // were already resolved from the escaped id rendered by renderToolCall().
           return `tool-call-${entry.message.toolCallId}`;

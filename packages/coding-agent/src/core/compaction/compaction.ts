@@ -141,7 +141,7 @@ function getAssistantUsage(msg: AgentMessage): Usage | undefined {
 export function getLastAssistantUsage(entries: SessionEntry[]): Usage | undefined {
 	for (let i = entries.length - 1; i >= 0; i--) {
 		const entry = entries[i];
-		if (entry.type === "message") {
+		if (entry.type === "message" && entry.message) {
 			const usage = getAssistantUsage(entry.message);
 			if (usage) return usage;
 		}
@@ -375,6 +375,10 @@ export interface CutPointResult {
  * - isSplitTurn: whether we're cutting in the middle of a turn
  *
  * Only considers entries between `startIndex` and `endIndex` (exclusive).
+ *
+ * 输入必须不含 LazyEntry 占位（compaction 前 kept message 的惰性占位无 .message）：
+ * 调用方应先 materialize（如 AgentSession._materializeBranchEntries），否则占位被
+ * sessionEntryToContextMessages 跳过，被裁剪的上下文静默丢失。
  */
 export function findCutPoint(
 	entries: SessionEntry[],
@@ -630,6 +634,13 @@ export interface CompactionPreparation {
 	settings: CompactionSettings;
 }
 
+/**
+ * 计算一次 compaction 的准备数据（裁剪窗口、待摘要消息、turn 前缀等）。
+ *
+ * 输入必须不含 LazyEntry 占位（compaction 前 kept message 的惰性占位无 .message）：
+ * 调用方应先 materialize（如 AgentSession._materializeBranchEntries），否则占位被
+ * sessionEntryToContextMessages 跳过，上下文静默丢失。
+ */
 export function prepareCompaction(
 	pathEntries: SessionEntry[],
 	settings: CompactionSettings,

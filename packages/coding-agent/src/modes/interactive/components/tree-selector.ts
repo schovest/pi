@@ -9,7 +9,7 @@ import {
 	TruncatedText,
 	truncateToWidth,
 } from "@schovest/pi-tui";
-import type { SessionTreeNode } from "../../../core/session-manager.ts";
+import { isLazyEntry, type SessionEntry, type SessionTreeNode } from "../../../core/session-manager.ts";
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
 import { keyHint, keyText } from "./keybinding-hints.ts";
@@ -64,6 +64,9 @@ class TreeList implements Component {
 	private lastSelectedId: string | null = null;
 	private foldedNodes: Set<string> = new Set();
 
+	/** materialize-on-view 回调：把 lazy 占位条目恢复为完整 entry（由 sessionManager 注入）。 */
+	private materialize?: (id: string) => SessionEntry | undefined;
+
 	public onSelect?: (entryId: string) => void;
 	public onCancel?: () => void;
 	public onCopy?: (text: string | undefined) => void;
@@ -75,10 +78,12 @@ class TreeList implements Component {
 		maxVisibleLines: number,
 		initialSelectedId?: string,
 		initialFilterMode?: FilterMode,
+		materialize?: (id: string) => SessionEntry | undefined,
 	) {
 		this.currentLeafId = currentLeafId;
 		this.maxVisibleLines = maxVisibleLines;
 		this.filterMode = initialFilterMode ?? "default";
+		this.materialize = materialize;
 		this.multipleRoots = tree.length > 1;
 		this.flatNodes = this.flattenTree(tree);
 		this.buildActivePath();
@@ -197,7 +202,7 @@ class TreeList implements Component {
 
 			// Extract tool calls from assistant messages for later lookup
 			const entry = node.entry;
-			if (entry.type === "message" && entry.message.role === "assistant") {
+			if (entry.type === "message" && entry.message?.role === "assistant") {
 				const content = (entry.message as { content?: unknown }).content;
 				if (Array.isArray(content)) {
 					for (const block of content) {
@@ -286,7 +291,7 @@ class TreeList implements Component {
 
 			// Skip assistant messages with only tool calls (no text) unless error/aborted
 			// Always show current leaf so active position is visible
-			if (entry.type === "message" && entry.message.role === "assistant" && !isCurrentLeaf) {
+			if (entry.type === "message" && entry.message?.role === "assistant" && !isCurrentLeaf) {
 				const msg = entry.message as { stopReason?: string; content?: unknown };
 				const hasText = this.hasTextContent(msg.content);
 				const isErrorOrAborted = msg.stopReason && msg.stopReason !== "stop" && msg.stopReason !== "toolUse";
@@ -309,11 +314,11 @@ class TreeList implements Component {
 			switch (this.filterMode) {
 				case "user-only":
 					// Just user messages
-					passesFilter = entry.type === "message" && entry.message.role === "user";
+					passesFilter = entry.type === "message" && entry.message?.role === "user";
 					break;
 				case "no-tools":
 					// Default minus tool results
-					passesFilter = !isSettingsEntry && !(entry.type === "message" && entry.message.role === "toolResult");
+					passesFilter = !isSettingsEntry && !(entry.type === "message" && entry.message?.role === "toolResult");
 					break;
 				case "labeled-only":
 					// Just labeled entries
@@ -500,9 +505,23 @@ class TreeList implements Component {
 		this.visibleChildrenMap = visibleChildren;
 	}
 
+	/**
+	 * materialize-on-view：lazy 占位条目（__lazy）首次显示/复制/搜索时经注入的 materialize
+	 * 回调恢复为完整 entry，并就地替换树节点引用（仅一次，后续渲染不再读盘）。
+	 * 无回调或恢复失败（id 未知）时维持占位，不崩溃。
+	 */
+	private resolveEntry(node: SessionTreeNode): SessionEntry {
+		const entry = node.entry;
+		if (isLazyEntry(entry) && this.materialize) {
+			const full = this.materialize(entry.id);
+			if (full) node.entry = full;
+		}
+		return node.entry;
+	}
+
 	/** Get searchable text content from a node */
 	private getSearchableText(node: SessionTreeNode): string {
-		const entry = node.entry;
+		const entry = this.resolveEntry(node);
 		const parts: string[] = [];
 
 		if (node.label) {
@@ -512,6 +531,7 @@ class TreeList implements Component {
 		switch (entry.type) {
 			case "message": {
 				const msg = entry.message;
+				if (!msg) break;
 				parts.push(msg.role);
 				if ("content" in msg && msg.content) {
 					parts.push(this.extractContent(msg.content));
@@ -705,7 +725,7 @@ class TreeList implements Component {
 	}
 
 	private getEntryDisplayText(node: SessionTreeNode, isSelected: boolean): string {
-		const entry = node.entry;
+		const entry = this.resolveEntry(node);
 		let result: string;
 
 		const normalize = (s: string) => s.replace(/[\n\t]/g, " ").trim();
@@ -713,6 +733,11 @@ class TreeList implements Component {
 		switch (entry.type) {
 			case "message": {
 				const msg = entry.message;
+				if (!msg) {
+					// LazyEntry 占位：无 .message，显示占位文本
+					result = theme.fg("dim", "[lazy message]");
+					break;
+				}
 				const role = msg.role;
 				if (role === "user") {
 					const msgWithContent = msg as { content?: unknown };
@@ -833,20 +858,23 @@ class TreeList implements Component {
 	}
 
 	private getEntryCopyText(node: SessionTreeNode): string | undefined {
-		const entry = node.entry;
+		const entry = this.resolveEntry(node);
 		let text: string | undefined;
 
 		switch (entry.type) {
-			case "message":
-				if (entry.message.role === "bashExecution") {
-					text = entry.message.command;
-				} else if ("content" in entry.message) {
-					text = this.extractFullContent(entry.message.content);
-					if (!text && entry.message.role === "assistant") {
-						text = entry.message.errorMessage;
+			case "message": {
+				const msg = entry.message;
+				if (!msg) break;
+				if (msg.role === "bashExecution") {
+					text = msg.command;
+				} else if ("content" in msg) {
+					text = this.extractFullContent(msg.content);
+					if (!text && msg.role === "assistant") {
+						text = msg.errorMessage;
 					}
 				}
 				break;
+			}
 			case "custom_message":
 				text = this.extractFullContent(entry.content);
 				break;
@@ -1201,13 +1229,21 @@ export class TreeSelectorComponent extends Container implements Focusable {
 		onLabelChange?: (entryId: string, label: string | undefined) => void,
 		initialSelectedId?: string,
 		initialFilterMode?: FilterMode,
+		materialize?: (id: string) => SessionEntry | undefined,
 	) {
 		super();
 
 		this.onLabelChangeCallback = onLabelChange;
 		const maxVisibleLines = Math.max(5, Math.floor(terminalHeight / 2));
 
-		this.treeList = new TreeList(tree, currentLeafId, maxVisibleLines, initialSelectedId, initialFilterMode);
+		this.treeList = new TreeList(
+			tree,
+			currentLeafId,
+			maxVisibleLines,
+			initialSelectedId,
+			initialFilterMode,
+			materialize,
+		);
 		this.treeList.onSelect = onSelect;
 		this.treeList.onCancel = onCancel;
 		this.treeList.onCopy = (text) => this.onCopy?.(text);

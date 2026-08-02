@@ -322,12 +322,13 @@ describe("selection-scroll: autoScroll across viewport boundary", () => {
 		assert.strictEqual(timerAfter, null);
 	});
 
-	it("triggers downward autoScroll at scrollable-area bottom, not terminal bottom, when fixed region exists", async () => {
+	it("triggers downward autoScroll only at the footer bottom, not the scrollable-area bottom", async () => {
 		// 20 scrollable lines + 2 fixed lines, terminal 8 rows.
-		// scrollableViewport = 8 - 2 = 6. scrollable region is screen rows 0..5,
-		// fixed region is screen rows 6..7. autoScroll(+1) should trigger at
-		// scrollable-area bottom (row=6, i.e. event.row = lastScrollableViewport = 6),
-		// NOT at terminal bottom (row=8).
+		// scrollableViewport = 8 - 2 = 6. scrollable region is screen rows 0..5
+		// (event.row 1..6), fixed region is screen rows 6..7 (event.row 7..8).
+		// autoScroll(+1) should trigger ONLY when the pointer reaches the footer's
+		// last row (terminal bottom, event.row = 8), not at the scrollable-area
+		// bottom (event.row = 6) — the whole footer acts as a dead zone.
 		const scrollableLines = Array.from({ length: 20 }, (_, i) => `L${i.toString().padStart(2, "0")}`);
 		const fixedLines = ["FIXED1", "FIXED2"];
 		const terminal = new VirtualTerminal(40, 8);
@@ -347,17 +348,22 @@ describe("selection-scroll: autoScroll across viewport boundary", () => {
 		tui.setScrollOffset(14);
 		await settleRender();
 
+		const getTimer = () => (tui as unknown as { autoScrollTimer: unknown }).autoScrollTimer;
+
 		// mouseDown at screen row 2 (buffer row 2, "L02")
 		tui.handleMouseEvent({ type: "mouseDown", button: 0, col: 1, row: 3, shift: false, alt: false, ctrl: false });
-		// mouseMove to screen row 6 (lastScrollableViewport = 6, the bottom of scrollable area, just above fixed region)
-		tui.handleMouseEvent({ type: "mouseMove", button: 0, col: 1, row: 6, shift: false, alt: false, ctrl: false });
 
-		// autoScroll timer should be active
-		const timerActive = (tui as unknown as { autoScrollTimer: unknown }).autoScrollTimer;
-		assert.ok(
-			timerActive !== null && timerActive !== undefined,
-			"autoScrollTimer should be active at scrollable-area bottom",
-		);
+		// Scrollable-area bottom (event.row = 6) → dead zone, no scroll
+		tui.handleMouseEvent({ type: "mouseMove", button: 0, col: 1, row: 6, shift: false, alt: false, ctrl: false });
+		assert.strictEqual(getTimer(), null, "no autoScroll at scrollable-area bottom");
+
+		// First footer row (event.row = 7) → still a dead zone
+		tui.handleMouseEvent({ type: "mouseMove", button: 0, col: 1, row: 7, shift: false, alt: false, ctrl: false });
+		assert.strictEqual(getTimer(), null, "no autoScroll inside footer dead zone");
+
+		// Footer bottom / terminal bottom (event.row = 8) → scroll kicks in
+		tui.handleMouseEvent({ type: "mouseMove", button: 0, col: 1, row: 8, shift: false, alt: false, ctrl: false });
+		assert.ok(getTimer() !== null && getTimer() !== undefined, "autoScroll should be active at footer bottom");
 
 		// Let it scroll a few ticks
 		await new Promise<void>((resolve) => setTimeout(resolve, 350));

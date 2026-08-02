@@ -276,7 +276,7 @@ export class AgentSessionRuntime {
 		if (position === "at") {
 			targetLeafId = selectedEntry.id;
 		} else {
-			if (selectedEntry.type !== "message" || selectedEntry.message.role !== "user") {
+			if (selectedEntry.type !== "message" || selectedEntry.message?.role !== "user") {
 				throw new Error("Invalid entry ID for forking");
 			}
 			targetLeafId = selectedEntry.parentId;

@@ -1,6 +1,34 @@
 # Changelog
 
-## [Unreleased]
+## [0.13.0] - 2026-08-02
+
+### Added
+
+- subagent 工具卡片主界面显示 worker assistant 文字（按 task 分组：每个 task 的 heading+工具+worker 文字紧邻，每个 task 头部用 `DynamicBorder` 整行横线分隔（含首个 task））：运行中显示 outputSummary 摘要，完成后折叠显示最后回复、展开显示完整 assistant 文字过程（Markdown 渲染，从 `SubagentTaskResult.messages` 提取）
+- subagent 卡片每个 task heading 序号前加 🚀 标识，多 task 时更易区分
+- Session resume 性能优化：`loadEntriesFromFile` 两阶段加载，compaction 前的 message 行懒加载为 `LazyEntry` 占位（`materialize` 按需读回），避免大 tool 输出行全量 parse 阻塞 resume
+- Compaction entry 新增 `cumulativeUsage` 字段（`appendCompaction` 写入截至 compaction 的全部 usage 累计）：resume 后 footer 以最后一个 compaction 的 `cumulativeUsage` 作基线累加其后条目，compaction 前被 lazy 占位跳过的大行用量不再缺失（`computeFooterUsage` 抽为可测纯函数，无 `cumulativeUsage` 时退化为线性累加）
+
+### Changed
+
+- 复制选区时向下自动滚动改为仅在指针拖到 footer 区域底部（终端底行）时触发：整个 footer（输入框等固定底部）成为死区，避免选区刚到 footer 上方就意外滚走（无 footer 时行为不变）
+- subagent 卡片工具行（heading/工具调用/输出摘要/错误）改用 `TruncatedText` 按窗口宽度截断，移除固定 80 字符截断：长命令/路径在窄终端单行 `…` 截断而非换行撑高卡片
+- `/running-subagents` 面板懒加载：`updateSubagentDetails` 只在 overlay 打开时 `loadSubagentRunEntries` 加载历史，`pi --resume` 遍历历史时不再为每个 subagent 结果重读历史（overlay/panel 未开时仅缓存 `latestSubagentDetails`）
+- 懒加载去 64KB 阈值（v3）：`loadEntriesFromFile` 对非 header/compaction 行一律 peek 元数据（不再按大小判断），compaction 前全部行（含小行）懒加载为 `LazyEntry` 占位；compaction 后 / 无 compaction 的行仍 full parse（零回归）。移除 `LAZY_ENTRY_THRESHOLD` 常量
+- 恢复 chatbox 渲染 `[compaction]` summary 块：`addMessageToChat` 渲染 compaction summary 消息，compaction 完成后向 chatbox 追加 `[compaction]` 摘要（summary 是当前上下文的总结，非 compaction 前原始消息；LLM 上下文不变）
+- tree materialize-on-view：tree 查看/复制/搜索 lazy 条目时经注入的 `materialize` 回调恢复完整内容（`[lazy message]` 占位仅在无回调时兜底），compaction 前历史可在 tree 中完整回顾
+
+### Fixed
+
+- git snapshot 跨会话总数限制：`gitSnapshotMaxCount` 现限制同一 cwd 下所有 session 的 snapshot 总数（而非每个 session 独立上限）。snapshot 改存 cwd 级全局索引 `snapshots.jsonl`（跨 session 共享），全局索引写操作经 lockfile 串行化防并发丢失；git ref 改用 full UUID（`refs/pi-snapshots/<refId>`）根除跨 session ref 冲突；session tree 保留 refId 锦点（revert 兼容迁移前的旧格式数据）；启动时批量迁移旧 in-tree 条目（失败不中断启动）。移除已无生产调用的 `countCustomEntries`/`trimOldestCustomEntries`
+- LazyEntry 占位条目导致的 `.message` 解引用崩溃：`buildSessionContext` / `_persist` / `createBranchedSession` 对无 `.message` 的 message 条目增加 optional chaining guard
+- LazyEntry 全量重写丢内容：`_rewriteFile` / `_persist` 首次 flush 分支 / `forkFrom` 对 lazy 条目原样写回磁盘 raw 而非 `JSON.stringify` 占位；`createBranchedSession` 切换 sessionFile 前先 materialize lazy 条目
+- 全仓剩余 `.message` 解引用点 lazy guard：`sessionEntryToContextMessages` / compaction（`findCutPoint` / `getLastAssistantUsage`）/ `branchSummarizeBranch` / fork（`agent-session-runtime`）/ `getUserMessagesForForking` / `getSessionStats` / 上下文 token 估算 / footer 用量统计 / `getUsageCostBreakdown` / cache-stats / tree-selector 渲染与复制 / `getSubagentMessages` / export-html（preRenderCustomTools + template.js）/ examples 扩展，遇无 `.message` 的 LazyEntry 不再崩溃（lazy 条目不参与上下文与统计累计）
+- v3 懒加载只对 `type=message` 行 peek（其余类型 full parse）：label / subagent_run / custom / thinking_level_change / model_change / branch_summary / session_info 等在 compaction 前不再被错误 lazy 化，`_buildIndex`（labelsById）/ `loadSubagentRunEntries` / `getLabel` 等索引与查询恢复完整字段
+- compaction 保留的 kept messages 不再丢失：`buildSessionContext` 新增可选 `materializer` 参数，`SessionManager.buildSessionContext` 传入 `materialize`，resume 后 lazy 占位的 kept messages 读回并进入 LLM 上下文（不再只剩 summary）
+- resume 后二次 compaction / 分支汇总不再丢 kept 内容：`compact` / `_runAutoCompaction` / `navigateTree` 汇总前 materialize lazy 占位（`_materializeBranchEntries`），`prepareCompaction` / `generateBranchSummary` 拿到完整消息
+- resume 后触发新 compaction 的 `cumulativeUsage` 漏算 lazy 历史 usage：`sumEntriesUsage` 改为以最后一个带 `cumulativeUsage` 的 compaction 作基线重置累加（对齐 `computeFooterUsage`），不再因 lazy 占位条目无 `.message` 被跳过而丢失 compaction 前历史用量（footer 累计 token/cost 不再偏小）
+- `_lazyRawCache` 读取 lazy raw 失败时记录 `console.error` 告警：原静默吞异常，降级为占位写入会不可见地丢失消息内容
 
 ## [0.12.8] - 2026-07-31
 

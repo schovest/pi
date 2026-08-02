@@ -22,7 +22,7 @@ export default function (pi: ExtensionAPI) {
 		let lastAssistantText = "";
 		for (let i = entries.length - 1; i >= 0; i--) {
 			const entry = entries[i];
-			if (entry.type === "message" && entry.message.role === "assistant") {
+			if (entry.type === "message" && entry.message?.role === "assistant") {
 				const content = entry.message.content;
 				if (Array.isArray(content)) {
 					lastAssistantText = content
