@@ -63,6 +63,7 @@ import {
 import { type AgentSession, type AgentSessionEvent, parseSkillBlock } from "../../core/agent-session.ts";
 import { type AgentSessionRuntime, SessionImportFileNotFoundError } from "../../core/agent-session-runtime.ts";
 import { PluginManager } from "../../core/claude-plugin-manager.ts";
+import { CodexPluginManager } from "../../core/codex-plugin-manager.ts";
 import { CommandPaletteComponent, CommandRegistry } from "../../core/command-palette/index.ts";
 import type {
 	AutocompleteProviderFactory,
@@ -124,6 +125,7 @@ import { BackgroundProcessSelector } from "./components/background-process-selec
 import { BashExecutionComponent } from "./components/bash-execution.ts";
 import { BorderedLoader } from "./components/bordered-loader.ts";
 import { BranchSummaryMessageComponent } from "./components/branch-summary-message.ts";
+import { CodexPluginManagerComponent } from "./components/codex-plugin-manager.ts";
 import { CompactionSummaryMessageComponent } from "./components/compaction-summary-message.ts";
 import { CountdownTimer } from "./components/countdown-timer.ts";
 import { CustomEditor } from "./components/custom-editor.ts";
@@ -2797,6 +2799,14 @@ export class InteractiveMode {
 		});
 
 		registry.register({
+			id: "slash.codex-plugin",
+			label: "/codex-plugin",
+			description: "管理 Codex 插件",
+			category: "slash",
+			handler: () => this.handleCodexPluginsCommand(),
+		});
+
+		registry.register({
 			id: "slash.scoped-models",
 			label: "/scoped-models",
 			description: "管理作用域模型",
@@ -3096,6 +3106,10 @@ export class InteractiveMode {
 			}
 			if (text === "/claude-plugin") {
 				this.handlePluginsCommand();
+				return;
+			}
+			if (text === "/codex-plugin") {
+				this.handleCodexPluginsCommand();
 				return;
 			}
 			if (text === "/scoped-models") {
@@ -4994,6 +5008,26 @@ export class InteractiveMode {
 		});
 	}
 
+	private showCodexPluginsManager(): void {
+		this.showSelector((done) => {
+			const pluginManager = new CodexPluginManager({
+				cwd: this.sessionManager.getCwd(),
+				agentDir: getAgentDir(),
+				settingsManager: this.settingsManager,
+			});
+			const manager = new CodexPluginManagerComponent({
+				pluginManager,
+				settingsManager: this.settingsManager,
+				onReload: () => this.reloadPluginResources(),
+				onClose: done,
+				onStatus: (message) => this.showStatus(message),
+				onError: (message) => this.showError(message),
+				tui: this.ui,
+			});
+			return { component: manager, focus: manager };
+		});
+	}
+
 	private showSubagentsPanel(): void {
 		this.showSelector((done) => {
 			const agents = discoverSubagentsSync({
@@ -6334,6 +6368,11 @@ export class InteractiveMode {
 	private handlePluginsCommand(): void {
 		this.editor.setText("");
 		this.showPluginsManager();
+	}
+
+	private handleCodexPluginsCommand(): void {
+		this.editor.setText("");
+		this.showCodexPluginsManager();
 	}
 
 	private handleSubagentsCommand(): void {
