@@ -10,6 +10,7 @@
 - codex 插件兼容：内置 hooks 桥接（`core/codex-hooks-bridge.ts`）：12 个 codex 事件映射到 Pi 事件（`session_start`/`session_end`/`user_prompt_submit`/`pre_tool_use`/`permission_request`/`post_tool_use`/`pre_compact`/`post_compact`/`subagent_start`/`subagent_stop`/`stop`/`turn_start`），`additionalContext` 经 `before_agent_start` 注入 systemPrompt；子进程协议（无 args 走 `sh -c` 完整命令行、有 args 走 spawn 数组、stdin JSON、exit 2=block、超时默认 30s 且 `session_end` 3s、注入 `PLUGIN_ROOT`/`PLUGIN_DATA`/`CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA` env）；注册 `/codex:<plugin>:<command>` 斜杠命令；插件来源经 `CodexPluginManager.listConfiguredPlugins()` 实时读取（disable 即时生效）
 - codex 插件兼容：resource-loader 集成——已启用 codex 插件的 skills 自动纳入技能资源解析（metadata `origin: "codex-plugin"`，诊断以 warning 合并进技能诊断），构造器内置注入 codex hooks 桥接 inline factory（随每次扩展加载/reload 注册，不依赖可选安装）
 - codex 插件兼容：交互式管理命令 `/codex-plugin`（斜杠命令打开插件管理器：搜索市场/安装/卸载/更新/市场管理，与 `/claude-plugin` 对称，组件 `CodexPluginManagerComponent`）
+- codex 插件兼容：内置默认市场源 `openai`（`https://github.com/openai/plugins`，OpenAI 官方 catalog），未配置市场时 `search`/`install <plugin>@openai` 直接可用；用户同名 `marketplace add` 覆盖默认、`marketplace remove` 仅移除自定义覆盖（内置默认不可删，`marketplace list` 带 `(default)` 标记）；`readCodexMarketplaceCatalog` 支持 `.agents/plugins/marketplace.json` 目录回退（适配官方仓库布局）
 
 ### Changed
 

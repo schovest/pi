@@ -6,11 +6,12 @@ import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	CodexPluginManager,
+	DEFAULT_CODEX_MARKETPLACE,
 	normalizeCodexHookEventName,
 	readCodexMarketplaceCatalog,
 	readCodexPluginManifest,
 } from "../src/core/codex-plugin-manager.ts";
-import { SettingsManager } from "../src/core/settings-manager.ts";
+import { type PluginMarketplaceSettings, SettingsManager } from "../src/core/settings-manager.ts";
 import type { GitSource } from "../src/utils/git.ts";
 
 const execFileAsync = promisify(execFile);
@@ -68,6 +69,21 @@ describe("codex marketplace catalog", () => {
 		);
 		const catalog = readCodexMarketplaceCatalog(tempDir);
 		expect(catalog.plugins).toEqual([{ name: "sp", source: { kind: "local", path: "./plugins/sp" } }]);
+	});
+
+	it("falls back to .agents/plugins/marketplace.json (openai/plugins layout)", () => {
+		mkdirSync(join(tempDir, ".agents", "plugins"), { recursive: true });
+		writeFileSync(
+			join(tempDir, ".agents", "plugins", "marketplace.json"),
+			JSON.stringify({ name: "openai-curated", plugins: [{ name: "sp", source: "./plugins/sp" }] }),
+		);
+		const catalog = readCodexMarketplaceCatalog(tempDir);
+		expect(catalog.name).toBe("openai-curated");
+		expect(catalog.plugins).toEqual([{ name: "sp", source: { kind: "local", path: "./plugins/sp" } }]);
+	});
+
+	it("throws when no catalog file exists", () => {
+		expect(() => readCodexMarketplaceCatalog(tempDir)).toThrow(/No marketplace\.json found/);
 	});
 });
 
@@ -359,5 +375,79 @@ describe("CodexPluginManager", () => {
 		const after = sm.getCodexPlugins()[0];
 		expect(after?.path).toBe("./plugins/demo");
 		expect(cloneSpy).toHaveBeenCalledTimes(2);
+	});
+
+	it("lists the built-in openai default marketplace when none are configured", () => {
+		expect(DEFAULT_CODEX_MARKETPLACE.openai).toEqual({ source: "https://github.com/openai/plugins" });
+		expect(manager.listMarketplaces()).toEqual([
+			{ name: "openai", source: DEFAULT_CODEX_MARKETPLACE.openai!.source },
+		]);
+	});
+
+	it("merges user-configured marketplaces with the default, user wins on name collision", async () => {
+		const marketplaceDir = join(tempDir, "mkt");
+		mkdirSync(marketplaceDir, { recursive: true });
+		writeFileSync(
+			join(marketplaceDir, "marketplace.json"),
+			JSON.stringify({ plugins: [{ name: "p1", source: { source: "local", path: "./plugins/p1" } }] }),
+		);
+
+		manager.addMarketplace("openai", marketplaceDir); // override the default source
+		manager.addMarketplace("team", marketplaceDir);
+
+		const listed = manager.listMarketplaces();
+		expect(listed).toHaveLength(2);
+		expect(listed.find((m) => m.name === "openai")?.source).toBe(marketplaceDir);
+
+		const results = await manager.searchMarketplaces();
+		expect(
+			results
+				.filter((r) => r.name === "p1")
+				.map((r) => r.marketplace)
+				.sort(),
+		).toEqual(["openai", "team"]);
+	});
+
+	it("searches the built-in openai marketplace without explicit configuration", async () => {
+		const marketplaceDir = join(tempDir, "openai-mkt");
+		mkdirSync(marketplaceDir, { recursive: true });
+		writeFileSync(
+			join(marketplaceDir, "marketplace.json"),
+			JSON.stringify({ name: "openai-curated", plugins: [{ name: "demo", source: "./plugins/demo" }] }),
+		);
+		// The default source is a git URL; stub the clone step to read a local fixture catalog.
+		const rootSpy = vi.spyOn(
+			manager as unknown as {
+				prepareMarketplaceRoot(name: string, marketplace: PluginMarketplaceSettings): Promise<string>;
+			},
+			"prepareMarketplaceRoot",
+		);
+		rootSpy.mockResolvedValue(marketplaceDir);
+
+		const results = await manager.searchMarketplaces("demo");
+		expect(results).toEqual([expect.objectContaining({ name: "demo", marketplace: "openai", installed: false })]);
+	});
+
+	it("installs from the built-in openai marketplace without explicit configuration", async () => {
+		const pluginRoot = join(tempDir, "plugin-src");
+		writeCodexPlugin(pluginRoot, "demo");
+		const marketplaceDir = join(tempDir, "openai-mkt");
+		mkdirSync(marketplaceDir, { recursive: true });
+		writeFileSync(
+			join(marketplaceDir, "marketplace.json"),
+			JSON.stringify({ plugins: [{ name: "demo", source: { source: "local", path: pluginRoot } }] }),
+		);
+		const rootSpy = vi.spyOn(
+			manager as unknown as {
+				prepareMarketplaceRoot(name: string, marketplace: PluginMarketplaceSettings): Promise<string>;
+			},
+			"prepareMarketplaceRoot",
+		);
+		rootSpy.mockResolvedValue(marketplaceDir);
+
+		const installed = await manager.install("demo@openai");
+		expect(installed.name).toBe("demo");
+		expect(installed.marketplace).toBe("openai");
+		expect(installed.installedPath).toBe(pluginRoot);
 	});
 });

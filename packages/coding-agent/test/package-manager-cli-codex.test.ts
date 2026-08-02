@@ -62,6 +62,27 @@ describe("codex-plugin CLI", () => {
 		expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("mkt"));
 	});
 
+	it("lists the built-in openai marketplace with a default marker", async () => {
+		expect(await handleCodexPluginCommand(["codex-plugin", "marketplace", "list"])).toBe(true);
+		expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("openai"));
+		expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("(default)"));
+	});
+
+	it("rejects removing the built-in default marketplace", async () => {
+		expect(await handleCodexPluginCommand(["codex-plugin", "marketplace", "remove", "openai"])).toBe(true);
+		expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("built-in default marketplace"));
+	});
+
+	it("removes a user-configured override of the default marketplace name", async () => {
+		const sm = SettingsManager.create(cwd, agentDir);
+		sm.setCodexPluginMarketplaces({ openai: { source: join(tempDir, "custom") } });
+		await sm.flush();
+
+		expect(await handleCodexPluginCommand(["codex-plugin", "marketplace", "remove", "openai"])).toBe(true);
+		expect(logSpy).toHaveBeenCalledWith(expect.stringContaining("Removed codex plugin marketplace openai"));
+		expect(SettingsManager.create(cwd, agentDir).getCodexPluginMarketplaces()).toEqual({});
+	});
+
 	it("installs a local plugin via codex-plugin install", async () => {
 		const pluginRoot = join(tempDir, "plugin-src");
 		writeLocalCodexPlugin(pluginRoot);

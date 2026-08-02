@@ -4,6 +4,7 @@ import type {
 	CodexPluginSearchResult,
 	ConfiguredCodexPlugin,
 } from "../../../core/codex-plugin-manager.ts";
+import { DEFAULT_CODEX_MARKETPLACE } from "../../../core/codex-plugin-manager.ts";
 import type { SettingsManager } from "../../../core/settings-manager.ts";
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
@@ -326,6 +327,11 @@ export class CodexPluginManagerComponent extends Container implements Focusable 
 			const removed = this.pluginManager.removeMarketplace(marketplace.name);
 			if (removed) {
 				await this.afterMutation(`Removed plugin marketplace ${marketplace.name}`);
+			} else if (marketplace.name in DEFAULT_CODEX_MARKETPLACE) {
+				this.setStatus(
+					`${marketplace.name} is a built-in default marketplace; only a custom override can be removed`,
+					true,
+				);
 			} else {
 				this.setStatus(`No matching plugin marketplace found for ${marketplace.name}`, true);
 			}

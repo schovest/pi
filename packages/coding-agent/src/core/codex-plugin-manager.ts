@@ -137,8 +137,23 @@ function normalizeMarketplaceSource(src: unknown): CodexPluginSource | undefined
 	return undefined;
 }
 
+const DEFAULT_CODEX_MARKETPLACE_CATALOG_PATHS = ["marketplace.json", join(".agents", "plugins", "marketplace.json")];
+
+/**
+ * Default Codex plugin marketplace (OpenAI official catalog: github.com/openai/plugins,
+ * marketplace.json lives under .agents/plugins/). Merged lazily into user-configured
+ * marketplaces; a same-named user entry overrides it.
+ */
+export const DEFAULT_CODEX_MARKETPLACE: Record<string, PluginMarketplaceSettings> = {
+	openai: { source: "https://github.com/openai/plugins" },
+};
+
 export function readCodexMarketplaceCatalog(root: string): CodexMarketplaceCatalog {
-	const raw = readJsonObject(join(root, "marketplace.json"));
+	const catalogPath = DEFAULT_CODEX_MARKETPLACE_CATALOG_PATHS.map((p) => join(root, p)).find(existsSync);
+	if (!catalogPath) {
+		throw new Error(`No marketplace.json found in ${root}`);
+	}
+	const raw = readJsonObject(catalogPath);
 	const plugins: CodexMarketplaceEntry[] = [];
 	if (Array.isArray(raw.plugins)) {
 		for (const entry of raw.plugins) {
@@ -490,15 +505,23 @@ export class CodexPluginManager {
 		return true;
 	}
 
+	/**
+	 * Merged view of configured + default marketplaces. User-configured entries
+	 * win over the built-in default when names collide.
+	 */
+	private getAllMarketplaces(): Record<string, PluginMarketplaceSettings> {
+		return { ...DEFAULT_CODEX_MARKETPLACE, ...this.settingsManager.getCodexPluginMarketplaces() };
+	}
+
 	listMarketplaces(): Array<{ name: string; source: string }> {
-		return Object.entries(this.settingsManager.getCodexPluginMarketplaces()).map(([name, value]) => ({
+		return Object.entries(this.getAllMarketplaces()).map(([name, value]) => ({
 			name,
 			source: value.source,
 		}));
 	}
 
 	async searchMarketplaces(query?: string, options?: { marketplace?: string }): Promise<CodexPluginSearchResult[]> {
-		const marketplaces = this.settingsManager.getCodexPluginMarketplaces();
+		const marketplaces = this.getAllMarketplaces();
 		const normalizedQuery = query?.trim().toLowerCase();
 		const installedPlugins = this.listConfiguredPlugins();
 		const results: CodexPluginSearchResult[] = [];
@@ -676,7 +699,7 @@ export class CodexPluginManager {
 		pluginName: string,
 		marketplaceName: string,
 	): Promise<{ source: CodexPluginSource; marketplaceRoot: string }> {
-		const marketplace = this.settingsManager.getCodexPluginMarketplaces()[marketplaceName];
+		const marketplace = this.getAllMarketplaces()[marketplaceName];
 		if (!marketplace) {
 			throw new Error(`Unknown plugin marketplace: ${marketplaceName}`);
 		}

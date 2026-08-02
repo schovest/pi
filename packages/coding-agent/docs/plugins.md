@@ -68,6 +68,8 @@ pi codex-plugin hooks disable superpowers
 pi codex-plugin hooks enable superpowers
 ```
 
+- **默认市场源**：内置 OpenAI 官方市场 `openai`（`https://github.com/openai/plugins`，catalog 位于仓库 `.agents/plugins/marketplace.json`），无需配置即可 `pi codex-plugin search --marketplace openai` 或 `pi codex-plugin install <plugin>@openai`；`marketplace list` 会以 `(default)` 标记内置源，用户 `marketplace add openai <other-url>` 可覆盖默认源，`marketplace remove openai` 只移除自定义覆盖（内置默认不可删除）。注意官方源多数插件为 skills + apps 型，Pi 不支持 `.app.json`（apps 解析时告警跳过），实际生效的是 skills/MCP 部分。
+
 - **安装与信任**：`install` 支持市场条目（`name@marketplace`）、git 仓库（含子目录）、npm 包和本地路径；默认写入用户级 `~/.pi/agent/settings.json` 并在 `~/.pi/agent/codex-plugins/` 存储，`-l` 改为项目级 `.pi/settings.json` 与 `.pi/codex-plugins/`。安装即信任——安装成功会打印每个事件的 hooks 摘要（每行 `hooks: <event> <command>`，无 hooks 打印 `hooks: none`）。
 - **hooks 行为**：读取新格式 `.codex-plugin/plugin.json` 或旧格式根 `plugin.json` 的 `hooks` 字段，映射为 Pi 事件（`session_start`、`session_end`、`user_prompt_submit`、`pre_tool_use`、`permission_request`、`post_tool_use`、`pre_compact`、`post_compact`、`subagent_start`、`subagent_stop`、`stop`、`turn_start`）。manifest 未声明 `hooks` 字段或声明为空时，回退加载插件根的默认 `hooks/hooks.json`。hook 以子进程执行（无 args 走 `sh -c`，有 args 走 spawn 数组），stdin 传入 JSON 事件负载，stdout 返回 JSON 结果，exit code 2 表示 block；注入 `PLUGIN_ROOT`/`PLUGIN_DATA` 环境变量。`hooks list/disable/enable` 即时查看与启停（disable 即时生效）。
 - **其他字段**：`skills` 并入 Pi 技能系统（metadata `origin: "codex-plugin"`）；`mcpServers` 注册进 Pi 的 mcp.json（`<plugin>-` 前缀防冲突，`${PLUGIN_ROOT}` 替换为安装根，`remove` 时清理）。`apps` 字段（codex 运行时专属）不受支持，解析时输出诊断。
