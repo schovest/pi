@@ -89,7 +89,7 @@ describe("PluginManagerComponent mutations", () => {
 			pluginManager: {
 				listConfiguredPlugins: () => [],
 				listMarketplaces: () => [],
-				searchMarketplaces: async () => [],
+				searchMarketplaces: async () => ({ results: [], failures: [] }),
 				install,
 				remove: () => false,
 				update: async () => {},
@@ -125,7 +125,7 @@ describe("PluginManagerComponent mutations", () => {
 			pluginManager: {
 				listConfiguredPlugins: () => [plugin],
 				listMarketplaces: () => [],
-				searchMarketplaces: async () => [],
+				searchMarketplaces: async () => ({ results: [], failures: [] }),
 				install: async () => plugin,
 				remove,
 				update: async () => {},
@@ -153,7 +153,7 @@ describe("PluginManagerComponent mutations", () => {
 			pluginManager: {
 				listConfiguredPlugins: () => [],
 				listMarketplaces: () => [],
-				searchMarketplaces: async () => [],
+				searchMarketplaces: async () => ({ results: [], failures: [] }),
 				install: async () => ({
 					name: "superpowers",
 					source: "https://github.com/example/superpowers",
@@ -184,7 +184,7 @@ describe("PluginManagerComponent mutations", () => {
 			pluginManager: {
 				listConfiguredPlugins: () => [],
 				listMarketplaces: () => [],
-				searchMarketplaces: async () => [],
+				searchMarketplaces: async () => ({ results: [], failures: [] }),
 				install: async () => ({
 					name: "superpowers",
 					source: "https://github.com/example/superpowers",

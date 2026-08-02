@@ -401,7 +401,7 @@ describe("CodexPluginManager", () => {
 
 		const results = await manager.searchMarketplaces();
 		expect(
-			results
+			results.results
 				.filter((r) => r.name === "p1")
 				.map((r) => r.marketplace)
 				.sort(),
@@ -425,7 +425,40 @@ describe("CodexPluginManager", () => {
 		rootSpy.mockResolvedValue(marketplaceDir);
 
 		const results = await manager.searchMarketplaces("demo");
-		expect(results).toEqual([expect.objectContaining({ name: "demo", marketplace: "openai", installed: false })]);
+		expect(results.results).toEqual([
+			expect.objectContaining({ name: "demo", marketplace: "openai", installed: false }),
+		]);
+		expect(results.failures).toEqual([]);
+	});
+
+	it("skips failed marketplaces and reports them as failures", async () => {
+		const marketplaceRoot = join(tempDir, "good-marketplace");
+		mkdirSync(marketplaceRoot, { recursive: true });
+		writeFileSync(
+			join(marketplaceRoot, "marketplace.json"),
+			JSON.stringify({ plugins: [{ name: "good", source: "./plugins/good" }] }),
+		);
+		manager.addMarketplace("good", marketplaceRoot);
+		const brokenRoot = join(tempDir, "broken-marketplace");
+		mkdirSync(brokenRoot, { recursive: true }); // exists but no marketplace.json
+		manager.addMarketplace("broken", brokenRoot);
+		// Stub the default marketplace clone to a local empty catalog to avoid network.
+		const emptyMarketplace = join(tempDir, "empty-marketplace");
+		mkdirSync(emptyMarketplace, { recursive: true });
+		writeFileSync(join(emptyMarketplace, "marketplace.json"), JSON.stringify({ plugins: [] }));
+		const managerPrivate = manager as unknown as {
+			prepareMarketplaceRoot(name: string, marketplace: PluginMarketplaceSettings): Promise<string>;
+		};
+		const originalPrepare = managerPrivate.prepareMarketplaceRoot.bind(manager);
+		vi.spyOn(managerPrivate, "prepareMarketplaceRoot").mockImplementation((name, marketplace) =>
+			name === "openai" ? Promise.resolve(emptyMarketplace) : originalPrepare(name, marketplace),
+		);
+
+		const { results, failures } = await manager.searchMarketplaces();
+		expect(results.map((r) => r.name)).toEqual(["good"]);
+		expect(failures).toEqual([
+			{ marketplace: "broken", message: expect.stringContaining("No marketplace.json found") },
+		]);
 	});
 
 	it("installs from the built-in openai marketplace without explicit configuration", async () => {

@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import { CONFIG_DIR_NAME } from "../config.ts";
 import { type GitSource, parseGitUrl } from "../utils/git.ts";
 import { resolvePath } from "../utils/paths.ts";
-import type { PluginDiagnostic } from "./claude-plugin-manager.ts";
+import type { MarketplaceSearchFailure, PluginDiagnostic } from "./claude-plugin-manager.ts";
 import type { PathMetadata } from "./package-manager.ts";
 import type {
 	CodexEventName,
@@ -370,6 +370,11 @@ export interface CodexPluginSearchResult {
 	installed: boolean;
 }
 
+export interface CodexPluginMarketplaceSearchResults {
+	results: CodexPluginSearchResult[];
+	failures: MarketplaceSearchFailure[];
+}
+
 export interface CodexPluginResources {
 	skills: Array<{ path: string; metadata: PathMetadata }>;
 	diagnostics: PluginDiagnostic[];
@@ -520,18 +525,32 @@ export class CodexPluginManager {
 		}));
 	}
 
-	async searchMarketplaces(query?: string, options?: { marketplace?: string }): Promise<CodexPluginSearchResult[]> {
+	async searchMarketplaces(
+		query?: string,
+		options?: { marketplace?: string },
+	): Promise<CodexPluginMarketplaceSearchResults> {
 		const marketplaces = this.getAllMarketplaces();
 		const normalizedQuery = query?.trim().toLowerCase();
 		const installedPlugins = this.listConfiguredPlugins();
 		const results: CodexPluginSearchResult[] = [];
+		const failures: MarketplaceSearchFailure[] = [];
 
 		for (const [marketplaceName, marketplace] of Object.entries(marketplaces)) {
 			if (options?.marketplace && marketplaceName !== options.marketplace) {
 				continue;
 			}
-			const marketplaceRoot = await this.prepareMarketplaceRoot(marketplaceName, marketplace);
-			const catalog = readCodexMarketplaceCatalog(marketplaceRoot);
+			let catalog: CodexMarketplaceCatalog;
+			let marketplaceRoot: string;
+			try {
+				marketplaceRoot = await this.prepareMarketplaceRoot(marketplaceName, marketplace);
+				catalog = readCodexMarketplaceCatalog(marketplaceRoot);
+			} catch (error) {
+				failures.push({
+					marketplace: marketplaceName,
+					message: error instanceof Error ? error.message : String(error),
+				});
+				continue;
+			}
 			for (const entry of catalog.plugins) {
 				const sourceDescription = this.describeSource(entry.source, marketplaceRoot);
 				const haystack = [entry.name, sourceDescription, marketplaceName].join(" ").toLowerCase();
@@ -551,7 +570,7 @@ export class CodexPluginManager {
 			}
 		}
 
-		return results;
+		return { results, failures };
 	}
 
 	async install(spec: string, options?: { local?: boolean }): Promise<ConfiguredCodexPlugin> {

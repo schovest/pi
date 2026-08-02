@@ -155,7 +155,7 @@ describe("Claude PluginManager", () => {
 		const bySource = await manager.searchMarketplaces("context-helper");
 		const byMarketplace = await manager.searchMarketplaces("context");
 
-		expect(byName).toEqual([
+		expect(byName.results).toEqual([
 			{
 				name: "superpowers",
 				marketplace: "claude",
@@ -164,8 +164,8 @@ describe("Claude PluginManager", () => {
 				installed: false,
 			},
 		]);
-		expect(bySource.map((result) => result.name)).toEqual(["docs"]);
-		expect(byMarketplace.map((result) => `${result.name}@${result.marketplace}`)).toEqual(["docs@context"]);
+		expect(bySource.results.map((result) => result.name)).toEqual(["docs"]);
+		expect(byMarketplace.results.map((result) => `${result.name}@${result.marketplace}`)).toEqual(["docs@context"]);
 	});
 
 	it("returns all catalog entries when marketplace search has no query", async () => {
@@ -195,7 +195,10 @@ describe("Claude PluginManager", () => {
 
 		const results = await manager.searchMarketplaces();
 
-		expect(results.map((result) => `${result.name}@${result.marketplace}`)).toEqual(["alpha@claude", "beta@claude"]);
+		expect(results.results.map((result) => `${result.name}@${result.marketplace}`)).toEqual([
+			"alpha@claude",
+			"beta@claude",
+		]);
 	});
 
 	it("marks marketplace search results as installed when a configured plugin uses the same source", async () => {
@@ -225,7 +228,7 @@ describe("Claude PluginManager", () => {
 
 		const results = await manager.searchMarketplaces("superpowers");
 
-		expect(results[0]?.installed).toBe(true);
+		expect(results.results[0]?.installed).toBe(true);
 	});
 
 	it("searches only the selected marketplace when requested", async () => {
@@ -245,7 +248,7 @@ describe("Claude PluginManager", () => {
 
 		const results = await manager.searchMarketplaces("super", { marketplace: "internal" });
 
-		expect(results.map((result) => result.marketplace)).toEqual(["internal"]);
+		expect(results.results.map((result) => result.marketplace)).toEqual(["internal"]);
 	});
 
 	it("reads manifest resources and unsupported diagnostics", () => {
@@ -347,7 +350,7 @@ describe("Claude PluginManager", () => {
 
 		const results = await manager.searchMarketplaces();
 		expect(
-			results
+			results.results
 				.filter((r) => r.name === "p1")
 				.map((r) => r.marketplace)
 				.sort(),
@@ -371,9 +374,38 @@ describe("Claude PluginManager", () => {
 		rootSpy.mockResolvedValue(marketplaceRoot);
 
 		const results = await manager.searchMarketplaces("demo");
-		expect(results).toEqual([
+		expect(results.results).toEqual([
 			expect.objectContaining({ name: "demo", marketplace: "claude-plugins-official", installed: false }),
 		]);
+		expect(results.failures).toEqual([]);
+	});
+
+	it("skips failed marketplaces and reports them as failures", async () => {
+		const marketplaceRoot = join(tempDir, "good-marketplace");
+		mkdirSync(join(marketplaceRoot, ".claude-plugin"), { recursive: true });
+		writeFileSync(
+			join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+			JSON.stringify({ plugins: [{ name: "good", source: { url: "https://github.com/example/good" } }] }),
+		);
+		manager.addMarketplace("good", marketplaceRoot);
+		const brokenRoot = join(tempDir, "broken-marketplace");
+		mkdirSync(join(brokenRoot, ".claude-plugin"), { recursive: true }); // exists but no marketplace.json
+		manager.addMarketplace("broken", brokenRoot);
+		// Stub the default marketplace clone to a local empty catalog to avoid network.
+		const emptyMarketplace = join(tempDir, "empty-marketplace");
+		mkdirSync(join(emptyMarketplace, ".claude-plugin"), { recursive: true });
+		writeFileSync(join(emptyMarketplace, ".claude-plugin", "marketplace.json"), JSON.stringify({ plugins: [] }));
+		const managerPrivate = manager as unknown as {
+			prepareMarketplaceRoot(name: string, marketplace: PluginMarketplaceSettings): Promise<string>;
+		};
+		const originalPrepare = managerPrivate.prepareMarketplaceRoot.bind(manager);
+		vi.spyOn(managerPrivate, "prepareMarketplaceRoot").mockImplementation((name, marketplace) =>
+			name === "claude-plugins-official" ? Promise.resolve(emptyMarketplace) : originalPrepare(name, marketplace),
+		);
+
+		const { results, failures } = await manager.searchMarketplaces();
+		expect(results.map((r) => r.name)).toEqual(["good"]);
+		expect(failures).toEqual([{ marketplace: "broken", message: expect.stringContaining("marketplace.json") }]);
 	});
 
 	it("installs from the built-in claude-plugins-official marketplace without explicit configuration", async () => {

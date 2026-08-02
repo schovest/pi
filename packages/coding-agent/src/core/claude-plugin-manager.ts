@@ -81,6 +81,17 @@ export interface PluginSearchResult {
 	installed: boolean;
 }
 
+/** A marketplace that was skipped during search because it failed to resolve/read. */
+export interface MarketplaceSearchFailure {
+	marketplace: string;
+	message: string;
+}
+
+export interface PluginMarketplaceSearchResults {
+	results: PluginSearchResult[];
+	failures: MarketplaceSearchFailure[];
+}
+
 export interface PluginResourcePaths {
 	skills: Array<{ path: string; metadata: PathMetadata }>;
 	prompts: Array<{ path: string; metadata: PathMetadata }>;
@@ -350,18 +361,31 @@ export class PluginManager {
 		}));
 	}
 
-	async searchMarketplaces(query?: string, options?: { marketplace?: string }): Promise<PluginSearchResult[]> {
+	async searchMarketplaces(
+		query?: string,
+		options?: { marketplace?: string },
+	): Promise<PluginMarketplaceSearchResults> {
 		const marketplaces = this.getAllMarketplaces();
 		const normalizedQuery = query?.trim().toLowerCase();
 		const installedPlugins = this.listConfiguredPlugins();
 		const results: PluginSearchResult[] = [];
+		const failures: MarketplaceSearchFailure[] = [];
 
 		for (const [marketplaceName, marketplace] of Object.entries(marketplaces)) {
 			if (options?.marketplace && marketplaceName !== options.marketplace) {
 				continue;
 			}
-			const marketplaceRoot = await this.prepareMarketplaceRoot(marketplaceName, marketplace);
-			const catalog = readMarketplaceCatalog(marketplaceRoot);
+			let catalog: MarketplaceCatalog;
+			try {
+				const marketplaceRoot = await this.prepareMarketplaceRoot(marketplaceName, marketplace);
+				catalog = readMarketplaceCatalog(marketplaceRoot);
+			} catch (error) {
+				failures.push({
+					marketplace: marketplaceName,
+					message: error instanceof Error ? error.message : String(error),
+				});
+				continue;
+			}
 			for (const entry of catalog.plugins) {
 				const haystack = [entry.name, entry.source.url, marketplaceName].join(" ").toLowerCase();
 				if (normalizedQuery && !haystack.includes(normalizedQuery)) {
@@ -381,7 +405,7 @@ export class PluginManager {
 			}
 		}
 
-		return results;
+		return { results, failures };
 	}
 
 	async install(spec: string, options?: PluginInstallOptions): Promise<ConfiguredPlugin> {

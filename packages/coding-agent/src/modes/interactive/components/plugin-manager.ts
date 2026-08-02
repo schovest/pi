@@ -201,11 +201,18 @@ export class PluginManagerComponent extends Container implements Focusable {
 		this.statusMessage = "Searching plugin marketplaces...";
 		this.refresh();
 		try {
-			this.searchResults = await this.pluginManager.searchMarketplaces(query.trim() || undefined);
+			const { results, failures } = await this.pluginManager.searchMarketplaces(query.trim() || undefined);
+			this.searchResults = results;
 			this.selectedIndex = 0;
 			this.view = "searchResults";
-			this.statusMessage =
-				this.searchResults.length === 0 ? "No matching plugins found." : `${this.searchResults.length} plugin(s)`;
+			if (failures.length > 0) {
+				this.setStatus(
+					`Skipped ${failures.length} marketplace(s): ${failures.map((f) => f.marketplace).join(", ")}`,
+					true,
+				);
+			} else {
+				this.statusMessage = results.length === 0 ? "No matching plugins found." : `${results.length} plugin(s)`;
+			}
 		} catch (error) {
 			this.setStatus(error instanceof Error ? error.message : String(error), true);
 		} finally {

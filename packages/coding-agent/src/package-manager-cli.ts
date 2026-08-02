@@ -614,7 +614,10 @@ export async function handlePluginCommand(args: string[]): Promise<boolean> {
 				return true;
 			}
 
-			const results = await pluginManager.searchMarketplaces(positional[0], { marketplace });
+			const { results, failures } = await pluginManager.searchMarketplaces(positional[0], { marketplace });
+			for (const failure of failures) {
+				console.error(chalk.yellow(`Skipped plugin marketplace ${failure.marketplace}: ${failure.message}`));
+			}
 			if (results.length === 0) {
 				console.log(chalk.dim("No matching plugins found."));
 				return true;
@@ -809,7 +812,10 @@ export async function handleCodexPluginCommand(args: string[]): Promise<boolean>
 				return true;
 			}
 
-			const results = await codexPluginManager.searchMarketplaces(positional[0], { marketplace });
+			const { results, failures } = await codexPluginManager.searchMarketplaces(positional[0], { marketplace });
+			for (const failure of failures) {
+				console.error(chalk.yellow(`Skipped codex plugin marketplace ${failure.marketplace}: ${failure.message}`));
+			}
 			if (results.length === 0) {
 				console.log(chalk.dim("No matching codex plugins found."));
 				return true;
