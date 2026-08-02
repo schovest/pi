@@ -1,13 +1,15 @@
-import { Text } from "@schovest/pi-tui";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import { Container, Markdown, Text, TruncatedText } from "@schovest/pi-tui";
 import { minimatch } from "minimatch";
 import { Type } from "typebox";
+import { DynamicBorder } from "../../modes/interactive/components/dynamic-border.ts";
 import { statusColor } from "../../modes/interactive/components/subagent-details.ts";
-import { theme } from "../../modes/interactive/theme/theme.ts";
+import { getMarkdownTheme, theme } from "../../modes/interactive/theme/theme.ts";
 import type { AgentSession } from "../agent-session.ts";
 import { defineTool } from "../extensions/types.ts";
 import type { Skill } from "../skills.ts";
 import { discoverSubagentsSync } from "./discovery.ts";
-import type { SubagentDefinition, SubagentRunEvent, SubagentRunResult } from "./types.ts";
+import type { SubagentDefinition, SubagentRunEvent, SubagentRunResult, SubagentTaskResult } from "./types.ts";
 
 const ThinkingSchema = Type.Union([
 	Type.Literal("off"),
@@ -93,36 +95,32 @@ function formatToolArgs(toolName: string, argsJson: string | undefined): string 
 		const args: Record<string, unknown> = JSON.parse(argsJson);
 		switch (toolName) {
 			case "bash":
-				return typeof args.command === "string" ? truncate(args.command, 80) : truncate(argsJson, 80);
+				return typeof args.command === "string" ? args.command : argsJson;
 			case "read":
-				return truncate(String(args.file_path ?? args.path ?? argsJson), 80);
+				return String(args.file_path ?? args.path ?? argsJson);
 			case "edit":
-				return truncate(String(args.path ?? args.file_path ?? argsJson), 80);
+				return String(args.path ?? args.file_path ?? argsJson);
 			case "write":
-				return truncate(String(args.path ?? args.file_path ?? argsJson), 80);
+				return String(args.path ?? args.file_path ?? argsJson);
 			case "ls":
-				return truncate(String(args.path ?? args.dir ?? "."), 80);
+				return String(args.path ?? args.dir ?? ".");
 			case "grep": {
 				const pattern = String(args.pattern ?? "");
 				const searchPath = args.path ? ` in ${args.path}` : "";
 				const include = args.glob ? ` (${args.glob})` : "";
-				return truncate(`/${pattern}/${searchPath}${include}`, 80);
+				return `/${pattern}/${searchPath}${include}`;
 			}
 			case "find": {
 				const pattern = String(args.pattern ?? args.glob ?? "");
 				const searchPath = args.path ? ` in ${args.path}` : "";
-				return truncate(`${pattern}${searchPath}`, 80);
+				return `${pattern}${searchPath}`;
 			}
 			default:
-				return truncate(argsJson, 80);
+				return argsJson;
 		}
 	} catch {
-		return truncate(argsJson, 80);
+		return argsJson;
 	}
-}
-
-function truncate(text: string, maxLength: number): string {
-	return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
 }
 
 function displayTitle(item: { title?: string; task: string }): string {
@@ -133,15 +131,12 @@ function toolCallCount(events: SubagentRunEvent[]): number {
 	return events.filter((e) => e.currentTool && e.currentToolArgs).length;
 }
 
-function recentToolCalls(events: SubagentRunEvent[], max: number): string {
+function recentToolCallLines(events: SubagentRunEvent[], max: number): string[] {
 	const toolEvents = events.filter((e) => e.currentTool && e.currentToolArgs);
-	return toolEvents
-		.slice(-max)
-		.map((e) => {
-			const args = formatToolArgs(e.currentTool!, e.currentToolArgs);
-			return `> ${e.currentTool}${args ? ` ${args}` : ""}`;
-		})
-		.join("\n");
+	return toolEvents.slice(-max).map((e) => {
+		const args = formatToolArgs(e.currentTool!, e.currentToolArgs);
+		return `> ${e.currentTool}${args ? ` ${args}` : ""}`;
+	});
 }
 
 /**
@@ -165,7 +160,7 @@ function coloredHeading(parts: {
 	if (parts.totalTokens !== undefined) metaBits.push(`tokens=${parts.totalTokens}`);
 	metaBits.push(`tools=${parts.toolCount}`);
 	return (
-		`${parts.index + 1}.` +
+		`🚀 ${parts.index + 1}.` +
 		theme.fg("accent", `(${parts.agent})`) +
 		` ${parts.title}: ` +
 		theme.fg(statusColor(parts.status), parts.status) +
@@ -177,7 +172,7 @@ function resultText(result: SubagentRunResult): string {
 	return result.results
 		.map((item) => {
 			const heading = `${item.index + 1}.(${item.agent}) ${displayTitle(item)}: ${item.status} ${item.model ?? ""} thinking=${item.thinking ?? "default"}${item.usage ? ` tokens=${item.usage.totalTokens}` : ""} tools=${toolCallCount(item.events)}`;
-			const recent = recentToolCalls(item.events, 3);
+			const recent = recentToolCallLines(item.events, 3).join("\n");
 			const body = item.error ? `Error: ${item.error}` : item.output;
 			const parts = [heading];
 			if (recent) parts.push(recent);
@@ -187,57 +182,51 @@ function resultText(result: SubagentRunResult): string {
 		.join("\n\n");
 }
 
-function renderDetails(details: SubagentToolDetails | undefined, _expanded: boolean): string {
-	if (!details) {
-		return "";
+/** Extract non-empty assistant text blocks from a worker's messages, in order. */
+function workerAssistantTexts(messages: AgentMessage[]): string[] {
+	const texts: string[] = [];
+	for (const message of messages) {
+		if (message.role !== "assistant") continue;
+		for (const part of message.content) {
+			if (part.type === "text" && part.text.trim()) {
+				texts.push(part.text.trim());
+			}
+		}
 	}
-	if (details.result) {
-		const lines = details.result.results.map((result) => {
-			const base = coloredHeading({
-				index: result.index,
-				agent: result.agent,
-				title: displayTitle(result),
-				status: result.status,
-				model: result.model,
-				thinking: result.thinking,
-				totalTokens: result.usage?.totalTokens,
-				toolCount: toolCallCount(result.events),
-			});
-			const recent = recentToolCalls(result.events, 3);
-			const coloredRecent = recent ? theme.fg("muted", recent) : "";
-			const body = result.error
-				? theme.fg("error", `Error: ${result.error}`)
-				: result.output
-					? theme.fg("toolOutput", result.output)
-					: "";
-			const parts = [base];
-			if (coloredRecent) parts.push(coloredRecent);
-			if (body) parts.push(body);
-			return parts.join("\n");
-		});
-		return lines.join("\n\n");
-	}
+	return texts;
+}
+
+/** Colored heading line shared by completed and running tasks. */
+function taskHeading(item: SubagentTaskResult | SubagentRunEvent, events: SubagentRunEvent[]): string {
+	return coloredHeading({
+		index: item.index,
+		agent: item.agent,
+		title: displayTitle(item),
+		status: item.status,
+		model: item.model,
+		thinking: item.thinking,
+		totalTokens: item.usage?.totalTokens,
+		toolCount: toolCallCount(events),
+	});
+}
+
+/** Latest non-empty output summary from a task's events (running text preview). */
+function outputSummaryLine(itemEvents: SubagentRunEvent[]): string | undefined {
+	return itemEvents.reduce<string | undefined>((acc, e) => e.outputSummary ?? acc, undefined);
+}
+
+/** Running progress text for the tool's streaming content (one block per task). */
+function renderDetails(details: SubagentToolDetails | undefined): string {
+	if (!details) return "";
 	const latest = new Map<number, SubagentRunEvent>();
-	for (const event of details.events) {
-		latest.set(event.index, event);
-	}
+	for (const event of details.events) latest.set(event.index, event);
 	return Array.from(latest.values())
 		.sort((a, b) => a.index - b.index)
 		.map((event) => {
 			const itemEvents = details.events.filter((e) => e.index === event.index);
-			const base = coloredHeading({
-				index: event.index,
-				agent: event.agent,
-				title: displayTitle(event),
-				status: event.status,
-				model: event.model,
-				thinking: event.thinking,
-				toolCount: toolCallCount(itemEvents),
-			});
-			const recent = recentToolCalls(itemEvents, 3);
-			const coloredRecent = recent ? theme.fg("muted", recent) : "";
-			const parts = [base];
-			if (coloredRecent) parts.push(coloredRecent);
+			const parts = [taskHeading(event, itemEvents), ...recentToolCallLines(itemEvents, 3)];
+			const summary = outputSummaryLine(itemEvents);
+			if (summary) parts.push(summary);
 			return parts.join("\n");
 		})
 		.join("\n\n");
@@ -289,7 +278,7 @@ export function createSubagentToolDefinition(session: AgentSession) {
 					onEvent: (event, child) => {
 						details.events.push(event);
 						details.children.set(event.index, child);
-						onUpdate?.({ content: [{ type: "text", text: renderDetails(details, false) }], details });
+						onUpdate?.({ content: [{ type: "text", text: renderDetails(details) }], details });
 					},
 				},
 			);
@@ -306,12 +295,60 @@ export function createSubagentToolDefinition(session: AgentSession) {
 		},
 		renderResult: (result, options) => {
 			const details = result.details as SubagentToolDetails | undefined;
-			const lines = renderDetails(details, options.expanded);
-			const fallback = result.content
-				.filter((part) => part.type === "text")
-				.map((part) => part.text)
-				.join("\n");
-			return new Text(lines || theme.fg("toolOutput", fallback), 0, 0);
+			const container = new Container();
+			const mdTheme = getMarkdownTheme();
+
+			if (details?.result) {
+				// Completed: group each task's heading + tools + worker text together.
+				// Heading/tools/error use TruncatedText so long values clip to the
+				// viewport width instead of wrapping or using a fixed char limit.
+				for (let i = 0; i < details.result.results.length; i++) {
+					const taskResult = details.result.results[i];
+					container.addChild(new DynamicBorder());
+					container.addChild(new TruncatedText(taskHeading(taskResult, taskResult.events), 0, 0));
+					for (const line of recentToolCallLines(taskResult.events, 3)) {
+						container.addChild(new TruncatedText(theme.fg("muted", line), 0, 0));
+					}
+					// Worker assistant text: collapsed = last reply, expanded = full process
+					const texts = workerAssistantTexts(taskResult.messages);
+					const visible = options.expanded ? texts : texts.slice(-1);
+					for (const text of visible) {
+						container.addChild(new Markdown(text, 1, 0, mdTheme));
+					}
+					if (taskResult.error) {
+						container.addChild(new TruncatedText(theme.fg("error", taskResult.error), 0, 0));
+					}
+				}
+			} else if (details) {
+				// Running: group each task's heading + tools + output summary
+				const latest = new Map<number, SubagentRunEvent>();
+				for (const event of details.events) latest.set(event.index, event);
+				const events = Array.from(latest.values()).sort((a, b) => a.index - b.index);
+				for (let i = 0; i < events.length; i++) {
+					container.addChild(new DynamicBorder());
+					const event = events[i];
+					const itemEvents = details.events.filter((e) => e.index === event.index);
+					container.addChild(new TruncatedText(taskHeading(event, itemEvents), 0, 0));
+					for (const line of recentToolCallLines(itemEvents, 3)) {
+						container.addChild(new TruncatedText(theme.fg("muted", line), 0, 0));
+					}
+					const summary = outputSummaryLine(itemEvents);
+					if (summary) {
+						container.addChild(new TruncatedText(theme.fg("toolOutput", summary), 0, 0));
+					}
+				}
+			}
+
+			if (container.children.length === 0) {
+				const fallback = result.content
+					.filter((part) => part.type === "text")
+					.map((part) => part.text)
+					.join("\n");
+				if (fallback) {
+					container.addChild(new Text(theme.fg("toolOutput", fallback), 0, 0));
+				}
+			}
+			return container;
 		},
 	});
 }

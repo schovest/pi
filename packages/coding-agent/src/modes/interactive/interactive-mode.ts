@@ -3700,10 +3700,13 @@ export class InteractiveMode {
 		}
 		this.latestSubagentDetails = details;
 		this.subagentsPanelComponent?.updateSubagentDetails(details);
-		// Include historical entries when updating overlay
-		const historicalEntries = this.sessionManager.loadSubagentRunEntries();
-		const dataWithHistory: SubagentDetailsData = { ...details, historicalEntries };
-		this.subagentOverlayComponent?.update(dataWithHistory);
+		// Lazy: only load historical entries and refresh the overlay when it is
+		// actually open. Without this, every subagent result (including each one
+		// replayed during `pi --resume`) would rebuild the historical list.
+		if (this.subagentOverlayComponent) {
+			const historicalEntries = this.sessionManager.loadSubagentRunEntries();
+			this.subagentOverlayComponent.update({ ...details, historicalEntries });
+		}
 	}
 
 	private renderSubagentMessages(messages: AgentMessage[], container: Container, expanded: boolean): void {

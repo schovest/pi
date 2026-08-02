@@ -4,11 +4,15 @@
 
 ### Added
 
+- subagent 工具卡片主界面显示 worker assistant 文字（按 task 分组：每个 task 的 heading+工具+worker 文字紧邻，每个 task 头部用 `DynamicBorder` 整行横线分隔（含首个 task））：运行中显示 outputSummary 摘要，完成后折叠显示最后回复、展开显示完整 assistant 文字过程（Markdown 渲染，从 `SubagentTaskResult.messages` 提取）
+- subagent 卡片每个 task heading 序号前加 🚀 标识，多 task 时更易区分
 - Session resume 性能优化：`loadEntriesFromFile` 两阶段加载，compaction 前的 message 行懒加载为 `LazyEntry` 占位（`materialize` 按需读回），避免大 tool 输出行全量 parse 阻塞 resume
 - Compaction entry 新增 `cumulativeUsage` 字段（`appendCompaction` 写入截至 compaction 的全部 usage 累计）：resume 后 footer 以最后一个 compaction 的 `cumulativeUsage` 作基线累加其后条目，compaction 前被 lazy 占位跳过的大行用量不再缺失（`computeFooterUsage` 抽为可测纯函数，无 `cumulativeUsage` 时退化为线性累加）
 
 ### Changed
 
+- subagent 卡片工具行（heading/工具调用/输出摘要/错误）改用 `TruncatedText` 按窗口宽度截断，移除固定 80 字符截断：长命令/路径在窄终端单行 `…` 截断而非换行撑高卡片
+- `/running-subagents` 面板懒加载：`updateSubagentDetails` 只在 overlay 打开时 `loadSubagentRunEntries` 加载历史，`pi --resume` 遍历历史时不再为每个 subagent 结果重读历史（overlay/panel 未开时仅缓存 `latestSubagentDetails`）
 - 懒加载去 64KB 阈值（v3）：`loadEntriesFromFile` 对非 header/compaction 行一律 peek 元数据（不再按大小判断），compaction 前全部行（含小行）懒加载为 `LazyEntry` 占位；compaction 后 / 无 compaction 的行仍 full parse（零回归）。移除 `LAZY_ENTRY_THRESHOLD` 常量
 - 恢复 chatbox 渲染 `[compaction]` summary 块：`addMessageToChat` 渲染 compaction summary 消息，compaction 完成后向 chatbox 追加 `[compaction]` 摘要（summary 是当前上下文的总结，非 compaction 前原始消息；LLM 上下文不变）
 - tree materialize-on-view：tree 查看/复制/搜索 lazy 条目时经注入的 `materialize` 回调恢复完整内容（`[lazy message]` 占位仅在无回调时兜底），compaction 前历史可在 tree 中完整回顾
