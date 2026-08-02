@@ -2,14 +2,15 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+	DEFAULT_CLAUDE_MARKETPLACE,
 	PluginManager,
 	parsePluginInstallSpec,
 	readClaudePluginManifest,
 	readMarketplaceCatalog,
 } from "../src/core/claude-plugin-manager.ts";
-import { SettingsManager } from "../src/core/settings-manager.ts";
+import { type PluginMarketplaceSettings, SettingsManager } from "../src/core/settings-manager.ts";
 
 function writePlugin(root: string, options?: { mcp?: boolean; unsupported?: boolean }): void {
 	const claudePluginRoot = "${" + "CLAUDE_PLUGIN_ROOT}";
@@ -121,6 +122,17 @@ describe("Claude PluginManager", () => {
 		for (const marketplaceRoot of [firstMarketplace, secondMarketplace]) {
 			mkdirSync(join(marketplaceRoot, ".claude-plugin"), { recursive: true });
 		}
+		// Stub the default marketplace clone to a local empty catalog to avoid network.
+		const emptyMarketplace = join(tempDir, "empty-marketplace");
+		mkdirSync(join(emptyMarketplace, ".claude-plugin"), { recursive: true });
+		writeFileSync(join(emptyMarketplace, ".claude-plugin", "marketplace.json"), JSON.stringify({ plugins: [] }));
+		const managerPrivate = manager as unknown as {
+			prepareMarketplaceRoot(name: string, marketplace: PluginMarketplaceSettings): Promise<string>;
+		};
+		const originalPrepare = managerPrivate.prepareMarketplaceRoot.bind(manager);
+		vi.spyOn(managerPrivate, "prepareMarketplaceRoot").mockImplementation((name, marketplace) =>
+			name === "claude-plugins-official" ? Promise.resolve(emptyMarketplace) : originalPrepare(name, marketplace),
+		);
 		writeFileSync(
 			join(firstMarketplace, ".claude-plugin", "marketplace.json"),
 			JSON.stringify({
@@ -159,6 +171,17 @@ describe("Claude PluginManager", () => {
 	it("returns all catalog entries when marketplace search has no query", async () => {
 		const marketplaceRoot = join(tempDir, "marketplace");
 		mkdirSync(join(marketplaceRoot, ".claude-plugin"), { recursive: true });
+		// Stub the default marketplace clone to a local empty catalog to avoid network.
+		const emptyMarketplace = join(tempDir, "empty-marketplace");
+		mkdirSync(join(emptyMarketplace, ".claude-plugin"), { recursive: true });
+		writeFileSync(join(emptyMarketplace, ".claude-plugin", "marketplace.json"), JSON.stringify({ plugins: [] }));
+		const managerPrivate = manager as unknown as {
+			prepareMarketplaceRoot(name: string, marketplace: PluginMarketplaceSettings): Promise<string>;
+		};
+		const originalPrepare = managerPrivate.prepareMarketplaceRoot.bind(manager);
+		vi.spyOn(managerPrivate, "prepareMarketplaceRoot").mockImplementation((name, marketplace) =>
+			name === "claude-plugins-official" ? Promise.resolve(emptyMarketplace) : originalPrepare(name, marketplace),
+		);
 		writeFileSync(
 			join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
 			JSON.stringify({
@@ -180,6 +203,17 @@ describe("Claude PluginManager", () => {
 		const pluginRoot = join(tempDir, "plugin");
 		writePlugin(pluginRoot);
 		mkdirSync(join(marketplaceRoot, ".claude-plugin"), { recursive: true });
+		// Stub the default marketplace clone to a local empty catalog to avoid network.
+		const emptyMarketplace = join(tempDir, "empty-marketplace");
+		mkdirSync(join(emptyMarketplace, ".claude-plugin"), { recursive: true });
+		writeFileSync(join(emptyMarketplace, ".claude-plugin", "marketplace.json"), JSON.stringify({ plugins: [] }));
+		const managerPrivate = manager as unknown as {
+			prepareMarketplaceRoot(name: string, marketplace: PluginMarketplaceSettings): Promise<string>;
+		};
+		const originalPrepare = managerPrivate.prepareMarketplaceRoot.bind(manager);
+		vi.spyOn(managerPrivate, "prepareMarketplaceRoot").mockImplementation((name, marketplace) =>
+			name === "claude-plugins-official" ? Promise.resolve(emptyMarketplace) : originalPrepare(name, marketplace),
+		);
 		writeFileSync(
 			join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
 			JSON.stringify({
@@ -285,5 +319,82 @@ describe("Claude PluginManager", () => {
 		};
 		expect(removed).toBe(true);
 		expect(raw.mcpServers["superpowers-chrome-chrome"]).toBeUndefined();
+	});
+
+	it("lists the built-in claude-plugins-official default marketplace when none are configured", () => {
+		expect(DEFAULT_CLAUDE_MARKETPLACE["claude-plugins-official"]).toEqual({
+			source: "https://github.com/anthropics/claude-plugins-official",
+		});
+		expect(manager.listMarketplaces()).toEqual([
+			{ name: "claude-plugins-official", source: DEFAULT_CLAUDE_MARKETPLACE["claude-plugins-official"]!.source },
+		]);
+	});
+
+	it("merges user-configured marketplaces with the default, user wins on name collision", async () => {
+		const marketplaceRoot = join(tempDir, "mkt");
+		mkdirSync(join(marketplaceRoot, ".claude-plugin"), { recursive: true });
+		writeFileSync(
+			join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+			JSON.stringify({ plugins: [{ name: "p1", source: { url: "https://example.com/p1" } }] }),
+		);
+
+		manager.addMarketplace("claude-plugins-official", marketplaceRoot); // override the default source
+		manager.addMarketplace("team", marketplaceRoot);
+
+		const listed = manager.listMarketplaces();
+		expect(listed).toHaveLength(2);
+		expect(listed.find((m) => m.name === "claude-plugins-official")?.source).toBe(marketplaceRoot);
+
+		const results = await manager.searchMarketplaces();
+		expect(
+			results
+				.filter((r) => r.name === "p1")
+				.map((r) => r.marketplace)
+				.sort(),
+		).toEqual(["claude-plugins-official", "team"]);
+	});
+
+	it("searches the built-in claude-plugins-official marketplace without explicit configuration", async () => {
+		const marketplaceRoot = join(tempDir, "official-mkt");
+		mkdirSync(join(marketplaceRoot, ".claude-plugin"), { recursive: true });
+		writeFileSync(
+			join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+			JSON.stringify({ plugins: [{ name: "demo", source: { url: "https://example.com/demo" } }] }),
+		);
+		// The default source is a git URL; stub the clone step to read a local fixture catalog.
+		const rootSpy = vi.spyOn(
+			manager as unknown as {
+				prepareMarketplaceRoot(name: string, marketplace: PluginMarketplaceSettings): Promise<string>;
+			},
+			"prepareMarketplaceRoot",
+		);
+		rootSpy.mockResolvedValue(marketplaceRoot);
+
+		const results = await manager.searchMarketplaces("demo");
+		expect(results).toEqual([
+			expect.objectContaining({ name: "demo", marketplace: "claude-plugins-official", installed: false }),
+		]);
+	});
+
+	it("installs from the built-in claude-plugins-official marketplace without explicit configuration", async () => {
+		const pluginRoot = join(tempDir, "plugin-src");
+		writePlugin(pluginRoot);
+		const marketplaceRoot = join(tempDir, "official-mkt");
+		mkdirSync(join(marketplaceRoot, ".claude-plugin"), { recursive: true });
+		writeFileSync(
+			join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+			JSON.stringify({ plugins: [{ name: "demo", source: { url: pluginRoot } }] }),
+		);
+		const rootSpy = vi.spyOn(
+			manager as unknown as {
+				prepareMarketplaceRoot(name: string, marketplace: PluginMarketplaceSettings): Promise<string>;
+			},
+			"prepareMarketplaceRoot",
+		);
+		rootSpy.mockResolvedValue(marketplaceRoot);
+
+		const installed = await manager.install("demo@claude-plugins-official");
+		expect(installed.name).toBe("superpowers-chrome");
+		expect(installed.marketplace).toBe("claude-plugins-official");
 	});
 });

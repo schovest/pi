@@ -11,6 +11,7 @@
 - codex 插件兼容：resource-loader 集成——已启用 codex 插件的 skills 自动纳入技能资源解析（metadata `origin: "codex-plugin"`，诊断以 warning 合并进技能诊断），构造器内置注入 codex hooks 桥接 inline factory（随每次扩展加载/reload 注册，不依赖可选安装）
 - codex 插件兼容：交互式管理命令 `/codex-plugin`（斜杠命令打开插件管理器：搜索市场/安装/卸载/更新/市场管理，与 `/claude-plugin` 对称，组件 `CodexPluginManagerComponent`）
 - codex 插件兼容：内置默认市场源 `openai`（`https://github.com/openai/plugins`，OpenAI 官方 catalog），未配置市场时 `search`/`install <plugin>@openai` 直接可用；用户同名 `marketplace add` 覆盖默认、`marketplace remove` 仅移除自定义覆盖（内置默认不可删，`marketplace list` 带 `(default)` 标记）；`readCodexMarketplaceCatalog` 支持 `.agents/plugins/marketplace.json` 目录回退（适配官方仓库布局）
+- claude 插件兼容：内置默认市场源 `claude-plugins-official`（`https://github.com/anthropics/claude-plugins-official`，Anthropic 官方 catalog，catalog 在仓库 `.claude-plugin/marketplace.json` 与解析器直接匹配），未配置市场时 `search`/`install <plugin>@claude-plugins-official` 直接可用；用户同名 `marketplace add` 覆盖默认、`marketplace remove` 仅移除自定义覆盖（内置默认不可删，`marketplace list` 带 `(default)` 标记）
 
 ### Changed
 

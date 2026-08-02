@@ -14,7 +14,7 @@ import {
 	type SelfUpdateCommand,
 	VERSION,
 } from "./config.ts";
-import { PluginManager } from "./core/claude-plugin-manager.ts";
+import { DEFAULT_CLAUDE_MARKETPLACE, PluginManager } from "./core/claude-plugin-manager.ts";
 import { CodexPluginManager, DEFAULT_CODEX_MARKETPLACE } from "./core/codex-plugin-manager.ts";
 import type { ExtensionFactory } from "./core/extensions/types.ts";
 import { DefaultPackageManager } from "./core/package-manager.ts";
@@ -547,8 +547,13 @@ export async function handlePluginCommand(args: string[]): Promise<boolean> {
 					console.log(chalk.dim("No plugin marketplaces configured."));
 					return true;
 				}
+				const userConfigured = settingsManager.getClaudePluginMarketplaces();
 				for (const marketplace of marketplaces) {
-					console.log(`${marketplace.name}  ${chalk.dim(marketplace.source)}`);
+					const isDefault =
+						marketplace.name in DEFAULT_CLAUDE_MARKETPLACE && !(marketplace.name in userConfigured);
+					console.log(
+						`${marketplace.name}  ${chalk.dim(marketplace.source)}${isDefault ? chalk.dim("  (default)") : ""}`,
+					);
 				}
 				return true;
 			}
@@ -556,7 +561,15 @@ export async function handlePluginCommand(args: string[]): Promise<boolean> {
 				const removed = pluginManager.removeMarketplace(name);
 				await settingsManager.flush();
 				if (!removed) {
-					console.error(chalk.red(`No matching plugin marketplace found for ${name}`));
+					if (name in DEFAULT_CLAUDE_MARKETPLACE) {
+						console.error(
+							chalk.red(
+								`${name} is a built-in default marketplace; only a custom ${name} override can be removed`,
+							),
+						);
+					} else {
+						console.error(chalk.red(`No matching plugin marketplace found for ${name}`));
+					}
 					process.exitCode = 1;
 				} else {
 					console.log(chalk.green(`Removed plugin marketplace ${name}`));

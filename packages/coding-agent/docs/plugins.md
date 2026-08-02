@@ -29,6 +29,8 @@ By default, plugin settings are written to `~/.pi/agent/settings.json` and plugi
 
 `pi claude-plugin search [query]` searches the catalogs from configured `claudePluginMarketplaces`. With no query it lists all catalog entries. Use `--marketplace <name>` or `-m <name>` to search one configured marketplace.
 
+- **默认市场源**：内置 Anthropic 官方市场 `claude-plugins-official`（`https://github.com/anthropics/claude-plugins-official`，catalog 位于仓库 `.claude-plugin/marketplace.json`），无需配置即可 `pi claude-plugin search --marketplace claude-plugins-official` 或 `pi claude-plugin install <plugin>@claude-plugins-official`；`marketplace list` 会以 `(default)` 标记内置源，用户 `marketplace add claude-plugins-official <other-url>` 可覆盖默认源，`marketplace remove claude-plugins-official` 只移除自定义覆盖（内置默认不可删除）。
+
 In interactive mode, `/claude-plugin` opens the plugin manager. It can search marketplace catalogs, install a selected plugin to user or project scope, list installed user/project plugins, update or remove installed plugins, and list/add/remove configured marketplaces. Marketplace add/remove writes user settings by default, matching the CLI behavior.
 
 ## Supported Claude Fields

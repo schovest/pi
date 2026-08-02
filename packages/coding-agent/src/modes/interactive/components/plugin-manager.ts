@@ -1,5 +1,6 @@
 import { Container, type Focusable, getKeybindings, Input, Spacer, Text } from "@schovest/pi-tui";
 import type { ConfiguredPlugin, PluginManager, PluginSearchResult } from "../../../core/claude-plugin-manager.ts";
+import { DEFAULT_CLAUDE_MARKETPLACE } from "../../../core/claude-plugin-manager.ts";
 import type { SettingsManager } from "../../../core/settings-manager.ts";
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
@@ -322,6 +323,11 @@ export class PluginManagerComponent extends Container implements Focusable {
 			const removed = this.pluginManager.removeMarketplace(marketplace.name);
 			if (removed) {
 				await this.afterMutation(`Removed plugin marketplace ${marketplace.name}`);
+			} else if (marketplace.name in DEFAULT_CLAUDE_MARKETPLACE) {
+				this.setStatus(
+					`${marketplace.name} is a built-in default marketplace; only a custom override can be removed`,
+					true,
+				);
 			} else {
 				this.setStatus(`No matching plugin marketplace found for ${marketplace.name}`, true);
 			}

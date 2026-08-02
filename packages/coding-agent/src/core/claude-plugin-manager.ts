@@ -184,6 +184,17 @@ export function parsePluginInstallSpec(input: string): PluginInstallSpec {
 	return { type: "source", source: trimmed };
 }
 
+const DEFAULT_CLAUDE_MARKETPLACE_SOURCE = "https://github.com/anthropics/claude-plugins-official";
+
+/**
+ * Default Claude plugin marketplace (Anthropic official catalog:
+ * github.com/anthropics/claude-plugins-official). Merged lazily into user-configured
+ * marketplaces; a same-named user entry overrides it.
+ */
+export const DEFAULT_CLAUDE_MARKETPLACE: Record<string, PluginMarketplaceSettings> = {
+	"claude-plugins-official": { source: DEFAULT_CLAUDE_MARKETPLACE_SOURCE },
+};
+
 export function readMarketplaceCatalog(root: string): MarketplaceCatalog {
 	const path = join(root, ".claude-plugin", "marketplace.json");
 	const raw = readJsonObject(path);
@@ -324,15 +335,23 @@ export class PluginManager {
 		return true;
 	}
 
+	/**
+	 * Merged view of configured + default marketplaces. User-configured entries
+	 * win over the built-in default when names collide.
+	 */
+	private getAllMarketplaces(): Record<string, PluginMarketplaceSettings> {
+		return { ...DEFAULT_CLAUDE_MARKETPLACE, ...this.settingsManager.getClaudePluginMarketplaces() };
+	}
+
 	listMarketplaces(): Array<{ name: string; source: string }> {
-		return Object.entries(this.settingsManager.getClaudePluginMarketplaces()).map(([name, value]) => ({
+		return Object.entries(this.getAllMarketplaces()).map(([name, value]) => ({
 			name,
 			source: value.source,
 		}));
 	}
 
 	async searchMarketplaces(query?: string, options?: { marketplace?: string }): Promise<PluginSearchResult[]> {
-		const marketplaces = this.settingsManager.getClaudePluginMarketplaces();
+		const marketplaces = this.getAllMarketplaces();
 		const normalizedQuery = query?.trim().toLowerCase();
 		const installedPlugins = this.listConfiguredPlugins();
 		const results: PluginSearchResult[] = [];
@@ -498,7 +517,7 @@ export class PluginManager {
 		pluginName: string,
 		marketplaceName: string,
 	): Promise<{ url: string; ref?: string }> {
-		const marketplace = this.settingsManager.getClaudePluginMarketplaces()[marketplaceName];
+		const marketplace = this.getAllMarketplaces()[marketplaceName];
 		if (!marketplace) {
 			throw new Error(`Unknown plugin marketplace: ${marketplaceName}`);
 		}
