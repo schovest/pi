@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- codex 插件兼容：marketplace/manifest/hooks 解析层（`readCodexMarketplaceCatalog` / `readCodexPluginManifest` / `normalizeCodexHooks` / `normalizeCodexHookEventName` / `parseCodexInstallSpec`），支持新格式 `.codex-plugin/plugin.json` 与旧格式根 `plugin.json`，`CodexEventName` 新增 `turn_start`
+
 ## [0.13.0] - 2026-08-02
 
 ### Added

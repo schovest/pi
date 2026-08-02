@@ -103,6 +103,7 @@ export type CodexEventName =
 	| "post_compact"
 	| "subagent_start"
 	| "subagent_stop"
+	| "turn_start"
 	| "stop";
 
 export interface CodexHookHandlerSpec {
