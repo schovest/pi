@@ -54,7 +54,7 @@
 
 - 代码改动后运行 `npm run check`（完整输出，不 tail），修复所有 errors/warnings/infos
 - 文档或纯说明文件改动通常不需要跑 check
-- 不主动运行 `npm test` 或完整 vitest suite（可能触发 e2e 和真实 provider）
+- 完成测试命令 `npm test > /tmp/pi-test.txt`（不要直接控制台输出）
 - 修改测试文件后必须运行对应测试并迭代到通过
 - 临时脚本写到 `/tmp`，运行后删除
 
