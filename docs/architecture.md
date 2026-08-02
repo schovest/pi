@@ -118,6 +118,7 @@ AssistantMessageEventStream              ← ai/utils/event-stream.ts
 | Subagent | `~/.pi/agent/subagents/*.md` 或 `.pi/subagents/*.md` | `includedTools`/`excludedTools` + `skills` glob 模式 frontmatter | explorer, worker |
 | MCP 工具 | Claude-compatible 插件（写入 `mcp.json`） | `plugins` / `pluginMarketplaces` settings | 外部 MCP server |
 | Claude 兼容插件 | npm 包安装 | `plugins` / `pluginMarketplaces` settings | 社区插件 |
+| Codex 插件兼容 | `core/codex-plugin-manager.ts` + `dist-assets/extensions/codex-hooks.ts` | `codexPlugins` / `codexPluginMarketplaces` settings + `pi codex-plugin` CLI | `marketplace.json` / `.codex-plugin/plugin.json` / `hooks.json` |
 | 用户配置 | `~/.pi/agent/settings.json` | SettingsManager 读写 | API key、默认模型 |
 | 项目配置 | `.pi/settings.json` | SettingsManager 读写 | 项目级 mcpServers、model overrides、defaultPrimaryAgent |
 | 系统提示词 | `coding-agent/core/system-prompt.ts:buildSystemPrompt()` | 优先级：Primary Agent → SYSTEM.md → 默认 → APPEND_SYSTEM.md → 上下文文件 → Skills | `.pi/SYSTEM.md`、`APPEND_SYSTEM.md`、`--system-prompt` |

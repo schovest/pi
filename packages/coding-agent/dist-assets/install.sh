@@ -87,6 +87,7 @@ EXT_NAMES=(
 	"pi-plugin-manager"
 	"pi-lens"
 	"pi-hermes-memory"
+	"codex-hooks"
 )
 # shellcheck disable=SC2034 # used via nameref in run_menu
 EXT_DESCS=(
@@ -102,9 +103,10 @@ EXT_DESCS=(
 	"插件管理器"
 	"代码智能分析"
 	"持久记忆与学习循环"
+	"Codex 插件 hooks 桥接"
 )
 # shellcheck disable=SC2034 # used via nameref in run_menu
-EXT_DEFAULTS=(1 1 1 0 0 0 0 0 0 1 0 0)
+EXT_DEFAULTS=(1 1 1 0 0 0 0 0 0 1 0 0 1)
 # shellcheck disable=SC2034 # used via nameref in run_menu
 EXT_INSTALLS=(
 	"npm:@schovest/pi-mcp-adapter"
@@ -119,6 +121,7 @@ EXT_INSTALLS=(
 	"npm:pi-plugin-manager"
 	"npm:pi-lens"
 	"npm:pi-hermes-memory"
+	"file:codex-hooks.ts"
 )
 
 # Primary Agent definitions

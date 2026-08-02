@@ -9,6 +9,7 @@ export type { ResourceCollision, ResourceDiagnostic } from "./diagnostics.ts";
 
 import { canonicalizePath, isLocalPath, resolvePath } from "../utils/paths.ts";
 import { PluginManager } from "./claude-plugin-manager.ts";
+import { CodexPluginManager } from "./codex-plugin-manager.ts";
 import { createEventBus, type EventBus } from "./event-bus.ts";
 import {
 	clearExtensionCache,
@@ -164,6 +165,7 @@ export class DefaultResourceLoader implements ResourceLoader {
 	private eventBus: EventBus;
 	private packageManager: DefaultPackageManager;
 	private pluginManager: PluginManager;
+	private codexPluginManager: CodexPluginManager;
 	private additionalExtensionPaths: string[];
 	private additionalSkillPaths: string[];
 	private additionalPromptTemplatePaths: string[];
@@ -223,6 +225,11 @@ export class DefaultResourceLoader implements ResourceLoader {
 			settingsManager: this.settingsManager,
 		});
 		this.pluginManager = new PluginManager({
+			cwd: this.cwd,
+			agentDir: this.agentDir,
+			settingsManager: this.settingsManager,
+		});
+		this.codexPluginManager = new CodexPluginManager({
 			cwd: this.cwd,
 			agentDir: this.agentDir,
 			settingsManager: this.settingsManager,
@@ -388,6 +395,13 @@ export class DefaultResourceLoader implements ResourceLoader {
 			}
 		}
 
+		const codexResources = this.codexPluginManager.resolveEnabledPluginResources();
+		for (const entry of codexResources.skills) {
+			if (!metadataByPath.has(entry.path)) {
+				metadataByPath.set(entry.path, entry.metadata);
+			}
+		}
+
 		// Add CLI paths metadata
 		for (const r of cliExtensionPaths.extensions) {
 			if (!metadataByPath.has(r.path)) {
@@ -424,7 +438,12 @@ export class DefaultResourceLoader implements ResourceLoader {
 		const skillPaths = this.noSkills
 			? this.mergePaths(cliEnabledSkills, this.additionalSkillPaths)
 			: this.mergePaths(
-					[...cliEnabledSkills, ...enabledSkills, ...pluginResources.skills.map((entry) => entry.path)],
+					[
+						...cliEnabledSkills,
+						...enabledSkills,
+						...pluginResources.skills.map((entry) => entry.path),
+						...codexResources.skills.map((entry) => entry.path),
+					],
 					this.additionalSkillPaths,
 				);
 
@@ -432,6 +451,13 @@ export class DefaultResourceLoader implements ResourceLoader {
 		this.updateSkillsFromPaths(skillPaths, metadataByPath);
 		this.skillDiagnostics.push(
 			...pluginResources.diagnostics.map((diagnostic) => ({
+				type: "warning" as const,
+				message: diagnostic.message,
+				path: diagnostic.path,
+			})),
+		);
+		this.skillDiagnostics.push(
+			...codexResources.diagnostics.map((diagnostic) => ({
 				type: "warning" as const,
 				message: diagnostic.message,
 				path: diagnostic.path,
