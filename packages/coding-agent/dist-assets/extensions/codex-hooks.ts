@@ -235,6 +235,11 @@ export function runCodexHookCommand(
 		child.stderr?.on("data", (chunk) => {
 			stderr += chunk.toString("utf8");
 		});
+		// 流级 error 监听：子进程在读完 stdin 前退出（如 `sh -c 'exit 2'`）时，
+		// 写 stdin 或读 stdout/stderr 会触发 EPIPE；无监听器会以未捕获异常崩溃整个进程。
+		child.stdin?.on("error", () => {});
+		child.stdout?.on("error", () => {});
+		child.stderr?.on("error", () => {});
 
 		let settled = false;
 		const timer = setTimeout(() => {
@@ -295,8 +300,14 @@ interface CollectedHookHandler {
 	handler: CodexHookHandlerSpec;
 }
 
-/** 插件 source 为绝对本地路径时作为 pluginRoot，否则跳过（git/npm 等来源不可直接执行）。 */
+/**
+ * 插件根目录：优先 settings 中物化时持久化的 installedPath（git/npm 来源的存储副本），
+ * 回退到 source 为绝对本地路径时直接使用；两者都不可用时跳过该插件。
+ */
 function resolvePluginRoot(plugin: InstalledCodexPluginSettings): string | undefined {
+	if (plugin.installedPath !== undefined && existsSync(plugin.installedPath)) {
+		return plugin.installedPath;
+	}
 	if (isAbsolute(plugin.source) && existsSync(plugin.source)) {
 		return plugin.source;
 	}

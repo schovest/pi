@@ -81,6 +81,18 @@ describe("codex hooks extension primitives", () => {
 		expect(result.reason).toBe("no way");
 	});
 
+	it("fast-exiting sh hook (command 'exit 2') does not crash on stdin EPIPE", async () => {
+		// C1 回归：`sh -c 'exit 2'` 在读 stdin 前就退出，大 payload 写 stdin 必然触发 EPIPE。
+		// 修复前未捕获的 EPIPE 会崩溃整个进程；修复后正常返回 block。
+		const result = await runCodexHookCommand(
+			{ type: "command", command: "exit 2" },
+			{ hook_event_name: "PreToolUse", payload: "x".repeat(1024 * 1024) },
+			{ pluginRoot: tempDir, pluginData: join(tempDir, "data"), cwd, timeoutFallback: 10 },
+		);
+		expect(result.blocked).toBe(true);
+		expect(result.reason).toBe("blocked by codex hook");
+	});
+
 	it("registers Pi event handlers for all mapped codex events", () => {
 		const registered: string[] = [];
 		const registeredCommands: Array<{ name: string; description?: string }> = [];
@@ -124,5 +136,184 @@ describe("codex hooks extension primitives", () => {
 			expect(registered).toContain(expected);
 		}
 		expect(registeredCommands.map((c) => c.name)).toContain("codex:legacy:review");
+	});
+
+	describe("event mapping behavior", () => {
+		const writeScript = (name: string, body: string): string => {
+			const script = join(tempDir, name);
+			writeFileSync(script, body);
+			return script;
+		};
+
+		const writePlugins = (settings: Record<string, unknown>): void => {
+			writeFileSync(join(agentDir, "settings.json"), JSON.stringify(settings));
+		};
+
+		const makeFakePi = (handlers: Map<string, (event: unknown, ctx: unknown) => unknown>) => ({
+			on: (event: string, handler: (event: unknown, ctx: unknown) => unknown) => {
+				handlers.set(event, handler);
+			},
+			registerCommand: () => {},
+			sendUserMessage: () => {},
+		});
+
+		const makeFakeCtx = () => ({
+			cwd,
+			sessionManager: { getSessionId: () => "sess-1" },
+			model: { id: "test-model" },
+			ui: { notify: () => {} },
+			getSystemPrompt: () => "BASE_SYSTEM_PROMPT",
+		});
+
+		it("tool_call handler blocks on pre_tool_use deny with reason", async () => {
+			const denyScript = writeScript("deny-hook.js", "process.stderr.write('tool not allowed');process.exit(2);");
+			writePlugins({
+				codexPlugins: [
+					{
+						name: "guard",
+						source: tempDir,
+						enabled: true,
+						hooks: {
+							pre_tool_use: [
+								{
+									matcher: "^Bash$",
+									handlers: [{ type: "command", command: process.execPath, args: [denyScript] }],
+								},
+							],
+						},
+					},
+				],
+			});
+			const handlers = new Map<string, (event: unknown, ctx: unknown) => unknown>();
+			createCodexHooksHandlers(makeFakePi(handlers) as never, { agentDir });
+			const toolCall = handlers.get("tool_call");
+			expect(toolCall).toBeDefined();
+
+			const event = { toolName: "Bash", input: { original: true } };
+			const result = await toolCall!(event, makeFakeCtx());
+			expect(result).toEqual({ block: true, reason: "tool not allowed" });
+			expect(event.input).toEqual({ original: true });
+		});
+
+		it("tool_call handler rewrites event.input in place from updatedInput", async () => {
+			const updateScript = writeScript(
+				"update-hook.js",
+				"let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{process.stdout.write(JSON.stringify({updatedInput:{injected:'yes'}}));});",
+			);
+			writePlugins({
+				codexPlugins: [
+					{
+						name: "editor",
+						source: tempDir,
+						enabled: true,
+						hooks: {
+							pre_tool_use: [
+								{ handlers: [{ type: "command", command: process.execPath, args: [updateScript] }] },
+							],
+						},
+					},
+				],
+			});
+			const handlers = new Map<string, (event: unknown, ctx: unknown) => unknown>();
+			createCodexHooksHandlers(makeFakePi(handlers) as never, { agentDir });
+			const toolCall = handlers.get("tool_call");
+			expect(toolCall).toBeDefined();
+
+			const event = { toolName: "Bash", input: { original: true } };
+			const result = await toolCall!(event, makeFakeCtx());
+			expect(result).toBeUndefined();
+			expect(event.input).toEqual({ original: true, injected: "yes" });
+		});
+
+		it("input handler returns handled when user_prompt_submit blocks", async () => {
+			const blockScript = writeScript("block-prompt.js", "process.stderr.write('prompt rejected');process.exit(2);");
+			writePlugins({
+				codexPlugins: [
+					{
+						name: "filter",
+						source: tempDir,
+						enabled: true,
+						hooks: {
+							user_prompt_submit: [
+								{ handlers: [{ type: "command", command: process.execPath, args: [blockScript] }] },
+							],
+						},
+					},
+				],
+			});
+			const handlers = new Map<string, (event: unknown, ctx: unknown) => unknown>();
+			createCodexHooksHandlers(makeFakePi(handlers) as never, { agentDir });
+			const inputHandler = handlers.get("input");
+			expect(inputHandler).toBeDefined();
+
+			const result = await inputHandler!({ text: "do the thing" }, makeFakeCtx());
+			expect(result).toEqual({ action: "handled" });
+		});
+
+		it("before_agent_start injects pendingContext and clears the queue", async () => {
+			const contextScript = writeScript(
+				"context-hook.js",
+				"let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{process.stdout.write(JSON.stringify({additionalContext:'injected context'}));});",
+			);
+			writePlugins({
+				codexPlugins: [
+					{
+						name: "ctx",
+						source: tempDir,
+						enabled: true,
+						hooks: {
+							session_start: [
+								{ handlers: [{ type: "command", command: process.execPath, args: [contextScript] }] },
+							],
+						},
+					},
+				],
+			});
+			const handlers = new Map<string, (event: unknown, ctx: unknown) => unknown>();
+			createCodexHooksHandlers(makeFakePi(handlers) as never, { agentDir });
+			const sessionStart = handlers.get("session_start");
+			const beforeAgentStart = handlers.get("before_agent_start");
+			expect(sessionStart).toBeDefined();
+			expect(beforeAgentStart).toBeDefined();
+
+			await sessionStart!({ reason: "startup" }, makeFakeCtx());
+			const injected = await beforeAgentStart!({}, makeFakeCtx());
+			expect(injected).toEqual({ systemPrompt: "BASE_SYSTEM_PROMPT\n\ninjected context" });
+			// 队列已清空：再次触发不再注入
+			const second = await beforeAgentStart!({}, makeFakeCtx());
+			expect(second).toBeUndefined();
+		});
+
+		it("runs hooks for non-local source plugins via installedPath with PLUGIN_ROOT env", async () => {
+			const envScript = writeScript(
+				"env-hook.js",
+				"let d='';process.stdin.on('data',c=>d+=c);process.stdin.on('end',()=>{process.stdout.write(JSON.stringify({additionalContext:'root='+process.env.PLUGIN_ROOT}));});",
+			);
+			writePlugins({
+				codexPlugins: [
+					{
+						name: "remote",
+						source: "https://github.com/example/remote-plugin.git",
+						enabled: true,
+						installedPath: tempDir,
+						hooks: {
+							user_prompt_submit: [
+								{ handlers: [{ type: "command", command: process.execPath, args: [envScript] }] },
+							],
+						},
+					},
+				],
+			});
+			const handlers = new Map<string, (event: unknown, ctx: unknown) => unknown>();
+			createCodexHooksHandlers(makeFakePi(handlers) as never, { agentDir });
+			const inputHandler = handlers.get("input");
+			const beforeAgentStart = handlers.get("before_agent_start");
+			expect(inputHandler).toBeDefined();
+			expect(beforeAgentStart).toBeDefined();
+
+			await inputHandler!({ text: "hi" }, makeFakeCtx());
+			const injected = await beforeAgentStart!({}, makeFakeCtx());
+			expect(injected).toEqual({ systemPrompt: `BASE_SYSTEM_PROMPT\n\nroot=${tempDir}` });
+		});
 	});
 });

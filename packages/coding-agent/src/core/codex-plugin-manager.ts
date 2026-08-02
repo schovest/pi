@@ -552,6 +552,7 @@ export class CodexPluginManager {
 			...(parsed.type === "marketplace" ? { marketplace: parsed.marketplace } : {}),
 			...(source.kind === "git" && source.ref ? { ref: source.ref } : {}),
 			...(source.kind === "git" && source.path ? { path: source.path } : {}),
+			installedPath: pluginRoot,
 			hooks: materializeHooks(manifest.hooks, pluginRoot, dataDir),
 			commands: materializeCommands(manifest.commands, pluginRoot),
 		};
@@ -610,6 +611,7 @@ export class CodexPluginManager {
 				...(plugin.marketplace ? { marketplace: plugin.marketplace } : {}),
 				...(plugin.ref ? { ref: plugin.ref } : {}),
 				...(plugin.path ? { path: plugin.path } : {}),
+				installedPath: pluginRoot,
 				hooks: materializeHooks(manifest.hooks, pluginRoot, dataDir),
 				commands: materializeCommands(manifest.commands, pluginRoot),
 			};

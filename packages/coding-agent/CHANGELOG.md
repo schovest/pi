@@ -12,6 +12,8 @@
 ### Fixed
 
 - codex 插件兼容：npm 来源安装修复（`npm pack` 加 `--ignore-scripts` 不跑 lifecycle，`tar -xzf` 在临时目录 cwd 内解包）；git-subdir 来源插件的子目录 `path` 持久化到 settings（`InstalledCodexPluginSettings` 新增 `path` 字段），`update()` 可恢复子目录重新物化
+- codex 插件兼容：hooks 子进程 stdin/stdout/stderr 流挂 error 监听，快速退出的 hook（如 `sh -c 'exit 2'`）写 stdin 触发 EPIPE 不再崩溃整个进程
+- codex 插件兼容：`InstalledCodexPluginSettings` 新增 `installedPath` 字段（install/update 时持久化物化根目录），git/npm 来源插件的 hooks 执行时可定位插件根并注入 `PLUGIN_ROOT` env（此前仅本地绝对路径 source 生效）
 
 ## [0.13.0] - 2026-08-02
 
