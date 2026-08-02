@@ -1,7 +1,26 @@
-import { existsSync, readFileSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { execFile } from "node:child_process";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { basename, dirname, join, resolve, sep } from "node:path";
+import { promisify } from "node:util";
+import { CONFIG_DIR_NAME } from "../config.ts";
+import { type GitSource, parseGitUrl } from "../utils/git.ts";
+import { resolvePath } from "../utils/paths.ts";
 import type { PluginDiagnostic } from "./claude-plugin-manager.ts";
-import type { CodexEventName, CodexHookGroupSpec, CodexHookHandlerSpec, CodexHooksSpec } from "./settings-manager.ts";
+import type { PathMetadata } from "./package-manager.ts";
+import type {
+	CodexEventName,
+	CodexHookGroupSpec,
+	CodexHookHandlerSpec,
+	CodexHooksSpec,
+	CodexPluginCommandSpec,
+	InstalledCodexPluginSettings,
+	PluginMarketplaceSettings,
+	SettingsManager,
+	SettingsScope,
+} from "./settings-manager.ts";
+
+const execFileAsync = promisify(execFile);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -319,4 +338,617 @@ export function parseCodexInstallSpec(
 	const match = trimmed.match(/^([^@\s/]+)@([^@\s/]+)$/);
 	if (match) return { type: "marketplace", name: match[1] ?? "", marketplace: match[2] ?? "" };
 	return { type: "source", source: trimmed };
+}
+
+export interface ConfiguredCodexPlugin extends InstalledCodexPluginSettings {
+	enabled: boolean;
+	scope: Exclude<SettingsScope, "global"> | "user";
+	installedPath?: string;
+}
+
+export interface CodexPluginSearchResult {
+	name: string;
+	marketplace: string;
+	source: string;
+	installed: boolean;
+}
+
+export interface CodexPluginResources {
+	skills: Array<{ path: string; metadata: PathMetadata }>;
+	diagnostics: PluginDiagnostic[];
+}
+
+interface CodexPluginManagerOptions {
+	cwd: string;
+	agentDir: string;
+	settingsManager: SettingsManager;
+}
+
+function readRawConfigObject(filePath: string): Record<string, unknown> {
+	if (!existsSync(filePath)) {
+		return {};
+	}
+	try {
+		return readJsonObject(filePath);
+	} catch {
+		return {};
+	}
+}
+
+function writeRawConfigObject(filePath: string, raw: Record<string, unknown>): void {
+	mkdirSync(dirname(filePath), { recursive: true });
+	writeFileSync(filePath, `${JSON.stringify(raw, null, 2)}\n`, "utf-8");
+}
+
+function getServersObject(raw: Record<string, unknown>): Record<string, unknown> {
+	const servers = raw.mcpServers;
+	return isRecord(servers) ? servers : {};
+}
+
+function replacePluginRootVars(value: string, root: string): string {
+	return value.replace(/\$\{PLUGIN_ROOT\}/g, root).replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, root);
+}
+
+function replaceCodexVars(value: string, root: string, dataDir: string): string {
+	return replacePluginRootVars(value, root)
+		.replace(/\$\{PLUGIN_DATA\}/g, dataDir)
+		.replace(/\$\{CLAUDE_PLUGIN_DATA\}/g, dataDir);
+}
+
+function materializeHooks(hooks: CodexHooksSpec, pluginRoot: string, dataDir: string): CodexHooksSpec {
+	const result: CodexHooksSpec = {};
+	for (const [event, groups] of Object.entries(hooks)) {
+		if (groups === undefined) {
+			continue;
+		}
+		result[event as CodexEventName] = groups.map((group) => ({
+			...(group.matcher ? { matcher: group.matcher } : {}),
+			handlers: group.handlers.map((handler) => ({
+				...handler,
+				command: replaceCodexVars(handler.command, pluginRoot, dataDir),
+				...(handler.args !== undefined
+					? { args: handler.args.map((arg) => replaceCodexVars(arg, pluginRoot, dataDir)) }
+					: {}),
+			})),
+		}));
+	}
+	return result;
+}
+
+function materializeCommands(commands: CodexPluginCommand[], pluginRoot: string): CodexPluginCommandSpec[] {
+	return commands.map((command) => {
+		const entry: CodexPluginCommandSpec = {
+			name: command.name,
+			command: replacePluginRootVars(command.command, pluginRoot),
+		};
+		if (command.description !== undefined) {
+			entry.description = command.description;
+		}
+		if (command.args !== undefined) {
+			entry.args = command.args.map((arg) => replacePluginRootVars(arg, pluginRoot));
+		}
+		if (command.env !== undefined) {
+			entry.env = Object.fromEntries(
+				Object.entries(command.env).map(([key, value]) => [key, replacePluginRootVars(value, pluginRoot)]),
+			);
+		}
+		return entry;
+	});
+}
+
+function convertCodexMcpServer(server: CodexMcpServer, root: string): CodexMcpServer {
+	return {
+		...server,
+		...(server.command ? { command: replacePluginRootVars(server.command, root) } : {}),
+		...(server.args ? { args: server.args.map((arg) => replacePluginRootVars(arg, root)) } : {}),
+		...(server.env
+			? {
+					env: Object.fromEntries(
+						Object.entries(server.env).map(([key, value]) => [key, replacePluginRootVars(value, root)]),
+					),
+				}
+			: {}),
+	};
+}
+
+function isInside(target: string, root: string): boolean {
+	const resolvedTarget = resolve(target);
+	const resolvedRoot = resolve(root);
+	return resolvedTarget === resolvedRoot || resolvedTarget.startsWith(`${resolvedRoot}${sep}`);
+}
+
+/**
+ * Manage Codex-compatible plugins: marketplace aliases, installation (local/git/npm),
+ * hooks/commands materialization, MCP server registration and skill path resolution.
+ */
+export class CodexPluginManager {
+	private cwd: string;
+	private agentDir: string;
+	private settingsManager: SettingsManager;
+
+	constructor(options: CodexPluginManagerOptions) {
+		this.cwd = resolvePath(options.cwd);
+		this.agentDir = resolvePath(options.agentDir);
+		this.settingsManager = options.settingsManager;
+	}
+
+	addMarketplace(name: string, source: string): void {
+		const marketplaces = this.settingsManager.getCodexPluginMarketplaces();
+		marketplaces[name] = { source };
+		this.settingsManager.setCodexPluginMarketplaces(marketplaces);
+	}
+
+	removeMarketplace(name: string): boolean {
+		const marketplaces = this.settingsManager.getCodexPluginMarketplaces();
+		if (!marketplaces[name]) {
+			return false;
+		}
+		delete marketplaces[name];
+		this.settingsManager.setCodexPluginMarketplaces(marketplaces);
+		return true;
+	}
+
+	listMarketplaces(): Array<{ name: string; source: string }> {
+		return Object.entries(this.settingsManager.getCodexPluginMarketplaces()).map(([name, value]) => ({
+			name,
+			source: value.source,
+		}));
+	}
+
+	async searchMarketplaces(query?: string, options?: { marketplace?: string }): Promise<CodexPluginSearchResult[]> {
+		const marketplaces = this.settingsManager.getCodexPluginMarketplaces();
+		const normalizedQuery = query?.trim().toLowerCase();
+		const installedPlugins = this.listConfiguredPlugins();
+		const results: CodexPluginSearchResult[] = [];
+
+		for (const [marketplaceName, marketplace] of Object.entries(marketplaces)) {
+			if (options?.marketplace && marketplaceName !== options.marketplace) {
+				continue;
+			}
+			const marketplaceRoot = await this.prepareMarketplaceRoot(marketplaceName, marketplace);
+			const catalog = readCodexMarketplaceCatalog(marketplaceRoot);
+			for (const entry of catalog.plugins) {
+				const sourceDescription = this.describeSource(entry.source, marketplaceRoot);
+				const haystack = [entry.name, sourceDescription, marketplaceName].join(" ").toLowerCase();
+				if (normalizedQuery && !haystack.includes(normalizedQuery)) {
+					continue;
+				}
+				results.push({
+					name: entry.name,
+					marketplace: marketplaceName,
+					source: sourceDescription,
+					installed: installedPlugins.some(
+						(plugin) =>
+							(plugin.marketplace === marketplaceName && plugin.name === entry.name) ||
+							plugin.source === sourceDescription,
+					),
+				});
+			}
+		}
+
+		return results;
+	}
+
+	async install(spec: string, options?: { local?: boolean }): Promise<ConfiguredCodexPlugin> {
+		const parsed = parseCodexInstallSpec(spec);
+		let source: CodexPluginSource;
+		let marketplaceRoot: string | undefined;
+		if (parsed.type === "marketplace") {
+			const resolved = await this.resolveMarketplaceSource(parsed.name, parsed.marketplace);
+			source = resolved.source;
+			marketplaceRoot = resolved.marketplaceRoot;
+		} else {
+			source = this.parseBareSource(parsed.source);
+		}
+		const requestedName = parsed.type === "marketplace" ? parsed.name : undefined;
+		const scope: SettingsScope = options?.local ? "project" : "global";
+		const pluginRoot = await this.preparePluginRoot(source, scope, requestedName, marketplaceRoot);
+		const manifest = readCodexPluginManifest(pluginRoot);
+		const dataDir = join(this.agentDir, "codex-plugin-data", manifest.name);
+		const settingsEntry: InstalledCodexPluginSettings = {
+			name: manifest.name,
+			source: this.describeSource(source, marketplaceRoot),
+			enabled: true,
+			...(parsed.type === "marketplace" ? { marketplace: parsed.marketplace } : {}),
+			...(source.kind === "git" && source.ref ? { ref: source.ref } : {}),
+			hooks: materializeHooks(manifest.hooks, pluginRoot, dataDir),
+			commands: materializeCommands(manifest.commands, pluginRoot),
+		};
+		this.writeMcpServers(manifest, scope);
+		this.upsertCodexPluginSettings(settingsEntry, options);
+		return {
+			...settingsEntry,
+			enabled: true,
+			scope: options?.local ? "project" : "user",
+			installedPath: pluginRoot,
+		};
+	}
+
+	listConfiguredPlugins(): ConfiguredCodexPlugin[] {
+		const plugins: ConfiguredCodexPlugin[] = [];
+		for (const plugin of this.settingsManager.getCodexPlugins()) {
+			plugins.push({
+				...plugin,
+				enabled: plugin.enabled !== false,
+				scope: "user",
+				installedPath: this.getInstalledPluginPath(plugin, "user"),
+			});
+		}
+		for (const plugin of this.settingsManager.getProjectCodexPlugins()) {
+			plugins.push({
+				...plugin,
+				enabled: plugin.enabled !== false,
+				scope: "project",
+				installedPath: this.getInstalledPluginPath(plugin, "project"),
+			});
+		}
+		return plugins;
+	}
+
+	async update(name?: string): Promise<void> {
+		let matched = false;
+		for (const plugin of this.listConfiguredPlugins()) {
+			if (name && plugin.name !== name) {
+				continue;
+			}
+			matched = true;
+			const local = plugin.scope === "project";
+			const scope: SettingsScope = local ? "project" : "global";
+			const pluginRoot = await this.preparePluginRoot(
+				this.parseConfiguredSource(plugin),
+				scope,
+				plugin.name,
+				undefined,
+			);
+			const manifest = readCodexPluginManifest(pluginRoot);
+			const dataDir = join(this.agentDir, "codex-plugin-data", manifest.name);
+			const settingsEntry: InstalledCodexPluginSettings = {
+				name: manifest.name,
+				source: plugin.source,
+				enabled: plugin.enabled,
+				...(plugin.marketplace ? { marketplace: plugin.marketplace } : {}),
+				...(plugin.ref ? { ref: plugin.ref } : {}),
+				hooks: materializeHooks(manifest.hooks, pluginRoot, dataDir),
+				commands: materializeCommands(manifest.commands, pluginRoot),
+			};
+			this.writeMcpServers(manifest, scope);
+			this.upsertCodexPluginSettings(settingsEntry, { local });
+		}
+		if (name && !matched) {
+			throw new Error(`No matching plugin found for ${name}`);
+		}
+	}
+
+	remove(name: string, options?: { local?: boolean }): boolean {
+		const scope: SettingsScope = options?.local ? "project" : "global";
+		const settings =
+			scope === "project" ? this.settingsManager.getProjectCodexPlugins() : this.settingsManager.getCodexPlugins();
+		const removedPlugins = settings.filter((plugin) => plugin.name === name || plugin.source === name);
+		const next = settings.filter((plugin) => plugin.name !== name && plugin.source !== name);
+		if (next.length === settings.length) {
+			return false;
+		}
+		for (const plugin of removedPlugins) {
+			this.removeMcpServers(plugin.name, scope);
+		}
+		if (scope === "project") {
+			this.settingsManager.setProjectCodexPlugins(next);
+		} else {
+			this.settingsManager.setCodexPlugins(next);
+		}
+		const root = this.getPluginStorageRoot(scope);
+		const target = join(root, normalizePluginName(name));
+		if (isInside(target, root)) {
+			rmSync(target, { recursive: true, force: true });
+		}
+		return true;
+	}
+
+	resolveEnabledPluginResources(): CodexPluginResources {
+		const skills: Array<{ path: string; metadata: PathMetadata }> = [];
+		const diagnostics: PluginDiagnostic[] = [];
+		for (const plugin of this.listConfiguredPlugins()) {
+			if (!plugin.enabled || !plugin.installedPath || !existsSync(plugin.installedPath)) {
+				continue;
+			}
+			const manifest = readCodexPluginManifest(plugin.installedPath);
+			diagnostics.push(...manifest.diagnostics);
+			const metadata: PathMetadata = {
+				source: plugin.source,
+				scope: plugin.scope,
+				origin: "codex-plugin",
+				baseDir: plugin.installedPath,
+			};
+			for (const path of this.getSkillPaths(manifest)) {
+				skills.push({ path, metadata });
+			}
+		}
+		return { skills, diagnostics };
+	}
+
+	private async resolveMarketplaceSource(
+		pluginName: string,
+		marketplaceName: string,
+	): Promise<{ source: CodexPluginSource; marketplaceRoot: string }> {
+		const marketplace = this.settingsManager.getCodexPluginMarketplaces()[marketplaceName];
+		if (!marketplace) {
+			throw new Error(`Unknown plugin marketplace: ${marketplaceName}`);
+		}
+		const marketplaceRoot = await this.prepareMarketplaceRoot(marketplaceName, marketplace);
+		const catalog = readCodexMarketplaceCatalog(marketplaceRoot);
+		const entry = catalog.plugins.find((plugin) => plugin.name === pluginName);
+		if (!entry) {
+			throw new Error(`Plugin ${pluginName} was not found in marketplace ${marketplaceName}`);
+		}
+		return { source: entry.source, marketplaceRoot };
+	}
+
+	private async prepareMarketplaceRoot(name: string, marketplace: PluginMarketplaceSettings): Promise<string> {
+		const source = marketplace.source;
+		if (existsSync(resolvePath(source, this.cwd, { trim: true }))) {
+			return resolvePath(source, this.cwd, { trim: true });
+		}
+		const parsed = parseGitUrl(source);
+		if (!parsed) {
+			throw new Error(`Unsupported marketplace source: ${source}`);
+		}
+		const target = join(this.agentDir, "codex-plugin-marketplaces", normalizePluginName(name));
+		await this.cloneOrUpdate(parsed, target);
+		return target;
+	}
+
+	private async preparePluginRoot(
+		source: CodexPluginSource,
+		scope: SettingsScope,
+		requestedName: string | undefined,
+		marketplaceRoot: string | undefined,
+	): Promise<string> {
+		if (source.kind === "local") {
+			const resolved = resolvePath(source.path, this.cwd, { trim: true });
+			if (existsSync(resolved)) {
+				return resolved;
+			}
+			if (marketplaceRoot && existsSync(resolvePath(source.path, marketplaceRoot, { trim: true }))) {
+				return resolvePath(source.path, marketplaceRoot, { trim: true });
+			}
+			throw new Error(`Local codex plugin path does not exist: ${source.path}`);
+		}
+		if (source.kind === "git") {
+			return await this.prepareGitPlugin(source, scope, requestedName);
+		}
+		return await this.prepareNpmPlugin(source, scope);
+	}
+
+	private async prepareGitPlugin(
+		source: { kind: "git"; url: string; path?: string; ref?: string },
+		scope: SettingsScope,
+		requestedName: string | undefined,
+	): Promise<string> {
+		const parsed = parseGitUrl(source.url);
+		if (!parsed) {
+			throw new Error(`Unsupported codex plugin git source: ${source.url}`);
+		}
+		const gitSource: GitSource = {
+			...parsed,
+			...(source.ref ? { ref: source.ref, pinned: true } : {}),
+		};
+		if (source.path) {
+			const subdir = source.path.replace(/^\.\//, "").replace(/\/+$/, "");
+			const tempDir = this.getTemporaryDir("codex-plugin-git");
+			try {
+				const cloneTarget = join(tempDir, "repo");
+				await this.cloneOrUpdate(gitSource, cloneTarget);
+				const subdirRoot = join(cloneTarget, subdir);
+				if (!existsSync(subdirRoot)) {
+					throw new Error(`Plugin subdirectory ${source.path} not found in ${source.url}`);
+				}
+				const manifest = readCodexPluginManifest(subdirRoot);
+				const target = join(this.getPluginStorageRoot(scope), manifest.name);
+				await this.copyTree(subdirRoot, target);
+				return target;
+			} finally {
+				rmSync(tempDir, { recursive: true, force: true });
+			}
+		}
+		const provisionalName = normalizePluginName(requestedName ?? basename(parsed.path));
+		const provisionalTarget = join(this.getPluginStorageRoot(scope), provisionalName);
+		await this.cloneOrUpdate(gitSource, provisionalTarget);
+		const manifest = readCodexPluginManifest(provisionalTarget);
+		const finalTarget = join(this.getPluginStorageRoot(scope), manifest.name);
+		if (finalTarget !== provisionalTarget) {
+			rmSync(finalTarget, { recursive: true, force: true });
+			renameSync(provisionalTarget, finalTarget);
+		}
+		return finalTarget;
+	}
+
+	private async prepareNpmPlugin(
+		source: { kind: "npm"; package: string; version?: string; registry?: string },
+		scope: SettingsScope,
+	): Promise<string> {
+		const tempDir = this.getTemporaryDir("codex-plugin-npm");
+		try {
+			const spec = source.version ? `${source.package}@${source.version}` : source.package;
+			const packArgs = ["pack", spec];
+			if (source.registry) {
+				packArgs.push("--registry", source.registry);
+			}
+			await execFileAsync("npm", packArgs, { cwd: tempDir });
+			const tarball = readdirSync(tempDir).find((entry) => entry.endsWith(".tgz"));
+			if (tarball === undefined) {
+				throw new Error(`npm pack produced no tarball for ${spec}`);
+			}
+			await execFileAsync("tar", ["-xzf", tarball, "-C", tempDir]);
+			const extracted = join(tempDir, "package");
+			const pluginRoot = existsSync(extracted) ? extracted : tempDir;
+			const manifest = readCodexPluginManifest(pluginRoot);
+			const target = join(this.getPluginStorageRoot(scope), manifest.name);
+			await this.copyTree(pluginRoot, target);
+			return target;
+		} finally {
+			rmSync(tempDir, { recursive: true, force: true });
+		}
+	}
+
+	private async copyTree(src: string, dest: string): Promise<void> {
+		if (existsSync(dest)) {
+			rmSync(dest, { recursive: true, force: true });
+		}
+		mkdirSync(dirname(dest), { recursive: true });
+		await execFileAsync("cp", ["-R", src, dest]);
+	}
+
+	private async cloneOrUpdate(source: GitSource, target: string): Promise<void> {
+		if (!existsSync(target)) {
+			mkdirSync(dirname(target), { recursive: true });
+			await execFileAsync("git", ["clone", source.repo, target]);
+		} else {
+			await execFileAsync("git", ["fetch", "origin"], { cwd: target });
+		}
+		if (source.ref) {
+			await execFileAsync("git", ["checkout", source.ref], { cwd: target });
+		}
+	}
+
+	private getTemporaryDir(prefix: string): string {
+		const dir = join(tmpdir(), `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		mkdirSync(dir, { recursive: true });
+		return dir;
+	}
+
+	private describeSource(source: CodexPluginSource, marketplaceRoot?: string): string {
+		if (source.kind === "local") {
+			const resolved = resolvePath(source.path, this.cwd, { trim: true });
+			if (existsSync(resolved)) {
+				return resolved;
+			}
+			if (marketplaceRoot && existsSync(resolvePath(source.path, marketplaceRoot, { trim: true }))) {
+				return resolvePath(source.path, marketplaceRoot, { trim: true });
+			}
+			return resolved;
+		}
+		return source.kind === "git" ? source.url : source.package;
+	}
+
+	private parseBareSource(source: string): CodexPluginSource {
+		const parsedGit = parseGitUrl(source);
+		if (parsedGit) {
+			return { kind: "git", url: parsedGit.repo, ref: parsedGit.ref ?? undefined };
+		}
+		if (existsSync(resolvePath(source, this.cwd, { trim: true }))) {
+			return { kind: "local", path: source };
+		}
+		throw new Error(`Unsupported codex plugin source: ${source}`);
+	}
+
+	private parseConfiguredSource(plugin: ConfiguredCodexPlugin): CodexPluginSource {
+		const parsedGit = parseGitUrl(plugin.source);
+		if (parsedGit) {
+			return { kind: "git", url: parsedGit.repo, ref: plugin.ref ?? parsedGit.ref ?? undefined };
+		}
+		if (existsSync(resolvePath(plugin.source, this.cwd, { trim: true }))) {
+			return { kind: "local", path: plugin.source };
+		}
+		return { kind: "npm", package: plugin.source };
+	}
+
+	private upsertCodexPluginSettings(entry: InstalledCodexPluginSettings, options?: { local?: boolean }): void {
+		const current = options?.local
+			? this.settingsManager.getProjectCodexPlugins()
+			: this.settingsManager.getCodexPlugins();
+		const next = current.filter((plugin) => plugin.name !== entry.name && plugin.source !== entry.source);
+		next.push(entry);
+		if (options?.local) {
+			this.settingsManager.setProjectCodexPlugins(next);
+		} else {
+			this.settingsManager.setCodexPlugins(next);
+		}
+	}
+
+	private writeMcpServers(manifest: CodexPluginManifest, scope: SettingsScope): void {
+		const servers = this.getEffectiveMcpServers(manifest);
+		if (Object.keys(servers).length === 0) {
+			return;
+		}
+		const path = scope === "project" ? join(this.cwd, CONFIG_DIR_NAME, "mcp.json") : join(this.agentDir, "mcp.json");
+		const raw = readRawConfigObject(path);
+		const existing = getServersObject(raw);
+		for (const [serverName, server] of Object.entries(servers)) {
+			existing[`${manifest.name}-${serverName}`] = convertCodexMcpServer(server, manifest.root);
+		}
+		raw.mcpServers = existing;
+		writeRawConfigObject(path, raw);
+	}
+
+	private removeMcpServers(pluginName: string, scope: SettingsScope): void {
+		const path = scope === "project" ? join(this.cwd, CONFIG_DIR_NAME, "mcp.json") : join(this.agentDir, "mcp.json");
+		if (!existsSync(path)) {
+			return;
+		}
+		const raw = readRawConfigObject(path);
+		const servers = getServersObject(raw);
+		const prefix = `${pluginName}-`;
+		let changed = false;
+		for (const serverName of Object.keys(servers)) {
+			if (serverName.startsWith(prefix)) {
+				delete servers[serverName];
+				changed = true;
+			}
+		}
+		if (!changed) {
+			return;
+		}
+		raw.mcpServers = servers;
+		writeRawConfigObject(path, raw);
+	}
+
+	private getEffectiveMcpServers(manifest: CodexPluginManifest): Record<string, CodexMcpServer> {
+		if (Object.keys(manifest.mcpServers).length > 0) {
+			return manifest.mcpServers;
+		}
+		const mcpPath = join(manifest.root, ".mcp.json");
+		if (!existsSync(mcpPath)) {
+			return {};
+		}
+		const mcpRaw = readJsonObject(mcpPath);
+		const servers = isRecord(mcpRaw.mcp_servers) ? mcpRaw.mcp_servers : mcpRaw;
+		const result: Record<string, CodexMcpServer> = {};
+		for (const [serverName, value] of Object.entries(servers)) {
+			if (isRecord(value)) {
+				result[serverName] = value as CodexMcpServer;
+			}
+		}
+		return result;
+	}
+
+	private getPluginStorageRoot(scope: SettingsScope): string {
+		return scope === "project"
+			? join(this.cwd, CONFIG_DIR_NAME, "codex-plugins")
+			: join(this.agentDir, "codex-plugins");
+	}
+
+	private getInstalledPluginPath(plugin: InstalledCodexPluginSettings, scope: "user" | "project"): string | undefined {
+		const storageRoot =
+			scope === "project" ? join(this.cwd, CONFIG_DIR_NAME, "codex-plugins") : join(this.agentDir, "codex-plugins");
+		const stored = join(storageRoot, plugin.name);
+		if (existsSync(stored)) {
+			return stored;
+		}
+		const resolvedSource = resolvePath(
+			plugin.source,
+			scope === "project" ? join(this.cwd, CONFIG_DIR_NAME) : this.agentDir,
+			{
+				trim: true,
+			},
+		);
+		return existsSync(resolvedSource) ? resolvedSource : undefined;
+	}
+
+	private getSkillPaths(manifest: CodexPluginManifest): string[] {
+		if (manifest.skills.length > 0) {
+			return manifest.skills.filter((path) => existsSync(path));
+		}
+		const convention = join(manifest.root, "skills");
+		return existsSync(convention) ? [convention] : [];
+	}
 }

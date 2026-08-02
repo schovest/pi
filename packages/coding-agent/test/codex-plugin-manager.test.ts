@@ -1,12 +1,14 @@
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+	CodexPluginManager,
 	normalizeCodexHookEventName,
 	readCodexMarketplaceCatalog,
 	readCodexPluginManifest,
 } from "../src/core/codex-plugin-manager.ts";
+import { SettingsManager } from "../src/core/settings-manager.ts";
 
 describe("codex marketplace catalog", () => {
 	let tempDir: string;
@@ -148,5 +150,92 @@ describe("hook name normalization", () => {
 		expect(normalizeCodexHookEventName("SessionStartHook")).toBe("session_start");
 		expect(normalizeCodexHookEventName("PromptHook")).toBe("user_prompt_submit");
 		expect(normalizeCodexHookEventName("UnknownHook")).toBeUndefined();
+	});
+});
+
+function writeCodexPlugin(root: string, name: string, options?: { hooks?: boolean; mcp?: boolean }): void {
+	mkdirSync(join(root, ".codex-plugin"), { recursive: true });
+	mkdirSync(join(root, "skills", "helper"), { recursive: true });
+	writeFileSync(join(root, ".codex-plugin", "plugin.json"), JSON.stringify({ name, skills: "./skills/" }));
+	writeFileSync(join(root, "skills", "helper", "SKILL.md"), `---\nname: helper\ndescription: Helper skill\n---\nBody`);
+	if (options?.hooks) {
+		mkdirSync(join(root, "hooks"), { recursive: true });
+		writeFileSync(
+			join(root, ".codex-plugin", "plugin.json"),
+			JSON.stringify({ name, skills: "./skills/", hooks: "./hooks/hooks.json" }),
+		);
+		writeFileSync(
+			join(root, "hooks", "hooks.json"),
+			JSON.stringify({
+				hooks: {
+					PreToolUse: [
+						{
+							matcher: "Bash",
+							// biome-ignore lint/suspicious/noTemplateCurlyInString: literal ${PLUGIN_ROOT} placeholder, materialized at install
+							hooks: [{ type: "command", command: "echo '${PLUGIN_ROOT}'" }],
+						},
+					],
+				},
+			}),
+		);
+	}
+	if (options?.mcp) {
+		writeFileSync(join(root, ".mcp.json"), JSON.stringify({ docs: { command: "docs-mcp" } }));
+	}
+}
+
+describe("CodexPluginManager", () => {
+	let tempDir: string;
+	let agentDir: string;
+	let cwd: string;
+	let sm: SettingsManager;
+	let manager: CodexPluginManager;
+
+	beforeEach(() => {
+		tempDir = join(tmpdir(), `codex-pm-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+		agentDir = join(tempDir, "agent");
+		cwd = join(tempDir, "project");
+		mkdirSync(agentDir, { recursive: true });
+		mkdirSync(cwd, { recursive: true });
+		sm = SettingsManager.create(cwd, agentDir);
+		manager = new CodexPluginManager({ cwd, agentDir, settingsManager: sm });
+	});
+	afterEach(() => rmSync(tempDir, { recursive: true, force: true }));
+
+	it("installs a local plugin, materializes hooks with PLUGIN_ROOT replaced, and writes mcp.json", async () => {
+		const pluginRoot = join(tempDir, "plugin-src");
+		writeCodexPlugin(pluginRoot, "demo", { hooks: true, mcp: true });
+		const installed = await manager.install(pluginRoot);
+		expect(installed.name).toBe("demo");
+		const stored = sm.getCodexPlugins()[0];
+		expect(stored).toBeDefined();
+		expect(stored?.hooks?.pre_tool_use?.[0]?.handlers[0]?.command).toBe(`echo '${installed.installedPath}'`);
+		const mcpRaw = JSON.parse(readFileSync(join(agentDir, "mcp.json"), "utf-8")) as {
+			mcpServers: Record<string, unknown>;
+		};
+		expect(mcpRaw.mcpServers["demo-docs"]).toEqual({ command: "docs-mcp" });
+		expect(existsSync(join(installed.installedPath!, ".codex-plugin", "plugin.json"))).toBe(true);
+	});
+
+	it("collects enabled plugin skills with codex-plugin origin metadata", async () => {
+		const pluginRoot = join(tempDir, "plugin-src");
+		writeCodexPlugin(pluginRoot, "skills-plugin");
+		await manager.install(pluginRoot);
+		const resources = manager.resolveEnabledPluginResources();
+		expect(resources.skills).toHaveLength(1);
+		expect(resources.skills[0]?.metadata.origin).toBe("codex-plugin");
+		expect(resources.skills[0]?.path).toBe(join(pluginRoot, "skills"));
+	});
+
+	it("removes plugin and its mcp servers", async () => {
+		const pluginRoot = join(tempDir, "plugin-src");
+		writeCodexPlugin(pluginRoot, "gone", { mcp: true });
+		await manager.install(pluginRoot);
+		expect(manager.remove("gone")).toBe(true);
+		const mcpRaw = JSON.parse(readFileSync(join(agentDir, "mcp.json"), "utf-8")) as {
+			mcpServers: Record<string, unknown>;
+		};
+		expect(mcpRaw.mcpServers["gone-docs"]).toBeUndefined();
+		expect(sm.getCodexPlugins()).toHaveLength(0);
 	});
 });
