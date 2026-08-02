@@ -22,6 +22,8 @@
 - v3 懒加载只对 `type=message` 行 peek（其余类型 full parse）：label / subagent_run / custom / thinking_level_change / model_change / branch_summary / session_info 等在 compaction 前不再被错误 lazy 化，`_buildIndex`（labelsById）/ `loadSubagentRunEntries` / `getLabel` 等索引与查询恢复完整字段
 - compaction 保留的 kept messages 不再丢失：`buildSessionContext` 新增可选 `materializer` 参数，`SessionManager.buildSessionContext` 传入 `materialize`，resume 后 lazy 占位的 kept messages 读回并进入 LLM 上下文（不再只剩 summary）
 - resume 后二次 compaction / 分支汇总不再丢 kept 内容：`compact` / `_runAutoCompaction` / `navigateTree` 汇总前 materialize lazy 占位（`_materializeBranchEntries`），`prepareCompaction` / `generateBranchSummary` 拿到完整消息
+- resume 后触发新 compaction 的 `cumulativeUsage` 漏算 lazy 历史 usage：`sumEntriesUsage` 改为以最后一个带 `cumulativeUsage` 的 compaction 作基线重置累加（对齐 `computeFooterUsage`），不再因 lazy 占位条目无 `.message` 被跳过而丢失 compaction 前历史用量（footer 累计 token/cost 不再偏小）
+- `_lazyRawCache` 读取 lazy raw 失败时记录 `console.error` 告警：原静默吞异常，降级为占位写入会不可见地丢失消息内容
 
 ## [0.12.8] - 2026-07-31
 

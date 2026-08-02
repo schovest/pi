@@ -206,10 +206,11 @@ export type SessionEntry =
 export type FileEntry = SessionHeader | SessionEntry;
 
 /**
- * 线性累加所有 entry 的 usage：message.usage + compaction/branch_summary.usage。
- * 不读 cumulativeUsage（避免重复计数）；appendCompaction 用它写 cumulativeUsage，
- * footer 侧再以最后一个带 cumulativeUsage 的 compaction 作基线恢复累计。
- * LazyEntry 占位（compaction 前行）无 .message，自然跳过。
+ * 累加所有 entry 的 usage：message.usage + compaction/branch_summary.usage。
+ * 遇到带 cumulativeUsage 的 compaction 时以它为基线重置（其值已含 compaction 前全部 usage，
+ * 包括 resume 后被 lazy 占位跳过的历史条目）——与 computeFooterUsage 对齐，避免 resume 后
+ * 触发新 compaction 时 lazy 占位条目的 usage 被漏算。appendCompaction 用它写新 compaction 的
+ * cumulativeUsage；footer 侧再以最后一个带 cumulativeUsage 的 compaction 作基线恢复累计。
  */
 function sumEntriesUsage(entries: readonly FileEntry[]): Usage {
 	let input = 0;
@@ -223,6 +224,22 @@ function sumEntriesUsage(entries: readonly FileEntry[]): Usage {
 	let costCacheWrite = 0;
 	let costTotal = 0;
 	for (const entry of entries) {
+		// 带 cumulativeUsage 的 compaction：以其为基线重置（其值已含 compaction 前全部 usage，
+		// 包括 resume 后被 lazy 占位跳过的历史条目），不重复累加其 entry.usage。
+		if (entry.type === "compaction" && entry.cumulativeUsage) {
+			const cum = entry.cumulativeUsage;
+			input = cum.input;
+			output = cum.output;
+			cacheRead = cum.cacheRead;
+			cacheWrite = cum.cacheWrite;
+			totalTokens = cum.totalTokens;
+			costInput = cum.cost.input;
+			costOutput = cum.cost.output;
+			costCacheRead = cum.cost.cacheRead;
+			costCacheWrite = cum.cost.cacheWrite;
+			costTotal = cum.cost.total;
+			continue;
+		}
 		let usage: Usage | undefined;
 		if (entry.type === "message" && entry.message?.role === "assistant") {
 			usage = entry.message.usage;
@@ -1128,10 +1145,13 @@ export class SessionManager {
 			if (isLazyEntry(entry)) {
 				try {
 					cache.set(entry.id, readRawLine(this.sessionFile, entry.offset, entry.length));
-				} catch {
+				} catch (error) {
 					// 源文件不可读（例如 createBranchedSession 的 !flushed 全量写路径：
 					// lazy 已在切换前 materialize，正常不会触发）；缓存缺失时
 					// _writeEntryRaw fallback JSON.stringify 占位，保证系统可用。
+					// 其他 IO 故障（磁盘错误、offset 损坏）会静默降级为占位并丢失真实内容，
+					// 记录告警便于排查。
+					console.error(`[session] failed to read lazy entry ${entry.id} raw: ${error}`);
 				}
 			}
 		}

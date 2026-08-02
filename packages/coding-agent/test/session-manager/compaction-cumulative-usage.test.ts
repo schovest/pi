@@ -106,3 +106,41 @@ describe("loadEntriesFromFile cumulativeUsage round-trip (raw file)", () => {
 		rmSync(dir, { recursive: true, force: true });
 	});
 });
+
+describe("appendCompaction cumulativeUsage after resume (lazy entries)", () => {
+	it("includes pre-compaction lazy entry usage via cumulativeUsage baseline", () => {
+		const dir = mkdtempSync(join(tmpdir(), "pi-cum-lazy-"));
+		const file = join(dir, "s.jsonl");
+		const sm = SessionManager.create("/tmp", dir);
+		sm.setSessionFile(file);
+
+		// m1 (30+5): compacted away → becomes a lazy placeholder on resume.
+		appendAssistant(sm, 30, 5);
+		// m2 (40+8): the kept entry (firstKeptEntryId).
+		const m2 = appendAssistant(sm, 40, 8);
+		// First compaction: cumulativeUsage.input = 30 + 40 = 70 (computed while in-memory,
+		// before any lazy placeholder exists).
+		sm.appendCompaction("sum", m2, 1000);
+		// Post-compaction message (flushed to disk).
+		appendAssistant(sm, 10, 2);
+
+		// --- RESUME: reopen; m1 (compacted-away) is now a lazy placeholder. ---
+		const reopened = SessionManager.open(file);
+		// Building context materializes the kept messages (m2); m1 stays lazy.
+		reopened.buildSessionContext();
+		// New message after resume.
+		appendAssistant(reopened, 5, 1);
+		const leaf = reopened.getLeafId()!;
+		// Second compaction.
+		const c2id = reopened.appendCompaction("sum2", leaf, 2000);
+		const c2 = reopened.getEntry(c2id) as CompactionEntry;
+
+		// Expected: 70 (c1 cumulativeUsage baseline) + 10 (m3) + 5 (m4) = 85.
+		// m1 is a lazy placeholder — its usage is recovered via c1.cumulativeUsage,
+		// not by re-summing in-memory entries (which skip lazy entries).
+		expect(c2.cumulativeUsage?.input).toBe(85);
+		expect(c2.cumulativeUsage?.output).toBe(16);
+
+		rmSync(dir, { recursive: true, force: true });
+	});
+});
