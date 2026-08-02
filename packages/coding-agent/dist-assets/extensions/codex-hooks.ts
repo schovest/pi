@@ -462,9 +462,9 @@ export function createCodexHooksHandlers(pi: ExtensionAPI, opts?: { agentDir?: s
 		await runCodexHooks(agentDir, ctx, "session_end", undefined, { reason: "other" }, 3);
 	});
 
-	// user_prompt_submit：matcher 忽略；blocked → handled；additionalContext 注入 pendingContext；重置 stopContinued
+	// user_prompt_submit：matcher 忽略；blocked → handled；additionalContext 注入 pendingContext；仅真实用户输入（非扩展注入）重置 stopContinued
 	api.on("input", async (event: unknown, ctx) => {
-		stopContinued = false;
+		if ((event as { source?: string }).source !== "extension") stopContinued = false;
 		const text = (event as { text?: string }).text ?? "";
 		const results = await runCodexHooks(agentDir, ctx, "user_prompt_submit", undefined, { prompt: text }, 30);
 		let blocked = false;

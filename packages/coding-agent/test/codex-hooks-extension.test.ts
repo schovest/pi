@@ -315,5 +315,53 @@ describe("codex hooks extension primitives", () => {
 			const injected = await beforeAgentStart!({}, makeFakeCtx());
 			expect(injected).toEqual({ systemPrompt: `BASE_SYSTEM_PROMPT\n\nroot=${tempDir}` });
 		});
+
+		it("input handler does not reset stopContinued for extension-sourced inputs", async () => {
+			const stopScript = writeScript("stop-hook.js", "process.stderr.write('stop requested');process.exit(2);");
+			writePlugins({
+				codexPlugins: [
+					{
+						name: "stopper",
+						source: tempDir,
+						enabled: true,
+						hooks: {
+							stop: [{ handlers: [{ type: "command", command: process.execPath, args: [stopScript] }] }],
+						},
+					},
+				],
+			});
+			const sendCalls: string[] = [];
+			const handlers = new Map<string, (event: unknown, ctx: unknown) => unknown>();
+			createCodexHooksHandlers(
+				{
+					on: (event: string, handler: (event: unknown, ctx: unknown) => unknown) => {
+						handlers.set(event, handler);
+					},
+					registerCommand: () => {},
+					sendUserMessage: (msg: string) => {
+						sendCalls.push(msg);
+					},
+				} as never,
+				{ agentDir },
+			);
+			const inputHandler = handlers.get("input");
+			const turnEnd = handlers.get("turn_end");
+			expect(inputHandler).toBeDefined();
+			expect(turnEnd).toBeDefined();
+
+			// 第一轮：stop hook block → sendUserMessage 注入继续消息
+			await turnEnd!({}, makeFakeCtx());
+			expect(sendCalls).toHaveLength(1);
+
+			// 扩展注入的继续消息不应重置 stopContinued → 第二轮 stop_hook_active=true，不再注入
+			await inputHandler!({ text: "continue", source: "extension" }, makeFakeCtx());
+			await turnEnd!({}, makeFakeCtx());
+			expect(sendCalls).toHaveLength(1);
+
+			// 真实用户新消息重置 stopContinued → 第三轮允许新的继续请求
+			await inputHandler!({ text: "user typed", source: "interactive" }, makeFakeCtx());
+			await turnEnd!({}, makeFakeCtx());
+			expect(sendCalls).toHaveLength(2);
+		});
 	});
 });

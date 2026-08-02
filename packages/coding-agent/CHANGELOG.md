@@ -15,6 +15,8 @@
 - codex 插件兼容：npm 来源安装修复（`npm pack` 加 `--ignore-scripts` 不跑 lifecycle，`tar -xzf` 在临时目录 cwd 内解包）；git-subdir 来源插件的子目录 `path` 持久化到 settings（`InstalledCodexPluginSettings` 新增 `path` 字段），`update()` 可恢复子目录重新物化
 - codex 插件兼容：hooks 子进程 stdin/stdout/stderr 流挂 error 监听，快速退出的 hook（如 `sh -c 'exit 2'`）写 stdin 触发 EPIPE 不再崩溃整个进程
 - codex 插件兼容：`InstalledCodexPluginSettings` 新增 `installedPath` 字段（install/update 时持久化物化根目录），git/npm 来源插件的 hooks 执行时可定位插件根并注入 `PLUGIN_ROOT` env（此前仅本地绝对路径 source 生效）
+- codex 插件兼容：新格式 manifest 未声明 `hooks` 字段时回退加载默认 `hooks/hooks.json`（此前默认 hooks 静默丢失；显式声明的非空 hooks 仍优先，不被覆盖）
+- codex 插件兼容：`stopContinued` 仅在真实用户输入（`input` 事件 `source !== "extension"`）时重置，扩展注入的继续消息不再击穿 stop 防递归（`stop_hook_active` 第二轮起对 hook 可见为 true，避免确定性 block 的 stop hook 造成无界继续循环）
 
 ## [0.13.0] - 2026-08-02
 

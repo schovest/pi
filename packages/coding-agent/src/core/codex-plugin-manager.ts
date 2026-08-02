@@ -310,14 +310,16 @@ export function readCodexPluginManifest(root: string): CodexPluginManifest {
 					}
 				}
 			}
-			if (Object.keys(hooks).length === 0 && existsSync(join(root, "hooks", "hooks.json"))) {
-				hooks = normalizeCodexHooks(readJsonObject(join(root, "hooks", "hooks.json")));
-			}
 		} else {
 			hooks = normalizeCodexHooks(hooksRef);
 		}
 	} else {
 		hooks = normalizeCodexHooks(raw.hooks);
+	}
+
+	// 新格式：manifest 未声明 hooks 或解析结果为空时，回退默认 hooks/hooks.json（显式声明的非空 hooks 优先，不被覆盖）
+	if (newFormat && Object.keys(hooks).length === 0 && existsSync(join(root, "hooks", "hooks.json"))) {
+		hooks = normalizeCodexHooks(readJsonObject(join(root, "hooks", "hooks.json")));
 	}
 
 	if (newFormat && "apps" in raw) {

@@ -155,6 +155,32 @@ describe("codex plugin manifest", () => {
 		const manifest = readCodexPluginManifest(tempDir);
 		expect(manifest.diagnostics.some((d) => d.field === "apps")).toBe(true);
 	});
+
+	it("falls back to default hooks/hooks.json when manifest omits the hooks field", () => {
+		mkdirSync(join(tempDir, ".codex-plugin"), { recursive: true });
+		mkdirSync(join(tempDir, "hooks"), { recursive: true });
+		writeFileSync(join(tempDir, ".codex-plugin", "plugin.json"), JSON.stringify({ name: "p", skills: "./skills/" }));
+		writeFileSync(
+			join(tempDir, "hooks", "hooks.json"),
+			JSON.stringify({
+				hooks: {
+					SessionStart: [
+						{
+							matcher: "startup",
+							hooks: [{ type: "command", command: "echo default-hook" }],
+						},
+					],
+				},
+			}),
+		);
+		const manifest = readCodexPluginManifest(tempDir);
+		expect(manifest.hooks.session_start).toEqual([
+			{
+				matcher: "startup",
+				handlers: [{ type: "command", command: "echo default-hook" }],
+			},
+		]);
+	});
 });
 
 describe("hook name normalization", () => {
