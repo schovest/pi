@@ -4,6 +4,7 @@
 
 ### Added
 
+- codex 插件兼容：CLI `codex-plugin` 子命令族（`marketplace add/list/remove`、`search [--marketplace]`、`install/list/remove/update`（`-l/--local`）、`hooks list/disable/enable`），install 成功后打印 hooks 摘要（每事件一行 `hooks: <event> <command>`，无 hooks 打印 `hooks: none`）
 - codex 插件兼容：`CodexPluginManager` 管理类（市场别名 add/remove/list/search、安装 local/git/npm 来源、hooks/commands 物化（`${PLUGIN_ROOT}`/`${PLUGIN_DATA}` 等替换为绝对路径）、MCP 注册进 mcp.json（`<plugin>-` 前缀）、skills 资源收集（`origin: "codex-plugin"`）），支持用户级 `agentDir/codex-plugins` 与项目级 `.pi/codex-plugins` 存储
 - codex 插件兼容：marketplace/manifest/hooks 解析层（`readCodexMarketplaceCatalog` / `readCodexPluginManifest` / `normalizeCodexHooks` / `normalizeCodexHookEventName` / `parseCodexInstallSpec`），支持新格式 `.codex-plugin/plugin.json` 与旧格式根 `plugin.json`，`CodexEventName` 新增 `turn_start`
 
