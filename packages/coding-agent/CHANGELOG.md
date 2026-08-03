@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.13.1] - 2026-08-03
+
 ### Added
 
 - codex 插件兼容：CLI `codex-plugin` 子命令族（`marketplace add/list/remove`、`search [--marketplace]`、`install/list/remove/update`（`-l/--local`）、`hooks list/disable/enable`），install 成功后打印 hooks 摘要（每事件一行 `hooks: <event> <command>`，无 hooks 打印 `hooks: none`）
