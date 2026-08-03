@@ -226,6 +226,14 @@ export {
 	type SessionMessageEntry,
 	type ThinkingLevelChangeEntry,
 } from "./core/session-manager.ts";
+export type {
+	CodexEventName,
+	CodexHookGroupSpec,
+	CodexHookHandlerSpec,
+	CodexHooksSpec,
+	CodexPluginCommandSpec,
+	InstalledCodexPluginSettings,
+} from "./core/settings-manager.ts";
 export {
 	type CompactionSettings,
 	type DefaultProjectTrust,

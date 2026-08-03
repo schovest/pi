@@ -1,6 +1,10 @@
 import { Container, type Focusable, getKeybindings, Input, Spacer, Text } from "@schovest/pi-tui";
-import type { ConfiguredPlugin, PluginManager, PluginSearchResult } from "../../../core/claude-plugin-manager.ts";
-import { DEFAULT_CLAUDE_MARKETPLACE } from "../../../core/claude-plugin-manager.ts";
+import type {
+	CodexPluginManager,
+	CodexPluginSearchResult,
+	ConfiguredCodexPlugin,
+} from "../../../core/codex-plugin-manager.ts";
+import { DEFAULT_CODEX_MARKETPLACE } from "../../../core/codex-plugin-manager.ts";
 import type { SettingsManager } from "../../../core/settings-manager.ts";
 import { theme } from "../theme/theme.ts";
 import { DynamicBorder } from "./dynamic-border.ts";
@@ -19,8 +23,8 @@ type View =
 	| "addMarketplaceName"
 	| "addMarketplaceSource";
 
-type PluginManagerLike = Pick<
-	PluginManager,
+type CodexPluginManagerLike = Pick<
+	CodexPluginManager,
 	| "addMarketplace"
 	| "install"
 	| "listConfiguredPlugins"
@@ -31,8 +35,8 @@ type PluginManagerLike = Pick<
 	| "update"
 >;
 
-interface PluginManagerComponentOptions {
-	pluginManager: PluginManagerLike;
+interface CodexPluginManagerComponentOptions {
+	pluginManager: CodexPluginManagerLike;
 	settingsManager: Pick<SettingsManager, "flush">;
 	onReload: () => Promise<void>;
 	onClose: () => void;
@@ -46,8 +50,8 @@ interface MarketplaceItem {
 	source: string;
 }
 
-export class PluginManagerComponent extends Container implements Focusable {
-	private readonly pluginManager: PluginManagerLike;
+export class CodexPluginManagerComponent extends Container implements Focusable {
+	private readonly pluginManager: CodexPluginManagerLike;
 	private readonly settingsManager: Pick<SettingsManager, "flush">;
 	private readonly onReload: () => Promise<void>;
 	private readonly onClose: () => void;
@@ -57,10 +61,10 @@ export class PluginManagerComponent extends Container implements Focusable {
 	private readonly input = new Input();
 	private view: View = "main";
 	private selectedIndex = 0;
-	private searchResults: PluginSearchResult[] = [];
-	private selectedSearchResult: PluginSearchResult | undefined;
-	private installedPlugins: ConfiguredPlugin[] = [];
-	private selectedPlugin: ConfiguredPlugin | undefined;
+	private searchResults: CodexPluginSearchResult[] = [];
+	private selectedSearchResult: CodexPluginSearchResult | undefined;
+	private installedPlugins: ConfiguredCodexPlugin[] = [];
+	private selectedPlugin: ConfiguredCodexPlugin | undefined;
 	private marketplaces: MarketplaceItem[] = [];
 	private selectedMarketplace: MarketplaceItem | undefined;
 	private pendingMarketplaceName = "";
@@ -77,7 +81,7 @@ export class PluginManagerComponent extends Container implements Focusable {
 		this.input.focused = value && this.isInputView();
 	}
 
-	constructor(options: PluginManagerComponentOptions) {
+	constructor(options: CodexPluginManagerComponentOptions) {
 		super();
 		this.pluginManager = options.pluginManager;
 		this.settingsManager = options.settingsManager;
@@ -93,14 +97,14 @@ export class PluginManagerComponent extends Container implements Focusable {
 		this.refresh();
 	}
 
-	async installSearchResult(result: PluginSearchResult, scope: PluginScope): Promise<void> {
+	async installSearchResult(result: CodexPluginSearchResult, scope: PluginScope): Promise<void> {
 		const installed = await this.pluginManager.install(`${result.name}@${result.marketplace}`, {
 			local: scope === "project",
 		});
 		await this.afterMutation(`Installed plugin ${installed.name}`);
 	}
 
-	async removePlugin(plugin: ConfiguredPlugin): Promise<void> {
+	async removePlugin(plugin: ConfiguredCodexPlugin): Promise<void> {
 		const removed = this.pluginManager.remove(plugin.name, { local: plugin.scope === "project" });
 		if (!removed) {
 			this.setStatus(`No matching plugin found for ${plugin.name}`, true);
@@ -109,7 +113,7 @@ export class PluginManagerComponent extends Container implements Focusable {
 		await this.afterMutation(`Removed plugin ${plugin.name}`);
 	}
 
-	async updatePlugins(plugin?: ConfiguredPlugin): Promise<void> {
+	async updatePlugins(plugin?: ConfiguredCodexPlugin): Promise<void> {
 		await this.pluginManager.update(plugin?.name);
 		await this.afterMutation(plugin ? `Updated plugin ${plugin.name}` : "Updated plugins");
 	}
@@ -330,7 +334,7 @@ export class PluginManagerComponent extends Container implements Focusable {
 			const removed = this.pluginManager.removeMarketplace(marketplace.name);
 			if (removed) {
 				await this.afterMutation(`Removed plugin marketplace ${marketplace.name}`);
-			} else if (marketplace.name in DEFAULT_CLAUDE_MARKETPLACE) {
+			} else if (marketplace.name in DEFAULT_CODEX_MARKETPLACE) {
 				this.setStatus(
 					`${marketplace.name} is a built-in default marketplace; only a custom override can be removed`,
 					true,
@@ -413,7 +417,7 @@ export class PluginManagerComponent extends Container implements Focusable {
 	private refresh(): void {
 		this.clear();
 		this.addChild(new DynamicBorder());
-		this.addChild(new Text(theme.fg("accent", "Plugins"), 0, 0));
+		this.addChild(new Text(theme.fg("accent", "Codex Plugins"), 0, 0));
 		this.addChild(new Spacer(1));
 
 		if (this.view === "main") {
@@ -476,10 +480,9 @@ export class PluginManagerComponent extends Container implements Focusable {
 		for (const [index, result] of this.searchResults.entries()) {
 			const prefix = index === this.selectedIndex ? ">" : " ";
 			const installed = result.installed ? theme.fg("success", " installed") : "";
-			const ref = result.ref ? ` ${theme.fg("dim", result.ref)}` : "";
 			this.addChild(
 				new Text(
-					`${prefix} ${result.name}@${result.marketplace} ${theme.fg("dim", result.source)}${ref}${installed}`,
+					`${prefix} ${result.name}@${result.marketplace} ${theme.fg("dim", result.source)}${installed}`,
 					0,
 					0,
 				),
@@ -490,7 +493,7 @@ export class PluginManagerComponent extends Container implements Focusable {
 	private renderInstalled(): void {
 		this.installedPlugins = this.pluginManager.listConfiguredPlugins();
 		if (this.installedPlugins.length === 0) {
-			this.addChild(new Text(theme.fg("muted", "No Claude-compatible plugins installed."), 0, 0));
+			this.addChild(new Text(theme.fg("muted", "No codex plugins installed."), 0, 0));
 			return;
 		}
 		for (const [index, plugin] of this.installedPlugins.entries()) {

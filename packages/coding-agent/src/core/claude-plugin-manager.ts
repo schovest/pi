@@ -7,7 +7,7 @@ import { type GitSource, parseGitUrl } from "../utils/git.ts";
 import { resolvePath } from "../utils/paths.ts";
 import type { PathMetadata } from "./package-manager.ts";
 import type {
-	InstalledPluginSettings,
+	InstalledClaudePluginSettings,
 	PluginMarketplaceSettings,
 	SettingsManager,
 	SettingsScope,
@@ -79,6 +79,17 @@ export interface PluginSearchResult {
 	source: string;
 	ref?: string;
 	installed: boolean;
+}
+
+/** A marketplace that was skipped during search because it failed to resolve/read. */
+export interface MarketplaceSearchFailure {
+	marketplace: string;
+	message: string;
+}
+
+export interface PluginMarketplaceSearchResults {
+	results: PluginSearchResult[];
+	failures: MarketplaceSearchFailure[];
 }
 
 export interface PluginResourcePaths {
@@ -183,6 +194,17 @@ export function parsePluginInstallSpec(input: string): PluginInstallSpec {
 	}
 	return { type: "source", source: trimmed };
 }
+
+const DEFAULT_CLAUDE_MARKETPLACE_SOURCE = "https://github.com/anthropics/claude-plugins-official";
+
+/**
+ * Default Claude plugin marketplace (Anthropic official catalog:
+ * github.com/anthropics/claude-plugins-official). Merged lazily into user-configured
+ * marketplaces; a same-named user entry overrides it.
+ */
+export const DEFAULT_CLAUDE_MARKETPLACE: Record<string, PluginMarketplaceSettings> = {
+	"claude-plugins-official": { source: DEFAULT_CLAUDE_MARKETPLACE_SOURCE },
+};
 
 export function readMarketplaceCatalog(root: string): MarketplaceCatalog {
 	const path = join(root, ".claude-plugin", "marketplace.json");
@@ -309,40 +331,61 @@ export class PluginManager {
 	}
 
 	addMarketplace(name: string, source: string): void {
-		const marketplaces = this.settingsManager.getPluginMarketplaces();
+		const marketplaces = this.settingsManager.getClaudePluginMarketplaces();
 		marketplaces[name] = { source };
-		this.settingsManager.setPluginMarketplaces(marketplaces);
+		this.settingsManager.setClaudePluginMarketplaces(marketplaces);
 	}
 
 	removeMarketplace(name: string): boolean {
-		const marketplaces = this.settingsManager.getPluginMarketplaces();
+		const marketplaces = this.settingsManager.getClaudePluginMarketplaces();
 		if (!marketplaces[name]) {
 			return false;
 		}
 		delete marketplaces[name];
-		this.settingsManager.setPluginMarketplaces(marketplaces);
+		this.settingsManager.setClaudePluginMarketplaces(marketplaces);
 		return true;
 	}
 
+	/**
+	 * Merged view of configured + default marketplaces. User-configured entries
+	 * win over the built-in default when names collide.
+	 */
+	private getAllMarketplaces(): Record<string, PluginMarketplaceSettings> {
+		return { ...DEFAULT_CLAUDE_MARKETPLACE, ...this.settingsManager.getClaudePluginMarketplaces() };
+	}
+
 	listMarketplaces(): Array<{ name: string; source: string }> {
-		return Object.entries(this.settingsManager.getPluginMarketplaces()).map(([name, value]) => ({
+		return Object.entries(this.getAllMarketplaces()).map(([name, value]) => ({
 			name,
 			source: value.source,
 		}));
 	}
 
-	async searchMarketplaces(query?: string, options?: { marketplace?: string }): Promise<PluginSearchResult[]> {
-		const marketplaces = this.settingsManager.getPluginMarketplaces();
+	async searchMarketplaces(
+		query?: string,
+		options?: { marketplace?: string },
+	): Promise<PluginMarketplaceSearchResults> {
+		const marketplaces = this.getAllMarketplaces();
 		const normalizedQuery = query?.trim().toLowerCase();
 		const installedPlugins = this.listConfiguredPlugins();
 		const results: PluginSearchResult[] = [];
+		const failures: MarketplaceSearchFailure[] = [];
 
 		for (const [marketplaceName, marketplace] of Object.entries(marketplaces)) {
 			if (options?.marketplace && marketplaceName !== options.marketplace) {
 				continue;
 			}
-			const marketplaceRoot = await this.prepareMarketplaceRoot(marketplaceName, marketplace);
-			const catalog = readMarketplaceCatalog(marketplaceRoot);
+			let catalog: MarketplaceCatalog;
+			try {
+				const marketplaceRoot = await this.prepareMarketplaceRoot(marketplaceName, marketplace);
+				catalog = readMarketplaceCatalog(marketplaceRoot);
+			} catch (error) {
+				failures.push({
+					marketplace: marketplaceName,
+					message: error instanceof Error ? error.message : String(error),
+				});
+				continue;
+			}
 			for (const entry of catalog.plugins) {
 				const haystack = [entry.name, entry.source.url, marketplaceName].join(" ").toLowerCase();
 				if (normalizedQuery && !haystack.includes(normalizedQuery)) {
@@ -362,7 +405,7 @@ export class PluginManager {
 			}
 		}
 
-		return results;
+		return { results, failures };
 	}
 
 	async install(spec: string, options?: PluginInstallOptions): Promise<ConfiguredPlugin> {
@@ -377,7 +420,7 @@ export class PluginManager {
 		const scope = options?.local ? "project" : "global";
 		this.writeMcpServers(manifest, scope);
 		const storedSource = source.url;
-		const settingsEntry: InstalledPluginSettings = {
+		const settingsEntry: InstalledClaudePluginSettings = {
 			name: manifest.name,
 			source: storedSource,
 			enabled: true,
@@ -395,7 +438,7 @@ export class PluginManager {
 
 	listConfiguredPlugins(): ConfiguredPlugin[] {
 		const plugins: ConfiguredPlugin[] = [];
-		for (const plugin of this.settingsManager.getGlobalSettings().plugins ?? []) {
+		for (const plugin of this.settingsManager.getGlobalSettings().claudePlugins ?? []) {
 			plugins.push({
 				...plugin,
 				enabled: plugin.enabled !== false,
@@ -403,7 +446,7 @@ export class PluginManager {
 				installedPath: this.getInstalledPluginPath(plugin, "user"),
 			});
 		}
-		for (const plugin of this.settingsManager.getProjectSettings().plugins ?? []) {
+		for (const plugin of this.settingsManager.getProjectSettings().claudePlugins ?? []) {
 			plugins.push({
 				...plugin,
 				enabled: plugin.enabled !== false,
@@ -445,8 +488,8 @@ export class PluginManager {
 		const scope = options?.local ? "project" : "global";
 		const settings =
 			scope === "project"
-				? (this.settingsManager.getProjectSettings().plugins ?? [])
-				: (this.settingsManager.getGlobalSettings().plugins ?? []);
+				? (this.settingsManager.getProjectSettings().claudePlugins ?? [])
+				: (this.settingsManager.getGlobalSettings().claudePlugins ?? []);
 		const removedPlugins = settings.filter((plugin) => plugin.name === name || plugin.source === name);
 		const next = settings.filter((plugin) => plugin.name !== name && plugin.source !== name);
 		if (next.length === settings.length) {
@@ -456,9 +499,9 @@ export class PluginManager {
 			this.removeMcpServers(plugin.name, scope);
 		}
 		if (scope === "project") {
-			this.settingsManager.setProjectPlugins(next);
+			this.settingsManager.setProjectClaudePlugins(next);
 		} else {
-			this.settingsManager.setPlugins(next);
+			this.settingsManager.setClaudePlugins(next);
 		}
 		const root = this.getPluginStorageRoot(options);
 		const target = join(root, normalizePluginName(name));
@@ -498,7 +541,7 @@ export class PluginManager {
 		pluginName: string,
 		marketplaceName: string,
 	): Promise<{ url: string; ref?: string }> {
-		const marketplace = this.settingsManager.getPluginMarketplaces()[marketplaceName];
+		const marketplace = this.getAllMarketplaces()[marketplaceName];
 		if (!marketplace) {
 			throw new Error(`Unknown plugin marketplace: ${marketplaceName}`);
 		}
@@ -576,16 +619,16 @@ export class PluginManager {
 		}
 	}
 
-	private upsertPluginSettings(entry: InstalledPluginSettings, options?: PluginInstallOptions): void {
+	private upsertPluginSettings(entry: InstalledClaudePluginSettings, options?: PluginInstallOptions): void {
 		const current = options?.local
-			? (this.settingsManager.getProjectSettings().plugins ?? [])
-			: (this.settingsManager.getGlobalSettings().plugins ?? []);
+			? (this.settingsManager.getProjectSettings().claudePlugins ?? [])
+			: (this.settingsManager.getGlobalSettings().claudePlugins ?? []);
 		const next = current.filter((plugin) => plugin.name !== entry.name && plugin.source !== entry.source);
 		next.push(entry);
 		if (options?.local) {
-			this.settingsManager.setProjectPlugins(next);
+			this.settingsManager.setProjectClaudePlugins(next);
 		} else {
-			this.settingsManager.setPlugins(next);
+			this.settingsManager.setClaudePlugins(next);
 		}
 	}
 
@@ -629,7 +672,10 @@ export class PluginManager {
 		return options?.local ? join(this.cwd, CONFIG_DIR_NAME, "plugins") : join(this.agentDir, "plugins");
 	}
 
-	private getInstalledPluginPath(plugin: InstalledPluginSettings, scope: "user" | "project"): string | undefined {
+	private getInstalledPluginPath(
+		plugin: InstalledClaudePluginSettings,
+		scope: "user" | "project",
+	): string | undefined {
 		const storageRoot =
 			scope === "project" ? join(this.cwd, CONFIG_DIR_NAME, "plugins") : join(this.agentDir, "plugins");
 		const stored = join(storageRoot, plugin.name);

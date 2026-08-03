@@ -47,7 +47,7 @@ function isOfflineModeEnabled(): boolean {
 export interface PathMetadata {
 	source: string;
 	scope: SourceScope;
-	origin: "package" | "top-level";
+	origin: "package" | "top-level" | "codex-plugin";
 	baseDir?: string;
 }
 

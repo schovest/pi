@@ -19,6 +19,7 @@ export interface BuiltinSlashCommand {
 export const BUILTIN_SLASH_COMMANDS: ReadonlyArray<BuiltinSlashCommand> = [
 	{ name: "settings", description: "Open settings menu" },
 	{ name: "claude-plugin", description: "Manage Claude-compatible plugins" },
+	{ name: "codex-plugin", description: "Manage Codex-compatible plugins" },
 	{ name: "model", description: "Select model (opens selector UI)", argumentHint: "<provider/model>" },
 	{ name: "thinking", description: "Select reasoning/thinking level (opens selector UI)" },
 	{ name: "scoped-models", description: "Enable/disable models for Ctrl+P cycling" },

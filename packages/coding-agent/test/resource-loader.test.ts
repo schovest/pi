@@ -30,6 +30,10 @@ describe("DefaultResourceLoader", () => {
 		rmSync(tempDir, { recursive: true, force: true });
 	});
 
+	// 内置 codex hooks 桥接以 inline factory 注入（<inline:N>），文件扩展相关断言需过滤它
+	const fileExtensions = (extensions: Array<{ path: string }>) =>
+		extensions.filter((extension) => !extension.path.startsWith("<inline:"));
+
 	describe("reload", () => {
 		it("should initialize with empty results before reload", () => {
 			const loader = new DefaultResourceLoader({ cwd, agentDir });
@@ -180,7 +184,7 @@ Project skill`,
 			await loader.reload();
 
 			const extensionsResult = loader.getExtensions();
-			expect(extensionsResult.extensions).toHaveLength(1);
+			expect(fileExtensions(extensionsResult.extensions)).toHaveLength(1);
 			expect(extensionsResult.errors).toEqual([]);
 
 			// mergePaths processes project paths before user paths, so the project
@@ -220,7 +224,7 @@ export default function(pi) {
 			const loader = new DefaultResourceLoader({ cwd, agentDir });
 			await loader.reload({
 				resolveProjectTrust: async ({ extensionsResult }) => {
-					expect(extensionsResult.extensions.map((extension) => extension.path)).toEqual([
+					expect(fileExtensions(extensionsResult.extensions).map((extension) => extension.path)).toEqual([
 						join(userExtDir, "user.ts"),
 					]);
 					return true;
@@ -228,7 +232,7 @@ export default function(pi) {
 			});
 
 			const extensionsResult = loader.getExtensions();
-			expect(extensionsResult.extensions.map((extension) => extension.path)).toEqual([
+			expect(fileExtensions(extensionsResult.extensions).map((extension) => extension.path)).toEqual([
 				join(cwd, ".pi", "extensions", "project.ts"),
 				join(userExtDir, "user.ts"),
 			]);
@@ -273,7 +277,7 @@ export default function(pi) {
 			await loader.reload();
 
 			const extensionsResult = loader.getExtensions();
-			expect(extensionsResult.extensions).toHaveLength(2);
+			expect(fileExtensions(extensionsResult.extensions)).toHaveLength(2);
 			expect(extensionsResult.errors.some((e) => e.error.includes('Command "/deploy" conflicts'))).toBe(false);
 
 			const sessionManager = SessionManager.inMemory();
@@ -416,7 +420,9 @@ Project skill content`,
 				true,
 			);
 			expect(loader.getAgentsFiles().agentsFiles.some((file) => file.path === join(cwd, "AGENTS.md"))).toBe(true);
-			expect(loader.getExtensions().extensions).toHaveLength(0);
+			// codex hooks bridge 为 core 内置 inline factory（<inline:1>），untrusted 项目下也注册；
+			// 项目级 codex 插件数据已由 SettingsManager 的 trust 机制隔离
+			expect(fileExtensions(loader.getExtensions().extensions)).toHaveLength(0);
 			expect(loader.getExtensions().errors).toEqual([]);
 			expect(loader.getSkills().skills.some((skill) => skill.name === "project-skill")).toBe(false);
 			expect(loader.getPrompts().prompts.some((prompt) => prompt.name === "project")).toBe(false);

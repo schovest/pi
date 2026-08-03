@@ -56,10 +56,10 @@ describe("plugin CLI search", () => {
 		const marketplaceRoot = join(tempDir, "marketplace");
 		writeMarketplace(marketplaceRoot);
 		const settingsManager = SettingsManager.create(cwd, agentDir);
-		settingsManager.setPluginMarketplaces({ claude: { source: marketplaceRoot } });
+		settingsManager.setClaudePluginMarketplaces({ claude: { source: marketplaceRoot } });
 		await settingsManager.flush();
 
-		await handlePluginCommand(["claude-plugin", "search", "super"]);
+		await handlePluginCommand(["claude-plugin", "search", "super", "--marketplace", "claude"]);
 
 		const output = logSpy.mock.calls.flat().join("\n");
 		expect(output).toContain("superpowers@claude");
@@ -68,21 +68,43 @@ describe("plugin CLI search", () => {
 		expect(process.exitCode).toBeUndefined();
 	});
 
-	it("prints a clear message when no plugin marketplaces are configured", async () => {
-		await handlePluginCommand(["claude-plugin", "search", "super"]);
+	it("lists the built-in claude-plugins-official default marketplace with a default marker", async () => {
+		await handlePluginCommand(["claude-plugin", "marketplace", "list"]);
 
-		expect(logSpy.mock.calls.flat().join("\n")).toContain("No plugin marketplaces configured.");
+		const output = logSpy.mock.calls.flat().join("\n");
+		expect(output).toContain("claude-plugins-official");
+		expect(output).toContain("(default)");
 		expect(process.exitCode).toBeUndefined();
+	});
+
+	it("rejects removing the built-in default marketplace", async () => {
+		await handlePluginCommand(["claude-plugin", "marketplace", "remove", "claude-plugins-official"]);
+
+		expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("built-in default marketplace"));
+		expect(process.exitCode).toBe(1);
+	});
+
+	it("removes a user-configured override of the default marketplace name", async () => {
+		const settingsManager = SettingsManager.create(cwd, agentDir);
+		settingsManager.setClaudePluginMarketplaces({ "claude-plugins-official": { source: join(tempDir, "custom") } });
+		await settingsManager.flush();
+
+		await handlePluginCommand(["claude-plugin", "marketplace", "remove", "claude-plugins-official"]);
+
+		expect(logSpy).toHaveBeenCalledWith(
+			expect.stringContaining("Removed plugin marketplace claude-plugins-official"),
+		);
+		expect(SettingsManager.create(cwd, agentDir).getClaudePluginMarketplaces()).toEqual({});
 	});
 
 	it("prints a clear message when search has no matches", async () => {
 		const marketplaceRoot = join(tempDir, "marketplace");
 		writeMarketplace(marketplaceRoot);
 		const settingsManager = SettingsManager.create(cwd, agentDir);
-		settingsManager.setPluginMarketplaces({ claude: { source: marketplaceRoot } });
+		settingsManager.setClaudePluginMarketplaces({ claude: { source: marketplaceRoot } });
 		await settingsManager.flush();
 
-		await handlePluginCommand(["claude-plugin", "search", "missing"]);
+		await handlePluginCommand(["claude-plugin", "search", "missing", "--marketplace", "claude"]);
 
 		expect(logSpy.mock.calls.flat().join("\n")).toContain("No matching plugins found.");
 		expect(process.exitCode).toBeUndefined();

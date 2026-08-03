@@ -1,5 +1,35 @@
 # Changelog
 
+## [Unreleased]
+
+## [0.13.1] - 2026-08-03
+
+### Added
+
+- codex 插件兼容：CLI `codex-plugin` 子命令族（`marketplace add/list/remove`、`search [--marketplace]`、`install/list/remove/update`（`-l/--local`）、`hooks list/disable/enable`），install 成功后打印 hooks 摘要（每事件一行 `hooks: <event> <command>`，无 hooks 打印 `hooks: none`）
+- codex 插件兼容：`CodexPluginManager` 管理类（市场别名 add/remove/list/search、安装 local/git/npm 来源、hooks/commands 物化（`${PLUGIN_ROOT}`/`${PLUGIN_DATA}` 等替换为绝对路径）、MCP 注册进 mcp.json（`<plugin>-` 前缀）、skills 资源收集（`origin: "codex-plugin"`）），支持用户级 `agentDir/codex-plugins` 与项目级 `.pi/codex-plugins` 存储
+- codex 插件兼容：marketplace/manifest/hooks 解析层（`readCodexMarketplaceCatalog` / `readCodexPluginManifest` / `normalizeCodexHooks` / `normalizeCodexHookEventName` / `parseCodexInstallSpec`），支持新格式 `.codex-plugin/plugin.json` 与旧格式根 `plugin.json`，`CodexEventName` 新增 `turn_start`
+- codex 插件兼容：内置 hooks 桥接（`core/codex-hooks-bridge.ts`）：12 个 codex 事件映射到 Pi 事件（`session_start`/`session_end`/`user_prompt_submit`/`pre_tool_use`/`permission_request`/`post_tool_use`/`pre_compact`/`post_compact`/`subagent_start`/`subagent_stop`/`stop`/`turn_start`），`additionalContext` 经 `before_agent_start` 注入 systemPrompt；子进程协议（无 args 走 `sh -c` 完整命令行、有 args 走 spawn 数组、stdin JSON、exit 2=block、超时默认 30s 且 `session_end` 3s、注入 `PLUGIN_ROOT`/`PLUGIN_DATA`/`CLAUDE_PLUGIN_ROOT`/`CLAUDE_PLUGIN_DATA` env）；注册 `/codex:<plugin>:<command>` 斜杠命令；插件来源经 `CodexPluginManager.listConfiguredPlugins()` 实时读取（disable 即时生效）
+- codex 插件兼容：resource-loader 集成——已启用 codex 插件的 skills 自动纳入技能资源解析（metadata `origin: "codex-plugin"`，诊断以 warning 合并进技能诊断），构造器内置注入 codex hooks 桥接 inline factory（随每次扩展加载/reload 注册，不依赖可选安装）
+- codex 插件兼容：交互式管理命令 `/codex-plugin`（斜杠命令打开插件管理器：搜索市场/安装/卸载/更新/市场管理，与 `/claude-plugin` 对称，组件 `CodexPluginManagerComponent`）
+- codex 插件兼容：内置默认市场源 `openai`（`https://github.com/openai/plugins`，OpenAI 官方 catalog），未配置市场时 `search`/`install <plugin>@openai` 直接可用；用户同名 `marketplace add` 覆盖默认、`marketplace remove` 仅移除自定义覆盖（内置默认不可删，`marketplace list` 带 `(default)` 标记）；`readCodexMarketplaceCatalog` 支持 `.agents/plugins/marketplace.json` 目录回退（适配官方仓库布局）
+- claude 插件兼容：内置默认市场源 `claude-plugins-official`（`https://github.com/anthropics/claude-plugins-official`，Anthropic 官方 catalog，catalog 在仓库 `.claude-plugin/marketplace.json` 与解析器直接匹配），未配置市场时 `search`/`install <plugin>@claude-plugins-official` 直接可用；用户同名 `marketplace add` 覆盖默认、`marketplace remove` 仅移除自定义覆盖（内置默认不可删，`marketplace list` 带 `(default)` 标记）
+
+### Changed
+
+- claude 插件兼容：settings 字段语义化重命名——`pluginMarketplaces` → `claudePluginMarketplaces`、`plugins` → `claudePlugins`（类型 `InstalledPluginSettings` → `InstalledClaudePluginSettings`），与 `codexPluginMarketplaces`/`codexPlugins` 命名对称；`migrateSettings` 自动迁移旧字段到新字段（旧字段存在且新字段为空时搬移并清理，新字段优先）
+- codex 插件兼容：hooks 桥接从可选 dist-assets 扩展（`install.sh` 的 `file:codex-hooks.ts`）改为内置核心代码，随二进制始终生效；`install.sh` 移除 codex-hooks 安装选项并在升级时自动删除旧扩展残留，防止与内置双份注册 hooks/斜杠命令
+- git snapshot 新增 `tracked-only` 模式（默认）：只记录/回滚 git 跟踪的文件，untracked 文件不捕获、revert 时也保留不动（不再执行 `clean -fd`）；`gitSnapshotMode` 三值共存 `tracked-only` / `include-untracked` / `all`，默认从 `include-untracked` 改为 `tracked-only`（snapshot 记录带 `mode` 字段，旧记录按 `include-untracked` 兼容）
+
+### Fixed
+
+- claude/codex 插件兼容：`searchMarketplaces` 单源失败不再中断整个搜索——失败市场（clone/读取 catalog 报错）聚合成 `failures` 跳过并继续，其余源结果正常返回；CLI 以黄色警告输出被跳过的市场，交互组件在状态栏提示（返回结构改为 `{ results, failures }`）
+- codex 插件兼容：npm 来源安装修复（`npm pack` 加 `--ignore-scripts` 不跑 lifecycle，`tar -xzf` 在临时目录 cwd 内解包）；git-subdir 来源插件的子目录 `path` 持久化到 settings（`InstalledCodexPluginSettings` 新增 `path` 字段），`update()` 可恢复子目录重新物化
+- codex 插件兼容：hooks 子进程 stdin/stdout/stderr 流挂 error 监听，快速退出的 hook（如 `sh -c 'exit 2'`）写 stdin 触发 EPIPE 不再崩溃整个进程
+- codex 插件兼容：`InstalledCodexPluginSettings` 新增 `installedPath` 字段（install/update 时持久化物化根目录），git/npm 来源插件的 hooks 执行时可定位插件根并注入 `PLUGIN_ROOT` env（此前仅本地绝对路径 source 生效）
+- codex 插件兼容：新格式 manifest 未声明 `hooks` 字段时回退加载默认 `hooks/hooks.json`（此前默认 hooks 静默丢失；显式声明的非空 hooks 仍优先，不被覆盖）
+- codex 插件兼容：`stopContinued` 仅在真实用户输入（`input` 事件 `source !== "extension"`）时重置，扩展注入的继续消息不再击穿 stop 防递归（`stop_hook_active` 第二轮起对 hook 可见为 true，避免确定性 block 的 stop hook 造成无界继续循环）
+
 ## [0.13.0] - 2026-08-02
 
 ### Added

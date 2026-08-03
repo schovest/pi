@@ -190,16 +190,16 @@ When a bash command exceeds the timeout threshold, it is automatically moved to 
 
 ### Git Snapshots
 
-Pi automatically takes git snapshots before each user prompt to enable the Revert and Revert and Delete features in the session tree. The snapshot captures the working tree state (tracked changes + untracked files) via `git stash`. Snapshots are stored in a cwd-scoped global index (shared across all sessions in that project), and a lightweight ref (`refs/pi-snapshots/<refId>`, where `refId` is a full UUID) protects each from git garbage collection.
+Pi automatically takes git snapshots before each user prompt to enable the Revert and Revert and Delete features in the session tree. The snapshot captures the working tree state via `git stash`. Snapshots are stored in a cwd-scoped global index (shared across all sessions in that project), and a lightweight ref (`refs/pi-snapshots/<refId>`, where `refId` is a full UUID) protects each from git garbage collection.
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `gitSnapshotMode` | string | `"include-untracked"` | What files to capture: `"include-untracked"` (untracked files only) or `"all"` (also includes `.gitignore`-ignored files) |
+| `gitSnapshotMode` | string | `"tracked-only"` | What files to capture: `"tracked-only"` (git-tracked changes only, untracked files are never captured or touched by revert), `"include-untracked"` (also captures non-ignored untracked files) or `"all"` (also includes `.gitignore`-ignored files) |
 | `gitSnapshotMaxCount` | number | `100` | Maximum number of snapshots to retain **across all sessions** in the project (cwd). The oldest are pruned along with their git refs when exceeded, allowing git gc to reclaim disk space. Set to `0` to disable snapshots entirely. |
 
 ```json
 {
-  "gitSnapshotMode": "include-untracked",
+  "gitSnapshotMode": "tracked-only",
   "gitSnapshotMaxCount": 100
 }
 ```

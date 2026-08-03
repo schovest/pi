@@ -116,8 +116,9 @@ AssistantMessageEventStream              ← ai/utils/event-stream.ts
 | 工具匹配 | `coding-agent/core/tool-matcher.ts` | glob 模式（minimatch），支持 `includedTools`/`excludedTools` | subagent 工具过滤、`--tools`/`--exclude-tools` CLI |
 | Primary Agent | `~/.pi/agent/primary-agents/*.md` 或 `.pi/primary-agents/*.md` | `defaultPrimaryAgent` settings | build, plan |
 | Subagent | `~/.pi/agent/subagents/*.md` 或 `.pi/subagents/*.md` | `includedTools`/`excludedTools` + `skills` glob 模式 frontmatter | explorer, worker |
-| MCP 工具 | Claude-compatible 插件（写入 `mcp.json`） | `plugins` / `pluginMarketplaces` settings | 外部 MCP server |
-| Claude 兼容插件 | npm 包安装 | `plugins` / `pluginMarketplaces` settings | 社区插件 |
+| MCP 工具 | Claude-compatible 插件（写入 `mcp.json`） | `claudePlugins` / `claudePluginMarketplaces` settings | 外部 MCP server |
+| Claude 兼容插件 | npm 包安装 | `claudePlugins` / `claudePluginMarketplaces` settings | 社区插件 |
+| Codex 插件兼容 | `core/codex-plugin-manager.ts` + `core/codex-hooks-bridge.ts` | `codexPlugins` / `codexPluginMarketplaces` settings + `pi codex-plugin` CLI | `marketplace.json` / `.codex-plugin/plugin.json` / `hooks.json` |
 | 用户配置 | `~/.pi/agent/settings.json` | SettingsManager 读写 | API key、默认模型 |
 | 项目配置 | `.pi/settings.json` | SettingsManager 读写 | 项目级 mcpServers、model overrides、defaultPrimaryAgent |
 | 系统提示词 | `coding-agent/core/system-prompt.ts:buildSystemPrompt()` | 优先级：Primary Agent → SYSTEM.md → 默认 → APPEND_SYSTEM.md → 上下文文件 → Skills | `.pi/SYSTEM.md`、`APPEND_SYSTEM.md`、`--system-prompt` |
@@ -128,7 +129,7 @@ AssistantMessageEventStream              ← ai/utils/event-stream.ts
 
 - 扩展通过 `pi install` 安装或 `.pi/extensions/` 发现；核心扩展列表见 `packages/coding-agent/dist-assets/install.sh`
 - MCP 能力通过 Claude-compatible 插件系统间接支持，插件安装时将 MCP 服务器配置写入 `mcp.json`；默认 proxy 模式控制上下文占用
-- Claude 兼容插件使用独立 `plugins` settings，不污染 Pi 原生 `packages` 配置
+- Claude 兼容插件使用独立 `claudePlugins` settings，不污染 Pi 原生 `packages` 配置
 - Subagent 工具通过 `includedTools`/`excludedTools` glob 模式控制工具权限；旧 `tools` 字段自动映射
 - Primary agent 的 system prompt 始终 prepend 在 SYSTEM.md 之前
 - 内置工具默认启用 `read, bash, edit, write`；`grep, find, ls` 按需启用

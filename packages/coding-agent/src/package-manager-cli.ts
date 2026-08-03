@@ -14,7 +14,8 @@ import {
 	type SelfUpdateCommand,
 	VERSION,
 } from "./config.ts";
-import { PluginManager } from "./core/claude-plugin-manager.ts";
+import { DEFAULT_CLAUDE_MARKETPLACE, PluginManager } from "./core/claude-plugin-manager.ts";
+import { CodexPluginManager, DEFAULT_CODEX_MARKETPLACE } from "./core/codex-plugin-manager.ts";
 import type { ExtensionFactory } from "./core/extensions/types.ts";
 import { DefaultPackageManager } from "./core/package-manager.ts";
 import { type AppMode, resolveProjectTrusted } from "./core/project-trust.ts";
@@ -496,6 +497,24 @@ Claude-compatible plugins are managed separately from Pi packages. Use ${APP_NAM
 `);
 }
 
+function printCodexPluginCommandHelp(): void {
+	console.log(`${chalk.bold("Usage:")}
+  ${APP_NAME} codex-plugin marketplace add <name> <repo-or-url>
+  ${APP_NAME} codex-plugin marketplace list
+  ${APP_NAME} codex-plugin marketplace remove <name>
+  ${APP_NAME} codex-plugin search [query] [--marketplace <name>]
+  ${APP_NAME} codex-plugin install <name@marketplace|git-url|local-path> [-l]
+  ${APP_NAME} codex-plugin list
+  ${APP_NAME} codex-plugin remove <plugin> [-l]
+  ${APP_NAME} codex-plugin update [plugin]
+  ${APP_NAME} codex-plugin hooks list
+  ${APP_NAME} codex-plugin hooks disable <plugin> [-l]
+  ${APP_NAME} codex-plugin hooks enable <plugin> [-l]
+
+Codex-compatible plugins are managed separately from Pi packages. Use ${APP_NAME} install/list for native packages.
+`);
+}
+
 export async function handlePluginCommand(args: string[]): Promise<boolean> {
 	if (args[0] !== "claude-plugin") {
 		return false;
@@ -528,8 +547,13 @@ export async function handlePluginCommand(args: string[]): Promise<boolean> {
 					console.log(chalk.dim("No plugin marketplaces configured."));
 					return true;
 				}
+				const userConfigured = settingsManager.getClaudePluginMarketplaces();
 				for (const marketplace of marketplaces) {
-					console.log(`${marketplace.name}  ${chalk.dim(marketplace.source)}`);
+					const isDefault =
+						marketplace.name in DEFAULT_CLAUDE_MARKETPLACE && !(marketplace.name in userConfigured);
+					console.log(
+						`${marketplace.name}  ${chalk.dim(marketplace.source)}${isDefault ? chalk.dim("  (default)") : ""}`,
+					);
 				}
 				return true;
 			}
@@ -537,7 +561,15 @@ export async function handlePluginCommand(args: string[]): Promise<boolean> {
 				const removed = pluginManager.removeMarketplace(name);
 				await settingsManager.flush();
 				if (!removed) {
-					console.error(chalk.red(`No matching plugin marketplace found for ${name}`));
+					if (name in DEFAULT_CLAUDE_MARKETPLACE) {
+						console.error(
+							chalk.red(
+								`${name} is a built-in default marketplace; only a custom ${name} override can be removed`,
+							),
+						);
+					} else {
+						console.error(chalk.red(`No matching plugin marketplace found for ${name}`));
+					}
 					process.exitCode = 1;
 				} else {
 					console.log(chalk.green(`Removed plugin marketplace ${name}`));
@@ -582,7 +614,10 @@ export async function handlePluginCommand(args: string[]): Promise<boolean> {
 				return true;
 			}
 
-			const results = await pluginManager.searchMarketplaces(positional[0], { marketplace });
+			const { results, failures } = await pluginManager.searchMarketplaces(positional[0], { marketplace });
+			for (const failure of failures) {
+				console.error(chalk.yellow(`Skipped plugin marketplace ${failure.marketplace}: ${failure.message}`));
+			}
 			if (results.length === 0) {
 				console.log(chalk.dim("No matching plugins found."));
 				return true;
@@ -673,6 +708,278 @@ export async function handlePluginCommand(args: string[]): Promise<boolean> {
 		return true;
 	} catch (error: unknown) {
 		const message = error instanceof Error ? error.message : "Unknown plugin command error";
+		console.error(chalk.red(`Error: ${message}`));
+		process.exitCode = 1;
+		return true;
+	}
+}
+
+export async function handleCodexPluginCommand(args: string[]): Promise<boolean> {
+	if (args[0] !== "codex-plugin") {
+		return false;
+	}
+
+	const [, command, ...rest] = args;
+	if (!command || command === "-h" || command === "--help") {
+		printCodexPluginCommandHelp();
+		return true;
+	}
+
+	const cwd = process.cwd();
+	const agentDir = getAgentDir();
+	const settingsManager = SettingsManager.create(cwd, agentDir);
+	reportSettingsErrors(settingsManager, "codex-plugin command");
+	const codexPluginManager = new CodexPluginManager({ cwd, agentDir, settingsManager });
+
+	try {
+		if (command === "marketplace") {
+			const [action, name, source] = rest;
+			if (action === "add" && name && source) {
+				codexPluginManager.addMarketplace(name, source);
+				await settingsManager.flush();
+				console.log(chalk.green(`Added codex plugin marketplace ${name}`));
+				return true;
+			}
+			if (action === "list") {
+				const marketplaces = codexPluginManager.listMarketplaces();
+				if (marketplaces.length === 0) {
+					console.log(chalk.dim("No codex plugin marketplaces configured."));
+					return true;
+				}
+				const userConfigured = settingsManager.getCodexPluginMarketplaces();
+				for (const marketplace of marketplaces) {
+					const isDefault = marketplace.name in DEFAULT_CODEX_MARKETPLACE && !(marketplace.name in userConfigured);
+					console.log(
+						`${marketplace.name}  ${chalk.dim(marketplace.source)}${isDefault ? chalk.dim("  (default)") : ""}`,
+					);
+				}
+				return true;
+			}
+			if (action === "remove" && name) {
+				const removed = codexPluginManager.removeMarketplace(name);
+				await settingsManager.flush();
+				if (!removed) {
+					if (name in DEFAULT_CODEX_MARKETPLACE) {
+						console.error(
+							chalk.red(
+								`${name} is a built-in default marketplace; only a custom ${name} override can be removed`,
+							),
+						);
+					} else {
+						console.error(chalk.red(`No matching codex plugin marketplace found for ${name}`));
+					}
+					process.exitCode = 1;
+				} else {
+					console.log(chalk.green(`Removed codex plugin marketplace ${name}`));
+				}
+				return true;
+			}
+			printCodexPluginCommandHelp();
+			process.exitCode = 1;
+			return true;
+		}
+
+		if (command === "search") {
+			let marketplace: string | undefined;
+			const positional: string[] = [];
+			for (let i = 0; i < rest.length; i++) {
+				const arg = rest[i];
+				if (arg === "-m" || arg === "--marketplace") {
+					const value = rest[i + 1];
+					if (!value) {
+						printCodexPluginCommandHelp();
+						process.exitCode = 1;
+						return true;
+					}
+					marketplace = value;
+					i++;
+				} else if (arg?.startsWith("-")) {
+					printCodexPluginCommandHelp();
+					process.exitCode = 1;
+					return true;
+				} else if (arg) {
+					positional.push(arg);
+				}
+			}
+			if (positional.length > 1) {
+				printCodexPluginCommandHelp();
+				process.exitCode = 1;
+				return true;
+			}
+
+			if (codexPluginManager.listMarketplaces().length === 0) {
+				console.log(chalk.dim("No codex plugin marketplaces configured."));
+				return true;
+			}
+
+			const { results, failures } = await codexPluginManager.searchMarketplaces(positional[0], { marketplace });
+			for (const failure of failures) {
+				console.error(chalk.yellow(`Skipped codex plugin marketplace ${failure.marketplace}: ${failure.message}`));
+			}
+			if (results.length === 0) {
+				console.log(chalk.dim("No matching codex plugins found."));
+				return true;
+			}
+			for (const result of results) {
+				const installed = result.installed ? " installed" : "";
+				console.log(`${result.name}@${result.marketplace}  ${chalk.dim(result.source)}${chalk.green(installed)}`);
+			}
+			return true;
+		}
+
+		if (command === "hooks") {
+			const [action, ...hookArgs] = rest;
+			if (action === "list") {
+				const plugins = codexPluginManager.listConfiguredPlugins();
+				if (plugins.length === 0) {
+					console.log(chalk.dim("No codex plugins installed."));
+					return true;
+				}
+				for (const plugin of plugins) {
+					const status = plugin.enabled ? "enabled" : "disabled";
+					console.log(`${plugin.name}  ${chalk.dim(status)}`);
+					const hooks = plugin.hooks;
+					if (hooks) {
+						for (const [event, groups] of Object.entries(hooks)) {
+							for (const group of groups) {
+								for (const handler of group.handlers) {
+									console.log(`  ${event}: ${handler.command}`);
+								}
+							}
+						}
+					}
+				}
+				return true;
+			}
+
+			let local = false;
+			const positional: string[] = [];
+			for (const arg of hookArgs) {
+				if (arg === "-l" || arg === "--local") {
+					local = true;
+				} else {
+					positional.push(arg);
+				}
+			}
+			if (action === "disable" || action === "enable") {
+				const name = positional[0];
+				if (!name || positional.length > 1) {
+					printCodexPluginCommandHelp();
+					process.exitCode = 1;
+					return true;
+				}
+				const enabled = action === "enable";
+				const settings = local ? settingsManager.getProjectCodexPlugins() : settingsManager.getCodexPlugins();
+				const plugin = settings.find((entry) => entry.name === name || entry.source === name);
+				if (!plugin) {
+					console.error(chalk.red(`No matching codex plugin found for ${name}`));
+					process.exitCode = 1;
+					return true;
+				}
+				const next = settings.map((entry) => (entry.name === plugin.name ? { ...entry, enabled } : entry));
+				if (local) {
+					settingsManager.setProjectCodexPlugins(next);
+				} else {
+					settingsManager.setCodexPlugins(next);
+				}
+				await settingsManager.flush();
+				console.log(chalk.green(`${enabled ? "Enabled" : "Disabled"} hooks for ${plugin.name}`));
+				return true;
+			}
+
+			printCodexPluginCommandHelp();
+			process.exitCode = 1;
+			return true;
+		}
+
+		let local = false;
+		const positional: string[] = [];
+		for (const arg of rest) {
+			if (arg === "-l" || arg === "--local") {
+				local = true;
+			} else {
+				positional.push(arg);
+			}
+		}
+
+		if (command === "install") {
+			const source = positional[0];
+			if (!source || positional.length > 1) {
+				printCodexPluginCommandHelp();
+				process.exitCode = 1;
+				return true;
+			}
+			const installed = await codexPluginManager.install(source, { local });
+			await settingsManager.flush();
+			console.log(chalk.green(`Installed plugin ${installed.name}`));
+			const hooks = installed.hooks;
+			if (hooks && Object.keys(hooks).length > 0) {
+				for (const [event, groups] of Object.entries(hooks)) {
+					for (const group of groups) {
+						for (const handler of group.handlers) {
+							console.log(chalk.dim(`  hooks: ${event} ${handler.command}`));
+						}
+					}
+				}
+			} else {
+				console.log(chalk.dim("  hooks: none"));
+			}
+			return true;
+		}
+
+		if (command === "list") {
+			const plugins = codexPluginManager.listConfiguredPlugins();
+			if (plugins.length === 0) {
+				console.log(chalk.dim("No codex plugins installed."));
+				return true;
+			}
+			for (const plugin of plugins) {
+				const scope = plugin.scope === "project" ? "project" : "user";
+				const disabled = plugin.enabled ? "" : " disabled";
+				console.log(`${plugin.name}  ${chalk.dim(`${scope}${disabled} ${plugin.source}`)}`);
+				if (plugin.installedPath) {
+					console.log(chalk.dim(`  ${plugin.installedPath}`));
+				}
+			}
+			return true;
+		}
+
+		if (command === "remove") {
+			const name = positional[0];
+			if (!name || positional.length > 1) {
+				printCodexPluginCommandHelp();
+				process.exitCode = 1;
+				return true;
+			}
+			const removed = codexPluginManager.remove(name, { local });
+			await settingsManager.flush();
+			if (!removed) {
+				console.error(chalk.red(`No matching codex plugin found for ${name}`));
+				process.exitCode = 1;
+			} else {
+				console.log(chalk.green(`Removed codex plugin ${name}`));
+			}
+			return true;
+		}
+
+		if (command === "update") {
+			const name = positional[0];
+			if (positional.length > 1) {
+				printCodexPluginCommandHelp();
+				process.exitCode = 1;
+				return true;
+			}
+			await codexPluginManager.update(name);
+			await settingsManager.flush();
+			console.log(chalk.green(name ? `Updated codex plugin ${name}` : "Updated codex plugins"));
+			return true;
+		}
+
+		printCodexPluginCommandHelp();
+		process.exitCode = 1;
+		return true;
+	} catch (error: unknown) {
+		const message = error instanceof Error ? error.message : "Unknown codex-plugin command error";
 		console.error(chalk.red(`Error: ${message}`));
 		process.exitCode = 1;
 		return true;

@@ -71,7 +71,7 @@ export interface SettingsConfig {
 	clearOnShrink: boolean;
 	showTerminalProgress: boolean;
 	warnings: WarningSettings;
-	gitSnapshotMode: "include-untracked" | "all";
+	gitSnapshotMode: "tracked-only" | "include-untracked" | "all";
 	gitSnapshotMaxCount: number;
 }
 
@@ -103,7 +103,7 @@ export interface SettingsCallbacks {
 	onClearOnShrinkChange: (enabled: boolean) => void;
 	onShowTerminalProgressChange: (enabled: boolean) => void;
 	onWarningsChange: (warnings: WarningSettings) => void;
-	onGitSnapshotModeChange: (mode: "include-untracked" | "all") => void;
+	onGitSnapshotModeChange: (mode: "tracked-only" | "include-untracked" | "all") => void;
 	onGitSnapshotMaxCountChange: (count: number) => void;
 	onCancel: () => void;
 }
@@ -500,7 +500,7 @@ export class SettingsSelectorComponent extends Container {
 			label: "Git snapshot mode",
 			description: "What files to capture in git snapshots for revert",
 			currentValue: config.gitSnapshotMode,
-			values: ["include-untracked", "all"],
+			values: ["tracked-only", "include-untracked", "all"],
 		});
 
 		// Git snapshot max count (insert after git-snapshot-mode)
@@ -602,7 +602,7 @@ export class SettingsSelectorComponent extends Container {
 						callbacks.onShowTerminalProgressChange(newValue === "true");
 						break;
 					case "git-snapshot-mode":
-						callbacks.onGitSnapshotModeChange(newValue as "include-untracked" | "all");
+						callbacks.onGitSnapshotModeChange(newValue as "tracked-only" | "include-untracked" | "all");
 						break;
 					case "git-snapshot-max-count":
 						callbacks.onGitSnapshotMaxCountChange(parseInt(newValue, 10));

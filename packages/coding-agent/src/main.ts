@@ -45,6 +45,7 @@ import { runMigrations, showDeprecationWarnings } from "./migrations.ts";
 import { InteractiveMode, runPrintMode, runRpcMode } from "./modes/index.ts";
 import { initTheme, stopThemeWatcher } from "./modes/interactive/theme/theme.ts";
 import {
+	handleCodexPluginCommand,
 	handleConfigCommand,
 	handlePackageCommand,
 	handlePluginCommand,
@@ -491,6 +492,11 @@ export async function main(args: string[], options?: MainOptions) {
 	}
 
 	if (await handlePluginCommand(args)) {
+		process.exit(0);
+		return;
+	}
+
+	if (await handleCodexPluginCommand(args)) {
 		process.exit(0);
 		return;
 	}

@@ -5,6 +5,7 @@ import { dirname, join } from "path";
 import lockfile from "proper-lockfile";
 import { CONFIG_DIR_NAME, getAgentDir } from "../config.ts";
 import { normalizePath, resolvePath } from "../utils/paths.ts";
+import type { GitSnapshotMode } from "./git-snapshot.ts";
 import { DEFAULT_HTTP_IDLE_TIMEOUT_MS, parseHttpIdleTimeoutMs } from "./http-dispatcher.ts";
 
 export interface CompactionSettings {
@@ -84,12 +85,71 @@ export interface PluginMarketplaceSettings {
 	source: string;
 }
 
-export interface InstalledPluginSettings {
+export interface InstalledClaudePluginSettings {
 	name: string;
 	source: string;
 	marketplace?: string;
 	enabled?: boolean;
 	ref?: string;
+}
+
+export type CodexEventName =
+	| "session_start"
+	| "session_end"
+	| "user_prompt_submit"
+	| "pre_tool_use"
+	| "permission_request"
+	| "post_tool_use"
+	| "pre_compact"
+	| "post_compact"
+	| "subagent_start"
+	| "subagent_stop"
+	| "turn_start"
+	| "stop";
+
+export interface CodexHookHandlerSpec {
+	type: "command";
+	/** 新格式：完整命令行（shell 执行）；旧格式：可执行文件名 */
+	command: string;
+	/** 旧格式专用：argv 数组 */
+	args?: string[];
+	timeout?: number;
+	statusMessage?: string;
+	/** handler 级 matcher（归一化后保留） */
+	matcher?: string;
+}
+
+export interface CodexHookGroupSpec {
+	matcher?: string;
+	handlers: CodexHookHandlerSpec[];
+}
+
+/** 旧格式 commands 条目（物化后存储于 settings，供扩展注册斜杠命令） */
+export interface CodexPluginCommandSpec {
+	name: string;
+	description?: string;
+	command: string;
+	args?: string[];
+	env?: Record<string, string>;
+}
+
+/** key = CodexEventName，value = matcher 分组列表（物化后存储于 settings） */
+export type CodexHooksSpec = Partial<Record<CodexEventName, CodexHookGroupSpec[]>>;
+
+export interface InstalledCodexPluginSettings {
+	name: string;
+	source: string;
+	marketplace?: string;
+	enabled?: boolean;
+	ref?: string;
+	/** git 来源（git-subdir）时仓库内子目录，update 时用于恢复插件根 */
+	path?: string;
+	/** 安装/更新时物化的插件根目录（git/npm 来源存存储副本，local 来源与 source 一致）；hooks 执行时作为 PLUGIN_ROOT */
+	installedPath?: string;
+	/** 安装/更新时物化的 hooks 配置（已替换 ${PLUGIN_ROOT} 等为绝对路径） */
+	hooks?: CodexHooksSpec;
+	/** 安装/更新时物化的旧格式 commands（供斜杠命令注册） */
+	commands?: CodexPluginCommandSpec[];
 }
 
 export interface Settings {
@@ -116,8 +176,10 @@ export interface Settings {
 	enableAnalytics?: boolean; // default: false - opt-in analytics data sharing
 	trackingId?: string; // analytics tracking identifier, generated when analytics is enabled
 	packages?: PackageSource[]; // Array of npm/git package sources (string or object with filtering)
-	pluginMarketplaces?: Record<string, PluginMarketplaceSettings>; // Claude-compatible plugin marketplace aliases
-	plugins?: InstalledPluginSettings[]; // Claude-compatible plugins, independent from Pi packages
+	claudePluginMarketplaces?: Record<string, PluginMarketplaceSettings>; // Claude-compatible plugin marketplace aliases
+	claudePlugins?: InstalledClaudePluginSettings[]; // Claude-compatible plugins, independent from Pi packages
+	codexPlugins?: InstalledCodexPluginSettings[]; // Codex-compatible plugins, independent from Pi packages
+	codexPluginMarketplaces?: Record<string, PluginMarketplaceSettings>; // Codex-compatible plugin marketplace aliases
 	extensions?: string[]; // Array of local extension file paths or directories
 	skills?: string[]; // Array of local skill file paths or directories
 	prompts?: string[]; // Array of local prompt template paths or directories
@@ -140,8 +202,8 @@ export interface Settings {
 	httpProxy?: string; // Proxy URL applied as HTTP_PROXY and HTTPS_PROXY for Pi-managed HTTP clients
 	websocketConnectTimeoutMs?: number; // WebSocket connect/open handshake timeout in milliseconds; 0 disables it
 	bashBackgroundTimeout?: number; // Default timeout in seconds before a bash command is moved to background (default: 120)
-	/** Git snapshot mode: "include-untracked" captures untracked files only; "all" also captures .gitignore'd files. Default: "include-untracked" */
-	gitSnapshotMode?: "include-untracked" | "all";
+	/** Git snapshot mode: "tracked-only" captures tracked changes only (default); "include-untracked" also captures non-ignored untracked files; "all" also captures .gitignore'd files. */
+	gitSnapshotMode?: GitSnapshotMode;
 	/** Maximum number of git snapshot checkpoints to retain across all sessions in the cwd. Oldest are pruned when exceeded. Set to 0 to disable snapshots entirely. Default: 100 */
 	gitSnapshotMaxCount?: number;
 }
@@ -401,6 +463,16 @@ export class SettingsManager {
 		if ("queueMode" in settings && !("steeringMode" in settings)) {
 			settings.steeringMode = settings.queueMode;
 			delete settings.queueMode;
+		}
+
+		// Migrate legacy claude-plugin field names -> claudePluginMarketplaces / claudePlugins
+		if ("pluginMarketplaces" in settings && !("claudePluginMarketplaces" in settings)) {
+			settings.claudePluginMarketplaces = settings.pluginMarketplaces;
+			delete settings.pluginMarketplaces;
+		}
+		if ("plugins" in settings && !("claudePlugins" in settings)) {
+			settings.claudePlugins = settings.plugins;
+			delete settings.plugins;
 		}
 
 		// Migrate legacy websockets boolean -> transport enum
@@ -985,38 +1057,69 @@ export class SettingsManager {
 		});
 	}
 
-	getPluginMarketplaces(): Record<string, PluginMarketplaceSettings> {
-		return structuredClone(this.settings.pluginMarketplaces ?? {});
+	getClaudePluginMarketplaces(): Record<string, PluginMarketplaceSettings> {
+		return structuredClone(this.settings.claudePluginMarketplaces ?? {});
 	}
 
-	setPluginMarketplaces(marketplaces: Record<string, PluginMarketplaceSettings>): void {
-		this.globalSettings.pluginMarketplaces = structuredClone(marketplaces);
-		this.markModified("pluginMarketplaces");
+	setClaudePluginMarketplaces(marketplaces: Record<string, PluginMarketplaceSettings>): void {
+		this.globalSettings.claudePluginMarketplaces = structuredClone(marketplaces);
+		this.markModified("claudePluginMarketplaces");
 		this.save();
 	}
 
-	setProjectPluginMarketplaces(marketplaces: Record<string, PluginMarketplaceSettings>): void {
+	setProjectClaudePluginMarketplaces(marketplaces: Record<string, PluginMarketplaceSettings>): void {
 		const projectSettings = structuredClone(this.projectSettings);
-		projectSettings.pluginMarketplaces = structuredClone(marketplaces);
-		this.markProjectModified("pluginMarketplaces");
+		projectSettings.claudePluginMarketplaces = structuredClone(marketplaces);
+		this.markProjectModified("claudePluginMarketplaces");
 		this.saveProjectSettings(projectSettings);
 	}
 
-	getPlugins(): InstalledPluginSettings[] {
-		return structuredClone(this.settings.plugins ?? []);
+	getClaudePlugins(): InstalledClaudePluginSettings[] {
+		return structuredClone(this.settings.claudePlugins ?? []);
 	}
 
-	setPlugins(plugins: InstalledPluginSettings[]): void {
-		this.globalSettings.plugins = structuredClone(plugins);
-		this.markModified("plugins");
+	setClaudePlugins(plugins: InstalledClaudePluginSettings[]): void {
+		this.globalSettings.claudePlugins = structuredClone(plugins);
+		this.markModified("claudePlugins");
 		this.save();
 	}
 
-	setProjectPlugins(plugins: InstalledPluginSettings[]): void {
+	setProjectClaudePlugins(plugins: InstalledClaudePluginSettings[]): void {
 		const projectSettings = structuredClone(this.projectSettings);
-		projectSettings.plugins = structuredClone(plugins);
-		this.markProjectModified("plugins");
+		projectSettings.claudePlugins = structuredClone(plugins);
+		this.markProjectModified("claudePlugins");
 		this.saveProjectSettings(projectSettings);
+	}
+
+	getCodexPlugins(): InstalledCodexPluginSettings[] {
+		return structuredClone(this.globalSettings.codexPlugins ?? []);
+	}
+
+	getProjectCodexPlugins(): InstalledCodexPluginSettings[] {
+		return structuredClone(this.projectSettings.codexPlugins ?? []);
+	}
+
+	setCodexPlugins(plugins: InstalledCodexPluginSettings[]): void {
+		this.globalSettings.codexPlugins = structuredClone(plugins);
+		this.markModified("codexPlugins");
+		this.save();
+	}
+
+	setProjectCodexPlugins(plugins: InstalledCodexPluginSettings[]): void {
+		const projectSettings = structuredClone(this.projectSettings);
+		projectSettings.codexPlugins = structuredClone(plugins);
+		this.markProjectModified("codexPlugins");
+		this.saveProjectSettings(projectSettings);
+	}
+
+	getCodexPluginMarketplaces(): Record<string, PluginMarketplaceSettings> {
+		return structuredClone(this.settings.codexPluginMarketplaces ?? {});
+	}
+
+	setCodexPluginMarketplaces(marketplaces: Record<string, PluginMarketplaceSettings>): void {
+		this.globalSettings.codexPluginMarketplaces = structuredClone(marketplaces);
+		this.markModified("codexPluginMarketplaces");
+		this.save();
 	}
 
 	getExtensionPaths(): string[] {
@@ -1269,11 +1372,13 @@ export class SettingsManager {
 		this.save();
 	}
 
-	getGitSnapshotMode(): "include-untracked" | "all" {
-		return this.settings.gitSnapshotMode ?? "include-untracked";
+	getGitSnapshotMode(): GitSnapshotMode {
+		const mode = this.settings.gitSnapshotMode;
+		const valid: GitSnapshotMode[] = ["tracked-only", "include-untracked", "all"];
+		return mode && valid.includes(mode) ? mode : "tracked-only";
 	}
 
-	setGitSnapshotMode(mode: "include-untracked" | "all"): void {
+	setGitSnapshotMode(mode: GitSnapshotMode): void {
 		this.globalSettings.gitSnapshotMode = mode;
 		this.markModified("gitSnapshotMode");
 		this.save();

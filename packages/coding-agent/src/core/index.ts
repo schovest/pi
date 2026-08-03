@@ -77,6 +77,7 @@ export {
 } from "./extensions/index.ts";
 export {
 	type GitSnapshotData,
+	type GitSnapshotMode,
 	hasUncommittedChanges,
 	isGitRepo,
 	protectSnapshot,

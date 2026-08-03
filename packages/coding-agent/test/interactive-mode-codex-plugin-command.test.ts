@@ -1,24 +1,18 @@
 import { Container } from "@schovest/pi-tui";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import type { ConfiguredPlugin, PluginSearchResult } from "../src/core/claude-plugin-manager.ts";
+import type { CodexPluginSearchResult, ConfiguredCodexPlugin } from "../src/core/codex-plugin-manager.ts";
 import { BUILTIN_SLASH_COMMANDS } from "../src/core/slash-commands.ts";
-import { PluginManagerComponent } from "../src/modes/interactive/components/plugin-manager.ts";
+import { CodexPluginManagerComponent } from "../src/modes/interactive/components/codex-plugin-manager.ts";
 import { InteractiveMode } from "../src/modes/interactive/interactive-mode.ts";
 import { initTheme } from "../src/modes/interactive/theme/theme.ts";
 
-type PluginsCommandContext = {
+type CodexPluginsCommandContext = {
 	editor: { setText: (text: string) => void };
-	showPluginsManager: () => void;
-};
-
-type SubagentsCommandContext = {
-	editor: { setText: (text: string) => void };
-	showSubagentsPanel: () => void;
+	showCodexPluginsManager: () => void;
 };
 
 type InteractiveModePrototype = {
-	handlePluginsCommand(this: PluginsCommandContext): void;
-	handleSubagentsCommand(this: SubagentsCommandContext): void;
+	handleCodexPluginsCommand(this: CodexPluginsCommandContext): void;
 };
 
 const interactiveModePrototype = InteractiveMode.prototype as unknown as InteractiveModePrototype;
@@ -27,47 +21,26 @@ beforeAll(() => {
 	initTheme("dark");
 });
 
-describe("InteractiveMode /claude-plugin", () => {
-	it("registers /claude-plugin as a built-in slash command", () => {
-		expect(BUILTIN_SLASH_COMMANDS.some((command) => command.name === "claude-plugin")).toBe(true);
+describe("InteractiveMode /codex-plugin", () => {
+	it("registers /codex-plugin as a built-in slash command", () => {
+		expect(BUILTIN_SLASH_COMMANDS.some((command) => command.name === "codex-plugin")).toBe(true);
 	});
 
-	it("registers /running-subagents as a built-in slash command", () => {
-		expect(BUILTIN_SLASH_COMMANDS.some((command) => command.name === "running-subagents")).toBe(true);
-	});
-
-	it("registers /subagents as a built-in slash command", () => {
-		expect(BUILTIN_SLASH_COMMANDS.some((command) => command.name === "subagents")).toBe(true);
-	});
-
-	it("opens the plugin manager and clears the editor", () => {
+	it("opens the codex plugin manager and clears the editor", () => {
 		const setText = vi.fn();
-		const showPluginsManager = vi.fn();
+		const showCodexPluginsManager = vi.fn();
 
-		interactiveModePrototype.handlePluginsCommand.call({
+		interactiveModePrototype.handleCodexPluginsCommand.call({
 			editor: { setText },
-			showPluginsManager,
+			showCodexPluginsManager,
 		});
 
 		expect(setText).toHaveBeenCalledWith("");
-		expect(showPluginsManager).toHaveBeenCalledTimes(1);
-	});
-
-	it("opens the subagents panel and clears the editor", () => {
-		const setText = vi.fn();
-		const showSubagentsPanel = vi.fn();
-
-		interactiveModePrototype.handleSubagentsCommand.call({
-			editor: { setText },
-			showSubagentsPanel,
-		});
-
-		expect(setText).toHaveBeenCalledWith("");
-		expect(showSubagentsPanel).toHaveBeenCalledTimes(1);
+		expect(showCodexPluginsManager).toHaveBeenCalledTimes(1);
 	});
 });
 
-describe("PluginManagerComponent mutations", () => {
+describe("CodexPluginManagerComponent mutations", () => {
 	it("flushes settings and reloads after installing a marketplace result", async () => {
 		const install = vi.fn(async () => ({
 			name: "superpowers",
@@ -79,13 +52,13 @@ describe("PluginManagerComponent mutations", () => {
 		const flush = vi.fn(async () => {});
 		const reload = vi.fn(async () => {});
 		const status = vi.fn();
-		const result: PluginSearchResult = {
+		const result: CodexPluginSearchResult = {
 			name: "superpowers",
 			marketplace: "claude",
 			source: "https://github.com/example/superpowers",
 			installed: false,
 		};
-		const component = new PluginManagerComponent({
+		const component = new CodexPluginManagerComponent({
 			pluginManager: {
 				listConfiguredPlugins: () => [],
 				listMarketplaces: () => [],
@@ -115,13 +88,13 @@ describe("PluginManagerComponent mutations", () => {
 		const remove = vi.fn(() => true);
 		const flush = vi.fn(async () => {});
 		const reload = vi.fn(async () => {});
-		const plugin: ConfiguredPlugin = {
+		const plugin: ConfiguredCodexPlugin = {
 			name: "superpowers",
 			source: "https://github.com/example/superpowers",
 			enabled: true,
 			scope: "project",
 		};
-		const component = new PluginManagerComponent({
+		const component = new CodexPluginManagerComponent({
 			pluginManager: {
 				listConfiguredPlugins: () => [plugin],
 				listMarketplaces: () => [],
@@ -149,7 +122,7 @@ describe("PluginManagerComponent mutations", () => {
 		const update = vi.fn(async () => {});
 		const flush = vi.fn(async () => {});
 		const reload = vi.fn(async () => {});
-		const component = new PluginManagerComponent({
+		const component = new CodexPluginManagerComponent({
 			pluginManager: {
 				listConfiguredPlugins: () => [],
 				listMarketplaces: () => [],
@@ -180,7 +153,7 @@ describe("PluginManagerComponent mutations", () => {
 
 	it("can be mounted in an editor container", () => {
 		const container = new Container();
-		const component = new PluginManagerComponent({
+		const component = new CodexPluginManagerComponent({
 			pluginManager: {
 				listConfiguredPlugins: () => [],
 				listMarketplaces: () => [],

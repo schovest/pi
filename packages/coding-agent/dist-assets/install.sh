@@ -342,6 +342,13 @@ AGENT_SELECTED=("${MN_SELECTED[@]}")
 echo ""
 any_installed=0
 
+# codex hooks 桥接已内置（core/codex-hooks-bridge.ts），删除旧版本可选扩展残留，
+# 防止与内置 inline factory 双份注册 hooks/斜杠命令
+if [ -f "$HOME/.pi/agent/extensions/codex-hooks.ts" ]; then
+	rm -f "$HOME/.pi/agent/extensions/codex-hooks.ts"
+	echo "  removed legacy codex-hooks extension (now built-in)"
+fi
+
 for i in $(seq 0 $((EXT_NUM - 1))); do
 	if [ "${EXT_SELECTED[$i]}" -ne 1 ]; then
 		continue
