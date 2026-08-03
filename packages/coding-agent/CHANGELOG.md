@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Session resume 性能优化（几百 MB 会话文件）：`buildSessionContext` 批量 materialize 路径上全部 lazy 占位（单 fd 按 offset 顺序读回，替代逐条 open/read/close），`materialize` 用 `entryIndex`（id→下标 Map）替换 O(N) `findIndex`，`buildSessionContext`/`getBranch` 的 `path.unshift` 改为 push+reverse，`SessionManager.open` 复用预读 entries 避免大文件二次全量读取——200MB 会话 resume 从 ~30s 降至 ~3s
+
 ## [0.13.1] - 2026-08-03
 
 ### Added

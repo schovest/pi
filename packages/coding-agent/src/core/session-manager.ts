@@ -517,12 +517,14 @@ export function buildSessionContext(
 	}
 
 	// Walk from leaf to root, collecting path
+	// push + reverse（unshift 是 O(N)，长路径下 O(N²)）
 	const path: SessionEntry[] = [];
 	let current: SessionEntry | undefined = leaf;
 	while (current) {
-		path.unshift(current);
+		path.push(current);
 		current = current.parentId ? byId.get(current.parentId) : undefined;
 	}
+	path.reverse();
 
 	// Extract settings and find compaction
 	let thinkingLevel = "off";
@@ -1025,6 +1027,8 @@ export class SessionManager {
 	private flushed: boolean = false;
 	private fileEntries: FileEntry[] = [];
 	private byId: Map<string, SessionEntry> = new Map();
+	/** entryId → fileEntries 下标。避免 materialize 时 O(N) findIndex（大会话文件 O(N²) 热点）。 */
+	private entryIndex: Map<string, number> = new Map();
 	private labelsById: Map<string, string> = new Map();
 	private labelTimestampsById: Map<string, string> = new Map();
 	private leafId: string | null = null;
@@ -1035,6 +1039,7 @@ export class SessionManager {
 		sessionFile: string | undefined,
 		persist: boolean,
 		newSessionOptions?: NewSessionOptions,
+		preloadedEntries?: FileEntry[],
 	) {
 		this.cwd = resolvePath(cwd);
 		this.sessionDir = normalizePath(sessionDir);
@@ -1044,17 +1049,18 @@ export class SessionManager {
 		}
 
 		if (sessionFile) {
-			this.setSessionFile(sessionFile);
+			this.setSessionFile(sessionFile, preloadedEntries);
 		} else {
 			this.newSession(newSessionOptions);
 		}
 	}
 
 	/** Switch to a different session file (used for resume and branching) */
-	setSessionFile(sessionFile: string): void {
+	setSessionFile(sessionFile: string, preloadedEntries?: FileEntry[]): void {
 		this.sessionFile = resolvePath(sessionFile);
 		if (existsSync(this.sessionFile)) {
-			this.fileEntries = loadEntriesFromFile(this.sessionFile);
+			// 复用调用方（SessionManager.open）已读出的 entries，避免大文件二次全量读取。
+			this.fileEntries = preloadedEntries ?? loadEntriesFromFile(this.sessionFile);
 
 			// If file was empty, initialize it with a valid session header. If it was
 			// non-empty but did not parse as a pi session, fail without modifying it.
@@ -1102,6 +1108,7 @@ export class SessionManager {
 		};
 		this.fileEntries = [header];
 		this.byId.clear();
+		this.entryIndex.clear();
 		this.labelsById.clear();
 		this.leafId = null;
 		this.flushed = false;
@@ -1115,10 +1122,13 @@ export class SessionManager {
 
 	private _buildIndex(): void {
 		this.byId.clear();
+		this.entryIndex.clear();
 		this.labelsById.clear();
 		this.labelTimestampsById.clear();
 		this.leafId = null;
-		for (const entry of this.fileEntries) {
+		for (let i = 0; i < this.fileEntries.length; i++) {
+			const entry = this.fileEntries[i];
+			this.entryIndex.set(entry.id, i);
 			if (entry.type === "session") continue;
 			this.byId.set(entry.id, entry);
 			// subagent_run entries are detached records — they must not
@@ -1233,10 +1243,20 @@ export class SessionManager {
 		const raw = readRawLine(this.sessionFile, entry.offset, entry.length);
 		const full = parseSessionEntryLine(raw);
 		if (!full || full.type === "session") return entry;
-		this.byId.set(id, full);
-		const idx = this.fileEntries.findIndex((e) => isLazyEntry(e) && e.id === id);
-		if (idx !== -1) this.fileEntries[idx] = full;
+		this._storeMaterializedEntry(id, full);
 		return full;
+	}
+
+	/**
+	 * 将已读回的完整条目写入 byId 并替换 fileEntries 中的 lazy 占位。
+	 * materialize 与 _materializeLazyOnBranch 共用的唯一替换入口，保持索引语义一致。
+	 */
+	private _storeMaterializedEntry(id: string, full: SessionEntry): void {
+		this.byId.set(id, full);
+		const idx = this.entryIndex.get(id);
+		if (idx !== undefined && this.fileEntries[idx] && isLazyEntry(this.fileEntries[idx])) {
+			this.fileEntries[idx] = full;
+		}
 	}
 
 	/** Append subagent messages as children of a SubagentRunEntry.
@@ -1253,6 +1273,7 @@ export class SessionManager {
 				message: message as Message,
 			};
 			this.fileEntries.push(entry);
+			this.entryIndex.set(entry.id, this.fileEntries.length - 1);
 			this.byId.set(entry.id, entry);
 			// 不更新 leafId — 子树消息不影响主链
 			this._persist(entry);
@@ -1314,6 +1335,7 @@ export class SessionManager {
 
 	private _appendEntry(entry: SessionEntry): void {
 		this.fileEntries.push(entry);
+		this.entryIndex.set(entry.id, this.fileEntries.length - 1);
 		this.byId.set(entry.id, entry);
 		this.leafId = entry.id;
 		this._persist(entry);
@@ -1567,9 +1589,10 @@ export class SessionManager {
 		const startId = fromId ?? this.leafId;
 		let current = startId ? this.byId.get(startId) : undefined;
 		while (current) {
-			path.unshift(current);
+			path.push(current);
 			current = current.parentId ? this.byId.get(current.parentId) : undefined;
 		}
+		path.reverse();
 		return path;
 	}
 
@@ -1596,7 +1619,65 @@ export class SessionManager {
 	 * compaction 保留的 kept messages 以 LazyEntry 占位存在时，经 materializer 恢复后进入上下文。
 	 */
 	buildSessionContext(): SessionContext {
-		return buildSessionContext(this.getEntries(), this.leafId, this.byId, (id) => this.materialize(id));
+		// 一次性 materialize 主链上全部 lazy 占位（单 fd 批量读回），避免逐条
+		// open/read/close 的 O(N) fd 系统调用——几百 MB 会话文件下是 resume 主要瓶颈。
+		this._materializeLazyOnBranch();
+		return buildSessionContext(this.getEntries(), this.leafId, this.byId);
+	}
+
+	/**
+	 * 将当前分支（leaf → root 路径）上的全部 lazy 占位批量读回为完整条目。
+	 * 与逐条 materialize 相比只 open 一次 fd；按 offset 排序后分段合并读（gap 小的
+	 * 条目共段），减少 readSync 系统调用，段长上限 1MB 控制内存峰值。
+	 * byId/fileEntries 就地替换（与 materialize 语义一致）；读回失败保持占位。
+	 * 注意：路径按 leafId 解析，与 buildSessionContext 的 leaf fallback 不同——
+	 * 这里 leafId 悬空时不做 entries[last] 回退（SessionManager.leafId 内部维护，
+	 * 正常流程不会悬空），悬空时不 materialize 任何条目，保持占位。
+	 */
+	private _materializeLazyOnBranch(): void {
+		if (!this.sessionFile) return;
+		const lazy: LazyEntry[] = [];
+		let current = this.leafId ? this.byId.get(this.leafId) : undefined;
+		while (current) {
+			if (isLazyEntry(current)) lazy.push(current);
+			current = current.parentId ? this.byId.get(current.parentId) : undefined;
+		}
+		if (lazy.length === 0) return;
+		lazy.sort((a, b) => a.offset - b.offset);
+
+		// 分段合并：gap ≤ 64KB 且段长 ≤ 1MB 的相邻条目共段，一次 read 读整段再切片。
+		const MAX_GAP = 64 * 1024;
+		const MAX_CHUNK = 1024 * 1024;
+		const chunks: { start: number; end: number; items: LazyEntry[] }[] = [];
+		let chunk: { start: number; end: number; items: LazyEntry[] } | null = null;
+		for (const l of lazy) {
+			const end = l.offset + l.length;
+			if (chunk && l.offset - chunk.end <= MAX_GAP && end - chunk.start <= MAX_CHUNK) {
+				chunk.end = end;
+				chunk.items.push(l);
+			} else {
+				chunk = { start: l.offset, end, items: [l] };
+				chunks.push(chunk);
+			}
+		}
+
+		const fd = openSync(this.sessionFile, "r");
+		try {
+			for (const c of chunks) {
+				const buf = Buffer.allocUnsafe(c.end - c.start);
+				const n = readSync(fd, buf, 0, buf.length, c.start);
+				const avail = c.start + n; // 文件截断时仅处理截断点前的条目
+				for (const l of c.items) {
+					if (l.offset + l.length > avail) continue;
+					const rel = l.offset - c.start;
+					const full = parseSessionEntryLine(buf.subarray(rel, rel + l.length).toString("utf8"));
+					if (!full || full.type === "session") continue;
+					this._storeMaterializedEntry(l.id, full);
+				}
+			}
+		} finally {
+			closeSync(fd);
+		}
 	}
 
 	/**
@@ -1964,7 +2045,7 @@ export class SessionManager {
 		const cwd = cwdOverride ?? header?.cwd ?? process.cwd();
 		// If no sessionDir provided, derive from file's parent directory
 		const dir = sessionDir ? normalizePath(sessionDir) : resolve(resolvedPath, "..");
-		return new SessionManager(cwd, dir, resolvedPath, true);
+		return new SessionManager(cwd, dir, resolvedPath, true, undefined, entries);
 	}
 
 	/** Create a SessionManager with a specific file path. */
