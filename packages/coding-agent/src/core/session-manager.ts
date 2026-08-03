@@ -851,49 +851,69 @@ function getMessageActivityTime(entry: SessionMessageEntry): number | undefined 
 }
 
 const MAX_SESSION_INFO_HEAD_LINES = 100;
-const SESSION_INFO_TAIL_BYTES = 64 * 1024;
+/**
+ * 尾部扫描窗口大小。session_info（重命名）与最后消息通常都在文件末尾；
+ * 窗口越大命中率越高，但逐行 parse 成本随窗口线性增长。1MB 对绝大多数
+ * 场景足够（重命名后继续长对话），且远小于全量读取。
+ */
+const SESSION_INFO_TAIL_BYTES = 1024 * 1024;
 
 /**
  * 扫描文件尾部（最后 maxBytes 字节），返回最后一条 user/assistant 消息的活动时间
- * 与最后一个非空 session_info 名称。append-only 会话的最后消息在文件末尾，
- * 读尾部即可获得毫秒精度的排序基准（优于文件系统 mtime 的粗粒度）；
- * 用户重命名追加的 session_info 也通常在尾部。
+ * 与最后一个 session_info 名称。append-only 会话的最后消息在文件末尾，
+ * 读尾部即可获得毫秒精度的排序基准（优于文件系统 mtime 的粗粒度）。
+ *
+ * session_info 用子串定位（不经逐行 parse）：所有条目由 JSON.stringify 序列化，
+ * 内容里的引号会被转义为 \"，非转义字面 `"type":"session_info"` 只可能来自顶层
+ * 类型字段，lastIndexOf 定位后仅 parse 命中行。从后往前第一个 session_info 即最新
+ * （append-only），无论名字是否为空都作为权威值——空名即清除，与头部扫描一致。
  */
 async function scanSessionTail(
 	filePath: string,
 	maxBytes: number,
-	initialName: string | undefined,
-): Promise<{ timestamp?: number; name?: string }> {
+): Promise<{ timestamp?: number; name?: string; hasSessionInfo: boolean }> {
 	const { size } = await stat(filePath);
-	if (size === 0) return {};
+	if (size === 0) return { hasSessionInfo: false };
 	const start = Math.max(0, size - maxBytes);
 	const fd = await openFile(filePath, "r");
 	let timestamp: number | undefined;
-	let name = initialName;
-	let nameSet = false;
+	let name: string | undefined;
+	let hasSessionInfo = false;
 	try {
 		const buf = Buffer.allocUnsafe(size - start);
 		// POSIX read 对常规文件单次读满；不做循环重读——万一读不满，尾部内容
 		// 缺失只会让 modified 退化为 mtime fallback，不会产生错误结果。
 		const { bytesRead } = await fd.read(buf, 0, size - start, start);
 		// 截断的首行 parse 失败会被 parseSessionEntryLine 跳过；尾行切分按 \n。
-		const lines = buf.subarray(0, bytesRead).toString("utf8").split("\n");
-		for (let i = lines.length - 1; i >= 0; i--) {
-			const entry = parseSessionEntryLine(lines[i]);
-			if (!entry) continue;
-			if (entry.type === "session_info" && entry.name?.trim() && !nameSet) {
-				// 从后往前首个 session_info 即最新（append-only）；后续更旧，不再覆盖
-				name = entry.name.trim();
-				nameSet = true;
-			} else if (entry.type === "message" && timestamp === undefined) {
-				const t = getMessageActivityTime(entry);
-				if (typeof t === "number") timestamp = t;
+		const tail = buf.subarray(0, bytesRead).toString("utf8");
+
+		// 子串定位最后一个 session_info：命中行的 parse 失败（截断）时继续往前找。
+		let pos = tail.lastIndexOf('"type":"session_info"');
+		while (pos !== -1) {
+			const lineStart = tail.lastIndexOf("\n", pos) + 1;
+			const lineEndIdx = tail.indexOf("\n", pos);
+			const line = tail.slice(lineStart, lineEndIdx === -1 ? tail.length : lineEndIdx);
+			const entry = parseSessionEntryLine(line);
+			if (entry?.type === "session_info") {
+				name = entry.name?.trim() || undefined;
+				hasSessionInfo = true;
+				break;
 			}
+			pos = tail.lastIndexOf('"type":"session_info"', pos - 1);
+		}
+
+		// 逐行扫描最后一条 user/assistant 消息的活动时间（排序基准），找到即停。
+		const lines = tail.split("\n");
+		for (let i = lines.length - 1; i >= 0 && timestamp === undefined; i--) {
+			const entry = parseSessionEntryLine(lines[i]);
+			if (!entry || entry.type !== "message") continue;
+			const t = getMessageActivityTime(entry);
+			if (typeof t === "number") timestamp = t;
 		}
 	} finally {
 		await fd.close();
 	}
-	return { timestamp, name };
+	return { timestamp, name, hasSessionInfo };
 }
 
 async function buildSessionInfo(filePath: string): Promise<SessionInfo | null> {
@@ -947,8 +967,9 @@ async function buildSessionInfo(filePath: string): Promise<SessionInfo | null> {
 		if (!header) return null;
 
 		// 尾部扫描：最后消息时间戳（排序基准）+ 追加的 session_info（用户重命名）。
-		const tail = await scanSessionTail(filePath, SESSION_INFO_TAIL_BYTES, name);
-		if (tail.name !== undefined) name = tail.name;
+		// 尾部命中 session_info（无论名字是否为空）即覆盖头部 name——空名 = 清除。
+		const tail = await scanSessionTail(filePath, SESSION_INFO_TAIL_BYTES);
+		if (tail.hasSessionInfo) name = tail.name;
 
 		const cwd = typeof header.cwd === "string" ? header.cwd : "";
 		const parentSessionPath = header.parentSession;

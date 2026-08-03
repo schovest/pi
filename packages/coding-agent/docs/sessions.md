@@ -48,7 +48,7 @@ In the picker you can:
 - rename with Ctrl+R
 - delete with Ctrl+D, then confirm
 
-The picker builds its list by scanning only the head (first 100 lines) and tail (last 64KB) of each session file — title and last activity time come from this partial scan, and the displayed file size comes from `stat`. Large session files load near-instantly. Search matches only session titles (name/first message) and metadata, not message contents.
+The picker builds its list by scanning only the head (first 100 lines) and tail (last 1MB) of each session file — title and last activity time come from this partial scan, and the displayed file size comes from `stat`. Large session files load near-instantly. Search matches only session titles (name/first message) and metadata, not message contents.
 
 When available, pi uses the `trash` CLI for deletion instead of permanently removing files.
 
