@@ -13,7 +13,7 @@ import {
 	statSync,
 	writeFileSync,
 } from "fs";
-import { readdir, stat } from "fs/promises";
+import { open as openFile, readdir, stat } from "fs/promises";
 import { join, resolve } from "path";
 import { createInterface } from "readline";
 import { StringDecoder } from "string_decoder";
@@ -305,9 +305,9 @@ export interface SessionInfo {
 	parentSessionPath?: string;
 	created: Date;
 	modified: Date;
-	messageCount: number;
+	/** 会话文件大小（字节）——列表展示会话体量，无需解析内容，stat 直接可得。 */
+	fileSize: number;
 	firstMessage: string;
-	allMessagesText: string;
 }
 
 export type ReadonlySessionManager = Pick<
@@ -850,22 +850,71 @@ function getMessageActivityTime(entry: SessionMessageEntry): number | undefined 
 	return Number.isNaN(t) ? undefined : t;
 }
 
+const MAX_SESSION_INFO_HEAD_LINES = 100;
+const SESSION_INFO_TAIL_BYTES = 64 * 1024;
+
+/**
+ * 扫描文件尾部（最后 maxBytes 字节），返回最后一条 user/assistant 消息的活动时间
+ * 与最后一个非空 session_info 名称。append-only 会话的最后消息在文件末尾，
+ * 读尾部即可获得毫秒精度的排序基准（优于文件系统 mtime 的粗粒度）；
+ * 用户重命名追加的 session_info 也通常在尾部。
+ */
+async function scanSessionTail(
+	filePath: string,
+	maxBytes: number,
+	initialName: string | undefined,
+): Promise<{ timestamp?: number; name?: string }> {
+	const { size } = await stat(filePath);
+	if (size === 0) return {};
+	const start = Math.max(0, size - maxBytes);
+	const fd = await openFile(filePath, "r");
+	let timestamp: number | undefined;
+	let name = initialName;
+	let nameSet = false;
+	try {
+		const buf = Buffer.allocUnsafe(size - start);
+		// POSIX read 对常规文件单次读满；不做循环重读——万一读不满，尾部内容
+		// 缺失只会让 modified 退化为 mtime fallback，不会产生错误结果。
+		const { bytesRead } = await fd.read(buf, 0, size - start, start);
+		// 截断的首行 parse 失败会被 parseSessionEntryLine 跳过；尾行切分按 \n。
+		const lines = buf.subarray(0, bytesRead).toString("utf8").split("\n");
+		for (let i = lines.length - 1; i >= 0; i--) {
+			const entry = parseSessionEntryLine(lines[i]);
+			if (!entry) continue;
+			if (entry.type === "session_info" && entry.name?.trim() && !nameSet) {
+				// 从后往前首个 session_info 即最新（append-only）；后续更旧，不再覆盖
+				name = entry.name.trim();
+				nameSet = true;
+			} else if (entry.type === "message" && timestamp === undefined) {
+				const t = getMessageActivityTime(entry);
+				if (typeof t === "number") timestamp = t;
+			}
+		}
+	} finally {
+		await fd.close();
+	}
+	return { timestamp, name };
+}
+
 async function buildSessionInfo(filePath: string): Promise<SessionInfo | null> {
 	try {
 		const stats = await stat(filePath);
 		let header: SessionHeader | null = null;
-		let messageCount = 0;
 		let firstMessage = "";
-		const allMessages: string[] = [];
 		let name: string | undefined;
-		let lastActivityTime: number | undefined;
 
+		// 只扫描文件头部：header + 标题（firstMessage/name）均取自此处。
+		// 不读整个文件——几百 MB 会话的列表构建只开销头部 I/O。
 		const rl = createInterface({
 			input: createReadStream(filePath, { encoding: "utf8" }),
 			crlfDelay: Infinity,
 		});
 
+		let linesRead = 0;
 		for await (const line of rl) {
+			linesRead++;
+			if (linesRead > MAX_SESSION_INFO_HEAD_LINES) break;
+
 			const entry = parseSessionEntryLine(line);
 			if (!entry) continue;
 
@@ -878,15 +927,10 @@ async function buildSessionInfo(filePath: string): Promise<SessionInfo | null> {
 			// Extract session name (use latest, including explicit clears)
 			if (entry.type === "session_info") {
 				name = entry.name?.trim() || undefined;
+				continue;
 			}
 
 			if (entry.type !== "message") continue;
-			messageCount++;
-
-			const activityTime = getMessageActivityTime(entry);
-			if (typeof activityTime === "number") {
-				lastActivityTime = Math.max(lastActivityTime ?? 0, activityTime);
-			}
 
 			const message = entry.message;
 			if (!isMessageWithContent(message)) continue;
@@ -895,7 +939,6 @@ async function buildSessionInfo(filePath: string): Promise<SessionInfo | null> {
 			const textContent = extractTextContent(message);
 			if (!textContent) continue;
 
-			allMessages.push(textContent);
 			if (!firstMessage && message.role === "user") {
 				firstMessage = textContent;
 			}
@@ -903,15 +946,18 @@ async function buildSessionInfo(filePath: string): Promise<SessionInfo | null> {
 
 		if (!header) return null;
 
+		// 尾部扫描：最后消息时间戳（排序基准）+ 追加的 session_info（用户重命名）。
+		const tail = await scanSessionTail(filePath, SESSION_INFO_TAIL_BYTES, name);
+		if (tail.name !== undefined) name = tail.name;
+
 		const cwd = typeof header.cwd === "string" ? header.cwd : "";
 		const parentSessionPath = header.parentSession;
-		const headerTime = typeof header.timestamp === "string" ? new Date(header.timestamp).getTime() : NaN;
+		// 排序基准：最后消息时间戳（毫秒精度）优先；尾部扫描取不到时
+		// （如末尾是超长 tool 输出占据整个尾部窗口）回退文件 mtime——
+		// append-only 文件 mtime = 最后写入时刻，接近“最后活动”，
+		// 比会话创建时间（headerTime）准确得多，避免排序失真。
 		const modified =
-			typeof lastActivityTime === "number" && lastActivityTime > 0
-				? new Date(lastActivityTime)
-				: !Number.isNaN(headerTime)
-					? new Date(headerTime)
-					: stats.mtime;
+			typeof tail.timestamp === "number" && tail.timestamp > 0 ? new Date(tail.timestamp) : stats.mtime;
 
 		return {
 			path: filePath,
@@ -921,9 +967,8 @@ async function buildSessionInfo(filePath: string): Promise<SessionInfo | null> {
 			parentSessionPath,
 			created: new Date(header.timestamp),
 			modified,
-			messageCount,
+			fileSize: stats.size,
 			firstMessage: firstMessage || "(no messages)",
-			allMessagesText: allMessages.join(" "),
 		};
 	} catch {
 		return null;

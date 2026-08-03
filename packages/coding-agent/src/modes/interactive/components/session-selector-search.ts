@@ -24,7 +24,9 @@ function normalizeWhitespaceLower(text: string): string {
 }
 
 function getSessionSearchText(session: SessionInfo): string {
-	return `${session.id} ${session.name ?? ""} ${session.allMessagesText} ${session.cwd}`;
+	// 只搜索标题（name/firstMessage）与元数据；不索引消息内容——
+	// 无索引的全量内容搜索展示不全且不可信，标题最直观。
+	return `${session.id} ${session.name ?? ""} ${session.firstMessage} ${session.cwd}`;
 }
 
 export function hasSessionName(session: SessionInfo): boolean {

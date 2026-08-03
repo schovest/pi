@@ -43,9 +43,8 @@ function makeSession(overrides: Partial<SessionInfo> & { id: string }): SessionI
 		parentSessionPath: overrides.parentSessionPath,
 		created: overrides.created ?? new Date(0),
 		modified: overrides.modified ?? new Date(0),
-		messageCount: overrides.messageCount ?? 1,
+		fileSize: overrides.fileSize ?? 1,
 		firstMessage: overrides.firstMessage ?? "hello",
-		allMessagesText: overrides.allMessagesText ?? "hello",
 	};
 }
 
