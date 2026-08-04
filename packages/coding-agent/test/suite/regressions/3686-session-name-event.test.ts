@@ -18,7 +18,10 @@ describe("regression #3686: session name changes emit an event", () => {
 		harness.session.setSessionName("hello world");
 
 		expect(harness.sessionManager.getSessionName()).toBe("hello world");
-		expect(harness.eventsOfType("session_info_changed").map((event) => event.name)).toEqual(["hello world"]);
+		const events = harness.eventsOfType("session_info_changed");
+		expect(events.map((event) => event.name)).toEqual(["hello world"]);
+		// 事件携带会话标识，扩展可区分改名的是哪个会话
+		expect(events.map((event) => event.sessionFile)).toEqual([harness.sessionManager.getSessionFile()]);
 	});
 
 	it("emits session_info_changed when an extension calls pi.setSessionName", async () => {
@@ -35,6 +38,8 @@ describe("regression #3686: session name changes emit an event", () => {
 		api?.setSessionName("from extension");
 
 		expect(harness.sessionManager.getSessionName()).toBe("from extension");
-		expect(harness.eventsOfType("session_info_changed").map((event) => event.name)).toEqual(["from extension"]);
+		const events = harness.eventsOfType("session_info_changed");
+		expect(events.map((event) => event.name)).toEqual(["from extension"]);
+		expect(events.map((event) => event.sessionFile)).toEqual([harness.sessionManager.getSessionFile()]);
 	});
 });

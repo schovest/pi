@@ -5927,6 +5927,19 @@ export class InteractiveMode {
 						if (!next) return;
 						const mgr = SessionManager.open(sessionFilePath);
 						mgr.appendSessionInfo(next);
+						// 统一到事件路径：扩展事件带会话标识，任意会话改名都可感知
+						const event = {
+							type: "session_info_changed",
+							sessionFile: sessionFilePath,
+							name: mgr.getSessionName(),
+						} as const;
+						void this.session.extensionRunner.emit(event);
+						// 当前会话改名 → 同步终端标题/状态栏（与 setSessionName 路径一致）
+						if (sessionFilePath === this.session.sessionFile) {
+							this.updateTerminalTitle();
+							this.footer.invalidate();
+							this.ui.requestRender();
+						}
 					},
 					showRenameHint: true,
 					keybindings: this.keybindings,

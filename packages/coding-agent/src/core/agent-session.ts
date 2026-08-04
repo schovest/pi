@@ -169,7 +169,7 @@ export type AgentSessionEvent =
 			followUp: readonly string[];
 	  }
 	| { type: "compaction_start"; reason: "manual" | "threshold" | "overflow" }
-	| { type: "session_info_changed"; name: string | undefined }
+	| { type: "session_info_changed"; sessionFile?: string; name: string | undefined }
 	| { type: "agent_settled" }
 	| { type: "thinking_level_changed"; level: ThinkingLevel }
 	| {
@@ -3173,7 +3173,11 @@ export class AgentSession {
 	 */
 	setSessionName(name: string): void {
 		this.sessionManager.appendSessionInfo(name);
-		const event = { type: "session_info_changed", name: this.sessionManager.getSessionName() } as const;
+		const event = {
+			type: "session_info_changed",
+			sessionFile: this.sessionFile,
+			name: this.sessionManager.getSessionName(),
+		} as const;
 		this._emit(event);
 		void this._extensionRunner.emit(event);
 	}
