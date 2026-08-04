@@ -209,4 +209,38 @@ describe("session meta (.meta companion file)", () => {
 		// 无 meta → modified 回退文件 mtime
 		expect(s!.modified.getTime()).toBe(statSync(filePath).mtime.getTime());
 	});
+
+	it("picker 改名当前会话必须走 live manager——detached 写入会在下次 append 回退 meta", async () => {
+		const dir = makeDir();
+		mkdirSync(dir, { recursive: true });
+		const filePath = createSession(dir, "s8");
+
+		// live manager：已 flush 会话，meta 已记录旧名
+		const live = SessionManager.open(filePath);
+		live.appendSessionInfo("old-name");
+		live.appendMessage(makeMessage("one", 1700000001000));
+		expect(JSON.parse(readFileSync(`${filePath}.meta`, "utf8")) as { name: string }).toMatchObject({
+			name: "old-name",
+		});
+
+		// 修复前的 picker 实现：detached manager 改名 → live 内存态不更新
+		const detached = SessionManager.open(filePath);
+		detached.appendSessionInfo("new-name");
+		expect(detached.getSessionName()).toBe("new-name");
+		expect(live.getSessionName()).toBe("old-name"); // 事件名与 getSessionName() 矛盾
+
+		// 下一次 append：live 用陈旧 metaName 写 meta → 改名被回退（旧路径的 bug）
+		live.appendMessage(makeMessage("two", 1700000002000));
+		expect(JSON.parse(readFileSync(`${filePath}.meta`, "utf8")) as { name: string }).toMatchObject({
+			name: "old-name",
+		});
+
+		// 修复后：当前会话改名走 live manager（即 AgentSession.setSessionName 的机制）
+		live.appendSessionInfo("new-name");
+		expect(live.getSessionName()).toBe("new-name");
+		live.appendMessage(makeMessage("three", 1700000003000));
+		expect(JSON.parse(readFileSync(`${filePath}.meta`, "utf8")) as { name: string }).toMatchObject({
+			name: "new-name",
+		});
+	});
 });

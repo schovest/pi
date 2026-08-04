@@ -5925,21 +5925,20 @@ export class InteractiveMode {
 					renameSession: async (sessionFilePath: string, nextName: string | undefined) => {
 						const next = (nextName ?? "").trim();
 						if (!next) return;
+						// 当前会话走统一路径：更新 live manager 内存态 + 写 meta，
+						// 并向会话内部监听器（标题/状态栏）与扩展 runner 各发一次事件
+						if (sessionFilePath === this.session.sessionFile) {
+							this.session.setSessionName(next);
+							return;
+						}
+						// 非当前会话：只落盘 + 发扩展事件，不影响当前会话状态
 						const mgr = SessionManager.open(sessionFilePath);
 						mgr.appendSessionInfo(next);
-						// 统一到事件路径：扩展事件带会话标识，任意会话改名都可感知
-						const event = {
+						void this.session.extensionRunner.emit({
 							type: "session_info_changed",
 							sessionFile: sessionFilePath,
 							name: mgr.getSessionName(),
-						} as const;
-						void this.session.extensionRunner.emit(event);
-						// 当前会话改名 → 同步终端标题/状态栏（与 setSessionName 路径一致）
-						if (sessionFilePath === this.session.sessionFile) {
-							this.updateTerminalTitle();
-							this.footer.invalidate();
-							this.ui.requestRender();
-						}
+						} as const);
 					},
 					showRenameHint: true,
 					keybindings: this.keybindings,
