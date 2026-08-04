@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.13.2] - 2026-08-04
+
 ### Fixed
 
 - 会话改名事件统一：`session_info_changed` 事件新增 `sessionFile` 字段（标识发生改名的会话，可选、向后兼容）；picker（Ctrl+R）对任意会话改名后也发出该事件（此前不发），扩展可凭 `sessionFile` 区分目标会话；picker 改名当前会话时走 `setSessionName` 统一路径（更新 live 会话内存态与 `.meta`，标题/状态栏即时同步、事件名与 `getSessionName()` 一致，后续 append 不回退 meta）——`/name`、`pi.setSessionName()`、picker 改名三条路径行为一致
