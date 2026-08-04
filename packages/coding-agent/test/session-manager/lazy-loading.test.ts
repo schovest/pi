@@ -318,4 +318,55 @@ describe("lazy serialization (C)", () => {
 		expect(m).toBeDefined();
 		expect((m as { message: { content: { text: string }[] } }).message.content[0].text).toContain("x".repeat(BIG));
 	});
+
+	describe("large lazy session bulk materialize (D)", () => {
+		it("buildSessionContext bulk-materializes thousands of kept lazy entries", () => {
+			const dir = mkdtempSync(join(tmpdir(), "pi-lazy-bulk-"));
+			const file = join(dir, "s.jsonl");
+			// 2 万条 compaction 前 kept 消息 + 1 个 compaction + 少量活跃消息。
+			// 旧实现 buildSessionContext 对每个 lazy 占位做 O(N) findIndex + 逐条 open/read/close，
+			// 在 N=2 万时需数十秒；新实现单 fd 批量读回，毫秒级。此用例兼作性能哨兵。
+			const KEPT = 20_000;
+			const lines = [makeHeader()];
+			for (let i = 0; i < KEPT; i++) {
+				lines.push(makeMsg(`k${i}`, i === 0 ? null : `k${i - 1}`, SMALL));
+			}
+			lines.push(makeCompaction("c1", "k0", `k${KEPT - 1}`));
+			lines.push(makeMsg("a1", "c1", SMALL));
+			lines.push(makeMsg("a2", "a1", SMALL));
+			writeFileSync(file, `${lines.join("\n")}\n`);
+
+			const sm = SessionManager.open(file);
+			const started = performance.now();
+			const ctx = sm.buildSessionContext();
+			const elapsed = performance.now() - started;
+
+			// 语义：kept 消息全部 materialize 进入上下文（compaction summary + KEPT + 活跃）
+			expect(ctx.messages.length).toBe(1 + KEPT + 2);
+			expect(ctx.entryIds[1]).toBe("k0");
+			const firstKept = ctx.messages[1] as { content?: { text: string }[] };
+			expect((firstKept.content?.[0] as { text?: string })?.text).toContain("x");
+			// fileEntries 中占位已被批量替换为完整条目
+			expect(isLazyEntry(sm.getEntry("k0"))).toBe(false);
+			expect(isLazyEntry(sm.getEntry(`k${KEPT - 1}`))).toBe(false);
+			// 性能哨兵：2 万 lazy 条目的上下文构建应毫秒级；O(N²) 旧实现（findIndex + unshift）
+			// 需数十秒。5s 阈值对实测值（约 200-300ms）留 16-25 倍余量，兼顾 CI 慢机。
+			expect(elapsed).toBeLessThan(5000);
+		});
+
+		it("materialize uses entryIndex after appends (offset stays valid)", () => {
+			const dir = mkdtempSync(join(tmpdir(), "pi-lazy-append-"));
+			const file = join(dir, "s.jsonl");
+			writeFileSync(file, `${makeHeader()}\n${makeMsg("k0", null, SMALL)}\n${makeCompaction("c1", "k0", "k0")}\n`);
+			const sm = SessionManager.open(file);
+			// append 若干条目后再 materialize，验证 entryIndex 随 append 维护、替换位置正确
+			sm.appendMessage(userMsg("hello"));
+			sm.appendMessage(userMsg("world"));
+			const m = sm.materialize("k0");
+			expect(m).toBeDefined();
+			expect(isLazyEntry(sm.getEntry("k0"))).toBe(false);
+			// 追加的消息不受影响
+			expect(sm.getEntries().length).toBe(4); // k0 + c1 + 2 appended
+		});
+	});
 });

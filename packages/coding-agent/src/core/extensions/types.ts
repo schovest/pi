@@ -556,9 +556,11 @@ export interface SessionStartEvent {
 	previousSessionFile?: string;
 }
 
-/** Fired when the current session metadata changes. */
+/** Fired when a session's metadata (display name) changes. */
 export interface SessionInfoChangedEvent {
 	type: "session_info_changed";
+	/** Session file whose display name changed. Absent for non-persisted sessions. */
+	sessionFile?: string;
 	/** Current normalized session name. Undefined when the name is cleared. */
 	name: string | undefined;
 }

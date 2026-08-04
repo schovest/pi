@@ -48,6 +48,14 @@ function formatSessionDate(date: Date): string {
 	return `${Math.floor(diffDays / 365)}y`;
 }
 
+/** 十进制文件大小：B 取整 / KB 取整 / MB、GB 1 位小数。 */
+function formatFileSize(bytes: number): string {
+	if (bytes < 1024) return `${bytes} B`;
+	if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+	if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+	return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
 function canonicalizePath(path: string | undefined): string | undefined {
 	if (!path) return path;
 	return _canonicalizePath(path);
@@ -461,9 +469,9 @@ class SessionList implements Component, Focusable {
 			const displayText = session.name ?? session.firstMessage;
 			const normalizedMessage = displayText.replace(/[\x00-\x1f\x7f]/g, " ").trim();
 
-			// Right side: message count and age
+			// Right side: file size and age
 			const age = formatSessionDate(session.modified);
-			const msgCount = String(session.messageCount);
+			const msgCount = formatFileSize(session.fileSize);
 			let rightPart = `${msgCount} ${age}`;
 			if (this.showCwd && session.cwd) {
 				rightPart = `${shortenPath(session.cwd)} ${rightPart}`;
@@ -645,8 +653,11 @@ type SessionsLoader = (onProgress?: SessionListProgress) => Promise<SessionInfo[
 async function deleteSessionFile(
 	sessionPath: string,
 ): Promise<{ ok: boolean; method: "trash" | "unlink"; error?: string }> {
+	// 伴生 meta 文件与主文件一并删除
+	const metaPath = `${sessionPath}.meta`;
+	const paths = [sessionPath, ...(existsSync(metaPath) ? [metaPath] : [])];
 	// Try `trash` first (if installed)
-	const trashArgs = sessionPath.startsWith("-") ? ["--", sessionPath] : [sessionPath];
+	const trashArgs = paths.flatMap((p) => (p.startsWith("-") ? ["--", p] : [p]));
 	const trashResult = spawnSync("trash", trashArgs, { encoding: "utf-8" });
 
 	const getTrashErrorHint = (): string | null => {
@@ -669,7 +680,9 @@ async function deleteSessionFile(
 
 	// Fallback to permanent deletion
 	try {
-		await unlink(sessionPath);
+		for (const p of paths) {
+			await unlink(p);
+		}
 		return { ok: true, method: "unlink" };
 	} catch (err) {
 		const unlinkError = err instanceof Error ? err.message : String(err);

@@ -48,6 +48,8 @@ In the picker you can:
 - rename with Ctrl+R
 - delete with Ctrl+D, then confirm
 
+The picker builds its list by scanning only the head (first 100 lines) of each session file — first message, title, and working directory come from this partial scan, and the displayed file size comes from `stat`. Title and last activity time are taken from a small companion metadata file (`<session file>.meta`, recording file size, last activity time, and session name) that pi maintains next to each session it writes; when the meta is missing or stale (file size mismatch, e.g. externally modified), the picker falls back to the head scan plus the file's mtime — so sessions never written by pi are still listed correctly. Large session files load near-instantly. Search matches only session titles (name/first message) and metadata, not message contents.
+
 When available, pi uses the `trash` CLI for deletion instead of permanently removing files.
 
 ## Naming Sessions

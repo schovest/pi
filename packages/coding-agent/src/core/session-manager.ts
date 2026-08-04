@@ -9,6 +9,7 @@ import {
 	mkdirSync,
 	openSync,
 	readdirSync,
+	readFileSync,
 	readSync,
 	statSync,
 	writeFileSync,
@@ -305,9 +306,9 @@ export interface SessionInfo {
 	parentSessionPath?: string;
 	created: Date;
 	modified: Date;
-	messageCount: number;
+	/** 会话文件大小（字节）——列表展示会话体量，无需解析内容，stat 直接可得。 */
+	fileSize: number;
 	firstMessage: string;
-	allMessagesText: string;
 }
 
 export type ReadonlySessionManager = Pick<
@@ -517,12 +518,14 @@ export function buildSessionContext(
 	}
 
 	// Walk from leaf to root, collecting path
+	// push + reverse（unshift 是 O(N)，长路径下 O(N²)）
 	const path: SessionEntry[] = [];
 	let current: SessionEntry | undefined = leaf;
 	while (current) {
-		path.unshift(current);
+		path.push(current);
 		current = current.parentId ? byId.get(current.parentId) : undefined;
 	}
+	path.reverse();
 
 	// Extract settings and find compaction
 	let thinkingLevel = "off";
@@ -848,22 +851,60 @@ function getMessageActivityTime(entry: SessionMessageEntry): number | undefined 
 	return Number.isNaN(t) ? undefined : t;
 }
 
+const MAX_SESSION_INFO_HEAD_LINES = 100;
+/**
+ * 伴生 meta 文件（${filePath}.meta）结构：缓存主文件的 size 与列表构建所需的
+ * name/lastActivityMs，使列表构建无需扫描文件内容。
+ */
+interface SessionMeta {
+	size: number;
+	lastActivityMs?: number;
+	name?: string;
+	hasSessionInfo: boolean;
+}
+
+/** 读伴生 meta 文件（${filePath}.meta）。不存在/损坏/字段不合法返回 undefined。 */
+function readSessionMeta(filePath: string): SessionMeta | undefined {
+	const metaPath = `${filePath}.meta`;
+	if (!existsSync(metaPath)) return undefined;
+	try {
+		const data = JSON.parse(readFileSync(metaPath, "utf8")) as {
+			size?: unknown;
+			lastActivityMs?: unknown;
+			name?: unknown;
+			hasSessionInfo?: unknown;
+		};
+		if (typeof data.size !== "number") return undefined;
+		return {
+			size: data.size,
+			lastActivityMs: typeof data.lastActivityMs === "number" ? data.lastActivityMs : undefined,
+			name: typeof data.name === "string" ? data.name : undefined,
+			hasSessionInfo: data.hasSessionInfo === true,
+		};
+	} catch {
+		return undefined;
+	}
+}
+
 async function buildSessionInfo(filePath: string): Promise<SessionInfo | null> {
 	try {
 		const stats = await stat(filePath);
 		let header: SessionHeader | null = null;
-		let messageCount = 0;
 		let firstMessage = "";
-		const allMessages: string[] = [];
 		let name: string | undefined;
-		let lastActivityTime: number | undefined;
 
+		// 只扫描文件头部：header + 标题（firstMessage/name）均取自此处。
+		// 不读整个文件——几百 MB 会话的列表构建只开销头部 I/O。
 		const rl = createInterface({
 			input: createReadStream(filePath, { encoding: "utf8" }),
 			crlfDelay: Infinity,
 		});
 
+		let linesRead = 0;
 		for await (const line of rl) {
+			linesRead++;
+			if (linesRead > MAX_SESSION_INFO_HEAD_LINES) break;
+
 			const entry = parseSessionEntryLine(line);
 			if (!entry) continue;
 
@@ -876,15 +917,10 @@ async function buildSessionInfo(filePath: string): Promise<SessionInfo | null> {
 			// Extract session name (use latest, including explicit clears)
 			if (entry.type === "session_info") {
 				name = entry.name?.trim() || undefined;
+				continue;
 			}
 
 			if (entry.type !== "message") continue;
-			messageCount++;
-
-			const activityTime = getMessageActivityTime(entry);
-			if (typeof activityTime === "number") {
-				lastActivityTime = Math.max(lastActivityTime ?? 0, activityTime);
-			}
 
 			const message = entry.message;
 			if (!isMessageWithContent(message)) continue;
@@ -893,7 +929,6 @@ async function buildSessionInfo(filePath: string): Promise<SessionInfo | null> {
 			const textContent = extractTextContent(message);
 			if (!textContent) continue;
 
-			allMessages.push(textContent);
 			if (!firstMessage && message.role === "user") {
 				firstMessage = textContent;
 			}
@@ -901,15 +936,23 @@ async function buildSessionInfo(filePath: string): Promise<SessionInfo | null> {
 
 		if (!header) return null;
 
+		// meta 有效（存在且 size 与主文件一致）→ name/lastActivityMs 直接用缓存，无需内容
+		// 扫描；meta 缺失/过期（外部修改、写失败）→ 回退：name 用头部扫描结果，modified
+		// 回退文件 mtime（append-only 下 mtime = 最后写入时刻，接近"最后活动"）。
+		// size 校验保证过期 meta 不会产生错误结果。
+		const meta = readSessionMeta(filePath);
+		const metaIsCurrent = meta !== undefined && meta.size === stats.size;
+		if (metaIsCurrent && meta.hasSessionInfo) {
+			// 空名（undefined）= 清除，与头部扫描语义一致
+			name = meta.name;
+		}
+
 		const cwd = typeof header.cwd === "string" ? header.cwd : "";
 		const parentSessionPath = header.parentSession;
-		const headerTime = typeof header.timestamp === "string" ? new Date(header.timestamp).getTime() : NaN;
 		const modified =
-			typeof lastActivityTime === "number" && lastActivityTime > 0
-				? new Date(lastActivityTime)
-				: !Number.isNaN(headerTime)
-					? new Date(headerTime)
-					: stats.mtime;
+			metaIsCurrent && typeof meta.lastActivityMs === "number" && meta.lastActivityMs > 0
+				? new Date(meta.lastActivityMs)
+				: stats.mtime;
 
 		return {
 			path: filePath,
@@ -919,9 +962,8 @@ async function buildSessionInfo(filePath: string): Promise<SessionInfo | null> {
 			parentSessionPath,
 			created: new Date(header.timestamp),
 			modified,
-			messageCount,
+			fileSize: stats.size,
 			firstMessage: firstMessage || "(no messages)",
-			allMessagesText: allMessages.join(" "),
 		};
 	} catch {
 		return null;
@@ -1025,6 +1067,12 @@ export class SessionManager {
 	private flushed: boolean = false;
 	private fileEntries: FileEntry[] = [];
 	private byId: Map<string, SessionEntry> = new Map();
+	/** 伴生 meta 的内存态：列表构建据此写 ${sessionFile}.meta，避免内容扫描。 */
+	private metaName: string | undefined;
+	private metaHasSessionInfo = false;
+	private metaLastActivityMs: number | undefined;
+	/** entryId → fileEntries 下标。避免 materialize 时 O(N) findIndex（大会话文件 O(N²) 热点）。 */
+	private entryIndex: Map<string, number> = new Map();
 	private labelsById: Map<string, string> = new Map();
 	private labelTimestampsById: Map<string, string> = new Map();
 	private leafId: string | null = null;
@@ -1035,6 +1083,7 @@ export class SessionManager {
 		sessionFile: string | undefined,
 		persist: boolean,
 		newSessionOptions?: NewSessionOptions,
+		preloadedEntries?: FileEntry[],
 	) {
 		this.cwd = resolvePath(cwd);
 		this.sessionDir = normalizePath(sessionDir);
@@ -1044,17 +1093,18 @@ export class SessionManager {
 		}
 
 		if (sessionFile) {
-			this.setSessionFile(sessionFile);
+			this.setSessionFile(sessionFile, preloadedEntries);
 		} else {
 			this.newSession(newSessionOptions);
 		}
 	}
 
 	/** Switch to a different session file (used for resume and branching) */
-	setSessionFile(sessionFile: string): void {
+	setSessionFile(sessionFile: string, preloadedEntries?: FileEntry[]): void {
 		this.sessionFile = resolvePath(sessionFile);
 		if (existsSync(this.sessionFile)) {
-			this.fileEntries = loadEntriesFromFile(this.sessionFile);
+			// 复用调用方（SessionManager.open）已读出的 entries，避免大文件二次全量读取。
+			this.fileEntries = preloadedEntries ?? loadEntriesFromFile(this.sessionFile);
 
 			// If file was empty, initialize it with a valid session header. If it was
 			// non-empty but did not parse as a pi session, fail without modifying it.
@@ -1078,6 +1128,7 @@ export class SessionManager {
 			}
 
 			this._buildIndex();
+			this._initMetaState();
 			this.flushed = true;
 		} else {
 			const explicitPath = this.sessionFile;
@@ -1102,9 +1153,11 @@ export class SessionManager {
 		};
 		this.fileEntries = [header];
 		this.byId.clear();
+		this.entryIndex.clear();
 		this.labelsById.clear();
 		this.leafId = null;
 		this.flushed = false;
+		this._initMetaState();
 
 		if (this.persist) {
 			const fileTimestamp = timestamp.replace(/[:.]/g, "-");
@@ -1115,10 +1168,13 @@ export class SessionManager {
 
 	private _buildIndex(): void {
 		this.byId.clear();
+		this.entryIndex.clear();
 		this.labelsById.clear();
 		this.labelTimestampsById.clear();
 		this.leafId = null;
-		for (const entry of this.fileEntries) {
+		for (let i = 0; i < this.fileEntries.length; i++) {
+			const entry = this.fileEntries[i];
+			this.entryIndex.set(entry.id, i);
 			if (entry.type === "session") continue;
 			this.byId.set(entry.id, entry);
 			// subagent_run entries are detached records — they must not
@@ -1233,10 +1289,20 @@ export class SessionManager {
 		const raw = readRawLine(this.sessionFile, entry.offset, entry.length);
 		const full = parseSessionEntryLine(raw);
 		if (!full || full.type === "session") return entry;
-		this.byId.set(id, full);
-		const idx = this.fileEntries.findIndex((e) => isLazyEntry(e) && e.id === id);
-		if (idx !== -1) this.fileEntries[idx] = full;
+		this._storeMaterializedEntry(id, full);
 		return full;
+	}
+
+	/**
+	 * 将已读回的完整条目写入 byId 并替换 fileEntries 中的 lazy 占位。
+	 * materialize 与 _materializeLazyOnBranch 共用的唯一替换入口，保持索引语义一致。
+	 */
+	private _storeMaterializedEntry(id: string, full: SessionEntry): void {
+		this.byId.set(id, full);
+		const idx = this.entryIndex.get(id);
+		if (idx !== undefined && this.fileEntries[idx] && isLazyEntry(this.fileEntries[idx])) {
+			this.fileEntries[idx] = full;
+		}
 	}
 
 	/** Append subagent messages as children of a SubagentRunEntry.
@@ -1253,6 +1319,7 @@ export class SessionManager {
 				message: message as Message,
 			};
 			this.fileEntries.push(entry);
+			this.entryIndex.set(entry.id, this.fileEntries.length - 1);
 			this.byId.set(entry.id, entry);
 			// 不更新 leafId — 子树消息不影响主链
 			this._persist(entry);
@@ -1280,6 +1347,60 @@ export class SessionManager {
 		return messages.map((m) => m.msg);
 	}
 
+	/**
+	 * 从 fileEntries 重建 meta 内存态（打开会话/新会话时调用）。
+	 * 从后往前第一个 session_info 即最新（空名=清除），最后一条 user/assistant
+	 * 消息时间即活动时间（lazy 占位跳过，其活动时间远早于 compaction 后的
+	 * 真实消息，列表用 mtime 兜底更合理）。
+	 */
+	private _initMetaState(): void {
+		this.metaName = undefined;
+		this.metaHasSessionInfo = false;
+		this.metaLastActivityMs = undefined;
+		for (let i = this.fileEntries.length - 1; i >= 0; i--) {
+			const e = this.fileEntries[i];
+			if (e.type === "session_info" && !this.metaHasSessionInfo) {
+				this.metaName = e.name?.trim() || undefined;
+				this.metaHasSessionInfo = true;
+			} else if (e.type === "message" && !isLazyEntry(e) && this.metaLastActivityMs === undefined) {
+				const t = getMessageActivityTime(e as SessionMessageEntry);
+				if (typeof t === "number") this.metaLastActivityMs = t;
+			}
+		}
+	}
+
+	/**
+	 * 主文件落盘后更新伴生 meta（${sessionFile}.meta）。size 存主文件当前字节数，
+	 * 列表构建据此判断 meta 是否过期（append/重写后不一致即回退头部扫描）。
+	 * 写失败静默——过期 meta 只损失快路径，不会产生错误结果。
+	 */
+	/** 用一条 append 的 entry 推进 meta 内存态（不写文件）。 */
+	private _applyMetaEntry(entry: SessionEntry): void {
+		if (entry.type === "session_info") {
+			this.metaName = entry.name?.trim() || undefined;
+			this.metaHasSessionInfo = true;
+		} else if (entry.type === "message" && !isLazyEntry(entry)) {
+			const t = getMessageActivityTime(entry as SessionMessageEntry);
+			if (typeof t === "number") this.metaLastActivityMs = t;
+		}
+	}
+
+	private _updateSessionMeta(entry: SessionEntry): void {
+		if (!this.persist || !this.sessionFile) return;
+		this._applyMetaEntry(entry);
+		try {
+			const meta = {
+				size: statSync(this.sessionFile).size,
+				lastActivityMs: this.metaLastActivityMs,
+				name: this.metaName,
+				hasSessionInfo: this.metaHasSessionInfo,
+			};
+			writeFileSync(`${this.sessionFile}.meta`, `${JSON.stringify(meta)}\n`);
+		} catch {
+			// meta 写失败无害：列表构建 size 校验不匹配时回退头部扫描
+		}
+	}
+
 	_persist(entry: SessionEntry): void {
 		if (!this.persist || !this.sessionFile) return;
 
@@ -1287,9 +1408,13 @@ export class SessionManager {
 		if (!hasAssistant) {
 			if (this.flushed) {
 				appendFileSync(this.sessionFile, `${JSON.stringify(entry)}\n`);
+				this._updateSessionMeta(entry);
 			} else {
 				// Mark as not flushed so when assistant arrives, all entries get written
 				this.flushed = false;
+				// 未落盘（首条 assistant 前）的条目也推进 meta 内存态——首条 assistant
+				// 全量写时 _updateSessionMeta 据此写出正确的 name/lastActivityMs
+				this._applyMetaEntry(entry);
 			}
 			return;
 		}
@@ -1307,13 +1432,16 @@ export class SessionManager {
 				closeSync(fd);
 			}
 			this.flushed = true;
+			this._updateSessionMeta(entry);
 		} else {
 			appendFileSync(this.sessionFile, `${JSON.stringify(entry)}\n`);
+			this._updateSessionMeta(entry);
 		}
 	}
 
 	private _appendEntry(entry: SessionEntry): void {
 		this.fileEntries.push(entry);
+		this.entryIndex.set(entry.id, this.fileEntries.length - 1);
 		this.byId.set(entry.id, entry);
 		this.leafId = entry.id;
 		this._persist(entry);
@@ -1567,9 +1695,10 @@ export class SessionManager {
 		const startId = fromId ?? this.leafId;
 		let current = startId ? this.byId.get(startId) : undefined;
 		while (current) {
-			path.unshift(current);
+			path.push(current);
 			current = current.parentId ? this.byId.get(current.parentId) : undefined;
 		}
+		path.reverse();
 		return path;
 	}
 
@@ -1596,7 +1725,65 @@ export class SessionManager {
 	 * compaction 保留的 kept messages 以 LazyEntry 占位存在时，经 materializer 恢复后进入上下文。
 	 */
 	buildSessionContext(): SessionContext {
-		return buildSessionContext(this.getEntries(), this.leafId, this.byId, (id) => this.materialize(id));
+		// 一次性 materialize 主链上全部 lazy 占位（单 fd 批量读回），避免逐条
+		// open/read/close 的 O(N) fd 系统调用——几百 MB 会话文件下是 resume 主要瓶颈。
+		this._materializeLazyOnBranch();
+		return buildSessionContext(this.getEntries(), this.leafId, this.byId);
+	}
+
+	/**
+	 * 将当前分支（leaf → root 路径）上的全部 lazy 占位批量读回为完整条目。
+	 * 与逐条 materialize 相比只 open 一次 fd；按 offset 排序后分段合并读（gap 小的
+	 * 条目共段），减少 readSync 系统调用，段长上限 1MB 控制内存峰值。
+	 * byId/fileEntries 就地替换（与 materialize 语义一致）；读回失败保持占位。
+	 * 注意：路径按 leafId 解析，与 buildSessionContext 的 leaf fallback 不同——
+	 * 这里 leafId 悬空时不做 entries[last] 回退（SessionManager.leafId 内部维护，
+	 * 正常流程不会悬空），悬空时不 materialize 任何条目，保持占位。
+	 */
+	private _materializeLazyOnBranch(): void {
+		if (!this.sessionFile) return;
+		const lazy: LazyEntry[] = [];
+		let current = this.leafId ? this.byId.get(this.leafId) : undefined;
+		while (current) {
+			if (isLazyEntry(current)) lazy.push(current);
+			current = current.parentId ? this.byId.get(current.parentId) : undefined;
+		}
+		if (lazy.length === 0) return;
+		lazy.sort((a, b) => a.offset - b.offset);
+
+		// 分段合并：gap ≤ 64KB 且段长 ≤ 1MB 的相邻条目共段，一次 read 读整段再切片。
+		const MAX_GAP = 64 * 1024;
+		const MAX_CHUNK = 1024 * 1024;
+		const chunks: { start: number; end: number; items: LazyEntry[] }[] = [];
+		let chunk: { start: number; end: number; items: LazyEntry[] } | null = null;
+		for (const l of lazy) {
+			const end = l.offset + l.length;
+			if (chunk && l.offset - chunk.end <= MAX_GAP && end - chunk.start <= MAX_CHUNK) {
+				chunk.end = end;
+				chunk.items.push(l);
+			} else {
+				chunk = { start: l.offset, end, items: [l] };
+				chunks.push(chunk);
+			}
+		}
+
+		const fd = openSync(this.sessionFile, "r");
+		try {
+			for (const c of chunks) {
+				const buf = Buffer.allocUnsafe(c.end - c.start);
+				const n = readSync(fd, buf, 0, buf.length, c.start);
+				const avail = c.start + n; // 文件截断时仅处理截断点前的条目
+				for (const l of c.items) {
+					if (l.offset + l.length > avail) continue;
+					const rel = l.offset - c.start;
+					const full = parseSessionEntryLine(buf.subarray(rel, rel + l.length).toString("utf8"));
+					if (!full || full.type === "session") continue;
+					this._storeMaterializedEntry(l.id, full);
+				}
+			}
+		} finally {
+			closeSync(fd);
+		}
 	}
 
 	/**
@@ -1964,7 +2151,7 @@ export class SessionManager {
 		const cwd = cwdOverride ?? header?.cwd ?? process.cwd();
 		// If no sessionDir provided, derive from file's parent directory
 		const dir = sessionDir ? normalizePath(sessionDir) : resolve(resolvedPath, "..");
-		return new SessionManager(cwd, dir, resolvedPath, true);
+		return new SessionManager(cwd, dir, resolvedPath, true, undefined, entries);
 	}
 
 	/** Create a SessionManager with a specific file path. */
