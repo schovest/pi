@@ -1374,8 +1374,8 @@ export class SessionManager {
 	 * 列表构建据此判断 meta 是否过期（append/重写后不一致即回退头部扫描）。
 	 * 写失败静默——过期 meta 只损失快路径，不会产生错误结果。
 	 */
-	private _updateSessionMeta(entry: SessionEntry): void {
-		if (!this.persist || !this.sessionFile) return;
+	/** 用一条 append 的 entry 推进 meta 内存态（不写文件）。 */
+	private _applyMetaEntry(entry: SessionEntry): void {
 		if (entry.type === "session_info") {
 			this.metaName = entry.name?.trim() || undefined;
 			this.metaHasSessionInfo = true;
@@ -1383,6 +1383,11 @@ export class SessionManager {
 			const t = getMessageActivityTime(entry as SessionMessageEntry);
 			if (typeof t === "number") this.metaLastActivityMs = t;
 		}
+	}
+
+	private _updateSessionMeta(entry: SessionEntry): void {
+		if (!this.persist || !this.sessionFile) return;
+		this._applyMetaEntry(entry);
 		try {
 			const meta = {
 				size: statSync(this.sessionFile).size,
@@ -1407,6 +1412,9 @@ export class SessionManager {
 			} else {
 				// Mark as not flushed so when assistant arrives, all entries get written
 				this.flushed = false;
+				// 未落盘（首条 assistant 前）的条目也推进 meta 内存态——首条 assistant
+				// 全量写时 _updateSessionMeta 据此写出正确的 name/lastActivityMs
+				this._applyMetaEntry(entry);
 			}
 			return;
 		}

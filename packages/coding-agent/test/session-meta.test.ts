@@ -151,6 +151,33 @@ describe("session meta (.meta companion file)", () => {
 		expect(s!.modified.getTime()).toBe(1700000003000);
 	});
 
+	it("rename before first assistant (unflushed session) persists name to jsonl and meta", async () => {
+		const dir = makeDir();
+		mkdirSync(dir, { recursive: true });
+		const filePath = join(dir, "s7.jsonl");
+		// 新会话（open 不存在路径 → newSession；cwdOverride 使其可被 list("/tmp", dir) 匹配）
+		const mgr = SessionManager.open(filePath, undefined, "/tmp");
+		mgr.appendSessionInfo("ext-name"); // 首条 assistant 之前改名（未 flush）
+		mgr.appendMessage({ role: "user", content: [{ type: "text", text: "hi" }], timestamp: 1700000000000 });
+		mgr.appendMessage(makeMessage("reply", 1700000001000)); // 首条 assistant → 全量 flush
+
+		// JSONL 已含 session_info 行
+		const raw = readFileSync(filePath, "utf8");
+		expect(raw).toContain('"name":"ext-name"');
+		// meta 记录 name（未 flush 阶段的改名在 flush 时不丢失）
+		const meta = JSON.parse(readFileSync(`${filePath}.meta`, "utf8")) as {
+			name?: string;
+			hasSessionInfo?: boolean;
+		};
+		expect(meta.name).toBe("ext-name");
+		expect(meta.hasSessionInfo).toBe(true);
+		// 列表显示正确
+		const sessions = await SessionManager.list("/tmp", dir);
+		const s = sessions.find((x) => x.path === filePath);
+		expect(s).toBeDefined();
+		expect(s!.name).toBe("ext-name");
+	});
+
 	it("hand-written session without meta falls back to head scan + mtime", async () => {
 		const dir = makeDir();
 		mkdirSync(dir, { recursive: true });
