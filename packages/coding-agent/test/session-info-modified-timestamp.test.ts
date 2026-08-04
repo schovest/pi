@@ -81,7 +81,7 @@ describe("SessionInfo.modified", () => {
 		expect(s!.modified.getTime()).not.toBe(before.mtime.getTime());
 	});
 
-	it("buildSessionInfo scans only head+tail: firstMessage from head, modified from tail last message", async () => {
+	it("hand-written session without meta: firstMessage from head, modified falls back to mtime", async () => {
 		const dir = join(tmpdir(), `pi-list-${Date.now()}`);
 		mkdirSync(dir, { recursive: true });
 		const filePath = join(dir, "big.jsonl");
@@ -111,13 +111,13 @@ describe("SessionInfo.modified", () => {
 		const s = sessions.find((x) => x.id === "big");
 		expect(s).toBeDefined();
 		expect(s!.firstMessage).toBe("FIRST-USER-MESSAGE");
-		// modified 取尾部最后消息时间戳（毫秒精度），而非文件 mtime
-		expect(s!.modified.toISOString()).toBe("2026-08-02T12:00:00.000Z");
+		// 无 meta → modified 回退文件 mtime（append-only 下 mtime = 最后写入时刻）
+		expect(s!.modified.getTime()).toBe(st.mtime.getTime());
 		// fileSize 来自 stat，精确等于文件字节数（无需解析内容）
 		expect(s!.fileSize).toBe(st.size);
 	});
 
-	it("buildSessionInfo picks up renamed session_info from file tail", async () => {
+	it("renamed session_info is picked up from head scan (no meta)", async () => {
 		const dir = join(tmpdir(), `pi-list-${Date.now()}`);
 		mkdirSync(dir, { recursive: true });
 		const filePath = join(dir, "renamed.jsonl");
@@ -162,7 +162,7 @@ describe("SessionInfo.modified", () => {
 		expect(s!.name).toBe("new-name");
 	});
 
-	it("falls back to file mtime when tail window holds no user/assistant message", async () => {
+	it("hand-written session without meta falls back to file mtime", async () => {
 		const dir = join(tmpdir(), `pi-list-${Date.now()}`);
 		mkdirSync(dir, { recursive: true });
 		const filePath = join(dir, "tail-tool.jsonl");
@@ -277,7 +277,7 @@ describe("SessionInfo.modified", () => {
 		expect(s!.name).toBe(trickyName);
 	});
 
-	it("renamed session_info beyond the old 64KB window is still found (1MB tail window)", async () => {
+	it("renamed session_info in head scan wins without meta", async () => {
 		const dir = join(tmpdir(), `pi-list-${Date.now()}`);
 		mkdirSync(dir, { recursive: true });
 		const filePath = join(dir, "mid-rename.jsonl");

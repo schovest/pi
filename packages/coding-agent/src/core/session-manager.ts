@@ -9,11 +9,12 @@ import {
 	mkdirSync,
 	openSync,
 	readdirSync,
+	readFileSync,
 	readSync,
 	statSync,
 	writeFileSync,
 } from "fs";
-import { open as openFile, readdir, stat } from "fs/promises";
+import { readdir, stat } from "fs/promises";
 import { join, resolve } from "path";
 import { createInterface } from "readline";
 import { StringDecoder } from "string_decoder";
@@ -852,68 +853,37 @@ function getMessageActivityTime(entry: SessionMessageEntry): number | undefined 
 
 const MAX_SESSION_INFO_HEAD_LINES = 100;
 /**
- * 尾部扫描窗口大小。session_info（重命名）与最后消息通常都在文件末尾；
- * 窗口越大命中率越高，但逐行 parse 成本随窗口线性增长。1MB 对绝大多数
- * 场景足够（重命名后继续长对话），且远小于全量读取。
+ * 伴生 meta 文件（${filePath}.meta）结构：缓存主文件的 size 与列表构建所需的
+ * name/lastActivityMs，使列表构建无需扫描文件内容。
  */
-const SESSION_INFO_TAIL_BYTES = 1024 * 1024;
+interface SessionMeta {
+	size: number;
+	lastActivityMs?: number;
+	name?: string;
+	hasSessionInfo: boolean;
+}
 
-/**
- * 扫描文件尾部（最后 maxBytes 字节），返回最后一条 user/assistant 消息的活动时间
- * 与最后一个 session_info 名称。append-only 会话的最后消息在文件末尾，
- * 读尾部即可获得毫秒精度的排序基准（优于文件系统 mtime 的粗粒度）。
- *
- * session_info 用子串定位（不经逐行 parse）：所有条目由 JSON.stringify 序列化，
- * 内容里的引号会被转义为 \"，非转义字面 `"type":"session_info"` 只可能来自顶层
- * 类型字段，lastIndexOf 定位后仅 parse 命中行。从后往前第一个 session_info 即最新
- * （append-only），无论名字是否为空都作为权威值——空名即清除，与头部扫描一致。
- */
-async function scanSessionTail(
-	filePath: string,
-	maxBytes: number,
-): Promise<{ timestamp?: number; name?: string; hasSessionInfo: boolean }> {
-	const { size } = await stat(filePath);
-	if (size === 0) return { hasSessionInfo: false };
-	const start = Math.max(0, size - maxBytes);
-	const fd = await openFile(filePath, "r");
-	let timestamp: number | undefined;
-	let name: string | undefined;
-	let hasSessionInfo = false;
+/** 读伴生 meta 文件（${filePath}.meta）。不存在/损坏/字段不合法返回 undefined。 */
+function readSessionMeta(filePath: string): SessionMeta | undefined {
+	const metaPath = `${filePath}.meta`;
+	if (!existsSync(metaPath)) return undefined;
 	try {
-		const buf = Buffer.allocUnsafe(size - start);
-		// POSIX read 对常规文件单次读满；不做循环重读——万一读不满，尾部内容
-		// 缺失只会让 modified 退化为 mtime fallback，不会产生错误结果。
-		const { bytesRead } = await fd.read(buf, 0, size - start, start);
-		// 截断的首行 parse 失败会被 parseSessionEntryLine 跳过；尾行切分按 \n。
-		const tail = buf.subarray(0, bytesRead).toString("utf8");
-
-		// 子串定位最后一个 session_info：命中行的 parse 失败（截断）时继续往前找。
-		let pos = tail.lastIndexOf('"type":"session_info"');
-		while (pos !== -1) {
-			const lineStart = tail.lastIndexOf("\n", pos) + 1;
-			const lineEndIdx = tail.indexOf("\n", pos);
-			const line = tail.slice(lineStart, lineEndIdx === -1 ? tail.length : lineEndIdx);
-			const entry = parseSessionEntryLine(line);
-			if (entry?.type === "session_info") {
-				name = entry.name?.trim() || undefined;
-				hasSessionInfo = true;
-				break;
-			}
-			pos = tail.lastIndexOf('"type":"session_info"', pos - 1);
-		}
-
-		// 逐行扫描最后一条 user/assistant 消息的活动时间（排序基准），找到即停。
-		const lines = tail.split("\n");
-		for (let i = lines.length - 1; i >= 0 && timestamp === undefined; i--) {
-			const entry = parseSessionEntryLine(lines[i]);
-			if (!entry || entry.type !== "message") continue;
-			const t = getMessageActivityTime(entry);
-			if (typeof t === "number") timestamp = t;
-		}
-	} finally {
-		await fd.close();
+		const data = JSON.parse(readFileSync(metaPath, "utf8")) as {
+			size?: unknown;
+			lastActivityMs?: unknown;
+			name?: unknown;
+			hasSessionInfo?: unknown;
+		};
+		if (typeof data.size !== "number") return undefined;
+		return {
+			size: data.size,
+			lastActivityMs: typeof data.lastActivityMs === "number" ? data.lastActivityMs : undefined,
+			name: typeof data.name === "string" ? data.name : undefined,
+			hasSessionInfo: data.hasSessionInfo === true,
+		};
+	} catch {
+		return undefined;
 	}
-	return { timestamp, name, hasSessionInfo };
 }
 
 async function buildSessionInfo(filePath: string): Promise<SessionInfo | null> {
@@ -966,19 +936,23 @@ async function buildSessionInfo(filePath: string): Promise<SessionInfo | null> {
 
 		if (!header) return null;
 
-		// 尾部扫描：最后消息时间戳（排序基准）+ 追加的 session_info（用户重命名）。
-		// 尾部命中 session_info（无论名字是否为空）即覆盖头部 name——空名 = 清除。
-		const tail = await scanSessionTail(filePath, SESSION_INFO_TAIL_BYTES);
-		if (tail.hasSessionInfo) name = tail.name;
+		// meta 有效（存在且 size 与主文件一致）→ name/lastActivityMs 直接用缓存，无需内容
+		// 扫描；meta 缺失/过期（外部修改、写失败）→ 回退：name 用头部扫描结果，modified
+		// 回退文件 mtime（append-only 下 mtime = 最后写入时刻，接近"最后活动"）。
+		// size 校验保证过期 meta 不会产生错误结果。
+		const meta = readSessionMeta(filePath);
+		const metaIsCurrent = meta !== undefined && meta.size === stats.size;
+		if (metaIsCurrent && meta.hasSessionInfo) {
+			// 空名（undefined）= 清除，与头部扫描语义一致
+			name = meta.name;
+		}
 
 		const cwd = typeof header.cwd === "string" ? header.cwd : "";
 		const parentSessionPath = header.parentSession;
-		// 排序基准：最后消息时间戳（毫秒精度）优先；尾部扫描取不到时
-		// （如末尾是超长 tool 输出占据整个尾部窗口）回退文件 mtime——
-		// append-only 文件 mtime = 最后写入时刻，接近“最后活动”，
-		// 比会话创建时间（headerTime）准确得多，避免排序失真。
 		const modified =
-			typeof tail.timestamp === "number" && tail.timestamp > 0 ? new Date(tail.timestamp) : stats.mtime;
+			metaIsCurrent && typeof meta.lastActivityMs === "number" && meta.lastActivityMs > 0
+				? new Date(meta.lastActivityMs)
+				: stats.mtime;
 
 		return {
 			path: filePath,
@@ -1093,6 +1067,10 @@ export class SessionManager {
 	private flushed: boolean = false;
 	private fileEntries: FileEntry[] = [];
 	private byId: Map<string, SessionEntry> = new Map();
+	/** 伴生 meta 的内存态：列表构建据此写 ${sessionFile}.meta，避免内容扫描。 */
+	private metaName: string | undefined;
+	private metaHasSessionInfo = false;
+	private metaLastActivityMs: number | undefined;
 	/** entryId → fileEntries 下标。避免 materialize 时 O(N) findIndex（大会话文件 O(N²) 热点）。 */
 	private entryIndex: Map<string, number> = new Map();
 	private labelsById: Map<string, string> = new Map();
@@ -1150,6 +1128,7 @@ export class SessionManager {
 			}
 
 			this._buildIndex();
+			this._initMetaState();
 			this.flushed = true;
 		} else {
 			const explicitPath = this.sessionFile;
@@ -1178,6 +1157,7 @@ export class SessionManager {
 		this.labelsById.clear();
 		this.leafId = null;
 		this.flushed = false;
+		this._initMetaState();
 
 		if (this.persist) {
 			const fileTimestamp = timestamp.replace(/[:.]/g, "-");
@@ -1367,6 +1347,55 @@ export class SessionManager {
 		return messages.map((m) => m.msg);
 	}
 
+	/**
+	 * 从 fileEntries 重建 meta 内存态（打开会话/新会话时调用）。
+	 * 从后往前第一个 session_info 即最新（空名=清除），最后一条 user/assistant
+	 * 消息时间即活动时间（lazy 占位跳过，其活动时间远早于 compaction 后的
+	 * 真实消息，列表用 mtime 兜底更合理）。
+	 */
+	private _initMetaState(): void {
+		this.metaName = undefined;
+		this.metaHasSessionInfo = false;
+		this.metaLastActivityMs = undefined;
+		for (let i = this.fileEntries.length - 1; i >= 0; i--) {
+			const e = this.fileEntries[i];
+			if (e.type === "session_info" && !this.metaHasSessionInfo) {
+				this.metaName = e.name?.trim() || undefined;
+				this.metaHasSessionInfo = true;
+			} else if (e.type === "message" && !isLazyEntry(e) && this.metaLastActivityMs === undefined) {
+				const t = getMessageActivityTime(e as SessionMessageEntry);
+				if (typeof t === "number") this.metaLastActivityMs = t;
+			}
+		}
+	}
+
+	/**
+	 * 主文件落盘后更新伴生 meta（${sessionFile}.meta）。size 存主文件当前字节数，
+	 * 列表构建据此判断 meta 是否过期（append/重写后不一致即回退头部扫描）。
+	 * 写失败静默——过期 meta 只损失快路径，不会产生错误结果。
+	 */
+	private _updateSessionMeta(entry: SessionEntry): void {
+		if (!this.persist || !this.sessionFile) return;
+		if (entry.type === "session_info") {
+			this.metaName = entry.name?.trim() || undefined;
+			this.metaHasSessionInfo = true;
+		} else if (entry.type === "message" && !isLazyEntry(entry)) {
+			const t = getMessageActivityTime(entry as SessionMessageEntry);
+			if (typeof t === "number") this.metaLastActivityMs = t;
+		}
+		try {
+			const meta = {
+				size: statSync(this.sessionFile).size,
+				lastActivityMs: this.metaLastActivityMs,
+				name: this.metaName,
+				hasSessionInfo: this.metaHasSessionInfo,
+			};
+			writeFileSync(`${this.sessionFile}.meta`, `${JSON.stringify(meta)}\n`);
+		} catch {
+			// meta 写失败无害：列表构建 size 校验不匹配时回退头部扫描
+		}
+	}
+
 	_persist(entry: SessionEntry): void {
 		if (!this.persist || !this.sessionFile) return;
 
@@ -1374,6 +1403,7 @@ export class SessionManager {
 		if (!hasAssistant) {
 			if (this.flushed) {
 				appendFileSync(this.sessionFile, `${JSON.stringify(entry)}\n`);
+				this._updateSessionMeta(entry);
 			} else {
 				// Mark as not flushed so when assistant arrives, all entries get written
 				this.flushed = false;
@@ -1394,8 +1424,10 @@ export class SessionManager {
 				closeSync(fd);
 			}
 			this.flushed = true;
+			this._updateSessionMeta(entry);
 		} else {
 			appendFileSync(this.sessionFile, `${JSON.stringify(entry)}\n`);
+			this._updateSessionMeta(entry);
 		}
 	}
 

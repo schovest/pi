@@ -4,9 +4,8 @@
 
 ### Fixed
 
-- 会话列表构建：尾部扫描的 `session_info`（会话名）改为子串定位（`"type":"session_info"`，内容中的引号被 JSON.stringify 转义故不会误匹配）+ 单行解析，不再逐行 JSON.parse 全部尾部条目；尾部窗口从 64KB 扩大到 1MB，重命名条目不再因超出窗口而丢失；尾部命中的 `session_info` 无论名字是否为空都作为最新值（空名 = 清除，修复清除会话名后旧名被复活的展示问题）
+- 会话列表（`--resume`/`/resume` 选择器）性能优化：`buildSessionInfo` 只扫描每个会话文件的头部（前 100 行），标题与最后活动时间优先取伴生元数据文件（`<会话文件>.meta`，pi 写入会话时同步维护 size/lastActivityMs/name），不再全量读取/解析整个会话文件，也不做尾部扫描——含 200MB 大文件的列表构建从 ~1.4s 降至 ~25ms（约 55x）；picker 搜索改为只匹配会话标题（name/firstMessage）与元数据，不再索引消息内容；meta 缺失/过期（size 不一致，如外部修改或写失败）时自动回退头部扫描，modified 用文件 mtime（append-only 下 mtime = 最后写入时刻），不会产生错误结果；meta 中的空名（清除）与最新重命名随写入同步维护，列表展示与 `getSessionName()` 语义一致；删除会话时 meta 一并删除
 - Session resume 性能优化（几百 MB 会话文件）：`buildSessionContext` 批量 materialize 路径上全部 lazy 占位（单 fd 按 offset 顺序读回，替代逐条 open/read/close），`materialize` 用 `entryIndex`（id→下标 Map）替换 O(N) `findIndex`，`buildSessionContext`/`getBranch` 的 `path.unshift` 改为 push+reverse，`SessionManager.open` 复用预读 entries 避免大文件二次全量读取——200MB 会话 resume 从 ~30s 降至 ~3s
-- 会话列表（`--resume`/`/resume` 选择器）性能优化：`buildSessionInfo` 只扫描每个会话文件的头部（前 100 行）+ 尾部（最后 1MB）——标题与最后活动时间取自部分扫描，会话体量改由 `stat` 直接得到的文件大小展示（KB/MB），不再全量读取/解析整个会话文件——含 200MB 大文件的列表构建从 ~1.4s 降至 ~25ms（约 55x）；picker 搜索改为只匹配会话标题（name/firstMessage）与元数据，不再索引消息内容；最后活动时间优先取尾部最后消息时间戳，尾部窗口内无 user/assistant 消息（如末尾是超长 tool 输出）时回退文件 mtime，避免排序基准退化为会话创建时间
 
 ## [0.13.1] - 2026-08-03
 
