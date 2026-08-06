@@ -1,7 +1,7 @@
 import { Marked, type Token, Tokenizer, type Tokens } from "marked";
 import { getCapabilities, hyperlink, isImageLine } from "../terminal-image.ts";
-import type { Component } from "../tui.ts";
-import { applyBackgroundToLine, visibleWidth, wrapTextWithAnsi } from "../utils.ts";
+import type { Component, CopyLineInfo } from "../tui.ts";
+import { applyBackgroundToLine, stripAnsi, visibleWidth, wrapTextWithAnsi } from "../utils.ts";
 
 const STRICT_STRIKETHROUGH_REGEX = /^(~~)(?=[^\s~])((?:\\.|[^\\])*?(?:\\.|[^\s~\\]))\1(?=[^~]|$)/;
 
@@ -80,6 +80,17 @@ interface InlineStyleContext {
 	stylePrefix: string;
 }
 
+/**
+ * A single wrapped render line with metadata for copy-text restoration.
+ * `firstOfLine` marks the first wrap segment of a token render line (a logical
+ * line start), which is the only segment that may carry a render prefix (e.g.
+ * code-block indent).
+ */
+interface WrappedTokenLine {
+	line: string;
+	firstOfLine: boolean;
+}
+
 export class Markdown implements Component {
 	private text: string;
 	private paddingX: number; // Left/right padding
@@ -97,7 +108,10 @@ export class Markdown implements Component {
 	// --- Incremental rendering cache ---
 	private cachedNormalizedText?: string; // normalizedText from last lex
 	private cachedTokens?: Token[]; // lexer output from last render
-	private cachedTokenWrappedLines?: string[][]; // per-token wrapped lines
+	private cachedTokenWrappedLines?: WrappedTokenLine[][]; // per-token wrapped lines
+
+	// Copyable text per rendered content line (aligned with render output minus paddingY)
+	private copyLineInfos: CopyLineInfo[] = [];
 
 	constructor(
 		text: string,
@@ -151,6 +165,7 @@ export class Markdown implements Component {
 		// Don't render anything if there's no actual text
 		if (!this.text || this.text.trim() === "") {
 			const result: string[] = [];
+			this.copyLineInfos = [];
 			// Update cache
 			this.cachedText = this.text;
 			this.cachedWidth = width;
@@ -172,7 +187,7 @@ export class Markdown implements Component {
 			this.cachedWidth === width &&
 			normalizedText.startsWith(this.cachedNormalizedText);
 
-		const tokenWrappedLines: string[][] = [];
+		const tokenWrappedLines: WrappedTokenLine[][] = [];
 
 		if (canIncremental) {
 			const oldTokens = this.cachedTokens!;
@@ -209,9 +224,22 @@ export class Markdown implements Component {
 
 		// Flatten token-wrapped lines
 		const wrappedLines: string[] = [];
-		for (const twl of tokenWrappedLines) {
-			for (const line of twl) {
+		const copyLineInfos: CopyLineInfo[] = [];
+		for (let ti = 0; ti < tokenWrappedLines.length; ti++) {
+			const token = tokens[ti]!;
+			const isCode = token.type === "code";
+			const codeIndent = isCode ? (this.theme.codeBlockIndent ?? "  ") : "";
+			for (const { line, firstOfLine } of tokenWrappedLines[ti]!) {
 				wrappedLines.push(line);
+				// Code-block content lines are rendered with an indent prefix; the ```
+				// border lines and wrapped continuation segments carry no prefix.
+				const stripped = stripAnsi(line);
+				const prefixLen = isCode && firstOfLine && stripped.startsWith(codeIndent) ? codeIndent.length : 0;
+				copyLineInfos.push({
+					text: stripped.slice(prefixLen),
+					colOffset: this.paddingX + prefixLen,
+					continuation: !firstOfLine,
+				});
 			}
 		}
 
@@ -249,6 +277,7 @@ export class Markdown implements Component {
 
 		// Combine top padding, content, and bottom padding
 		const result = emptyLines.concat(contentLines, emptyLines);
+		this.copyLineInfos = copyLineInfos;
 
 		// Update cache
 		this.cachedText = this.text;
@@ -262,20 +291,33 @@ export class Markdown implements Component {
 	}
 
 	/**
+	 * Copyable text for a rendered line: strips render-added padding (paddingX),
+	 * code-block indent and trailing width padding, so copying code blocks yields
+	 * clean logical text. `row` must be within the last render(width) output.
+	 */
+	getCopyLineInfo(row: number): CopyLineInfo | null {
+		const contentRow = row - this.paddingY;
+		const info = this.copyLineInfos[contentRow];
+		return info ?? null;
+	}
+
+	/**
 	 * Render a single token and wrap its lines.
 	 * Extracted so incremental rendering can cache per-token wrapped output.
 	 */
-	private renderAndWrapToken(tokens: Token[], index: number, contentWidth: number): string[] {
+	private renderAndWrapToken(tokens: Token[], index: number, contentWidth: number): WrappedTokenLine[] {
 		const token = tokens[index]!;
 		const nextToken = tokens[index + 1];
 		const tokenLines = this.renderToken(token, contentWidth, nextToken?.type);
-		const wrapped: string[] = [];
+		const wrapped: WrappedTokenLine[] = [];
 		for (const line of tokenLines) {
 			if (isImageLine(line)) {
-				wrapped.push(line);
+				wrapped.push({ line, firstOfLine: true });
 			} else {
+				let firstOfLine = true;
 				for (const wrappedLine of wrapTextWithAnsi(line, contentWidth)) {
-					wrapped.push(wrappedLine);
+					wrapped.push({ line: wrappedLine, firstOfLine });
+					firstOfLine = false;
 				}
 			}
 		}

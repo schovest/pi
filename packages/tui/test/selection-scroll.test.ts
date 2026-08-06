@@ -126,9 +126,10 @@ describe("selection-scroll: mouseDown→mouseUp without scroll", () => {
 		// mouseUp finalizes the selection (does not update focus)
 		tui.handleMouseEvent({ type: "mouseUp", button: 0, col: 6, row: 1, shift: false, alt: false, ctrl: false });
 
-		// anchor=(0,0), focus=(0,5). startCol=0, endCol=5 inclusive → cols 0..5 = "hello "
+		// anchor=(0,0), focus=(0,5). startCol=0, endCol=5 inclusive → cols 0..5 = "hello ",
+		// trailing render padding is trimmed (copy yields logical text)
 		assert.strictEqual(copied.length, 1);
-		assert.strictEqual(copied[0], "hello ");
+		assert.strictEqual(copied[0], "hello");
 	});
 
 	it("selects multi-line drag range within viewport", async () => {
