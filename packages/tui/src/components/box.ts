@@ -1,4 +1,4 @@
-import type { Component } from "../tui.ts";
+import type { Component, CopyLineInfo } from "../tui.ts";
 import { applyBackgroundToLine, visibleWidth } from "../utils.ts";
 
 type RenderCache = {
@@ -16,6 +16,8 @@ export class Box implements Component {
 	private paddingX: number;
 	private paddingY: number;
 	private bgFn?: (text: string) => string;
+	/** 最近一次 render 时每个子组件的渲染行数（用于 getCopyLineInfo 的行号映射） */
+	private childRenderLineCounts: number[] = [];
 
 	// Cache for rendered output
 	private cache?: RenderCache;
@@ -81,12 +83,15 @@ export class Box implements Component {
 
 		// Render all children
 		const childLines: string[] = [];
+		const childCounts: number[] = [];
 		for (const child of this.children) {
 			const lines = child.render(contentWidth);
+			childCounts.push(lines.length);
 			for (const line of lines) {
 				childLines.push(leftPad + line);
 			}
 		}
+		this.childRenderLineCounts = childCounts;
 
 		if (childLines.length === 0) {
 			return [];
@@ -122,6 +127,24 @@ export class Box implements Component {
 		this.cache = { childLines, width, bgSample, lines: result };
 
 		return result;
+	}
+
+	getCopyLineInfo(row: number): CopyLineInfo | null {
+		// Top/bottom padding rows carry no content
+		const contentRow = row - this.paddingY;
+		if (contentRow < 0) return null;
+		let offset = 0;
+		for (let i = 0; i < this.children.length; i++) {
+			const count = this.childRenderLineCounts[i] ?? 0;
+			if (contentRow < offset + count) {
+				const info = this.children[i]!.getCopyLineInfo?.(contentRow - offset);
+				if (!info) return null;
+				// Child lines are rendered with a left padding prefix inside the box
+				return { text: info.text, colOffset: info.colOffset + this.paddingX, continuation: info.continuation };
+			}
+			offset += count;
+		}
+		return null;
 	}
 
 	private applyBg(line: string, width: number): string {

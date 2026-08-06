@@ -40,6 +40,20 @@ function extractKittyImageIds(line: string): number[] {
 }
 
 /**
+ * Copyable text info for one rendered line, used by selection copy to restore
+ * logical content (stripping render-added prefixes and trailing padding, and
+ * merging wrapped continuation segments back into their logical line).
+ */
+export interface CopyLineInfo {
+	/** Copyable text: no ANSI, no render prefix (padding/code indent), no trailing padding */
+	text: string;
+	/** Visible column offset from the display line start to {@link text} (render prefix width) */
+	colOffset: number;
+	/** true when this line is a wrapped continuation: it joins the previous logical line without a newline */
+	continuation: boolean;
+}
+
+/**
  * Component interface - all components must implement this
  */
 export interface Component {
@@ -49,6 +63,13 @@ export interface Component {
 	 * @returns Array of strings, each representing a line
 	 */
 	render(width: number): string[];
+
+	/**
+	 * Optional: return the copyable text info for the given rendered line.
+	 * Implementers must keep `row` in sync with the output of {@link render}.
+	 * Return null when no info is available (caller falls back to display-line extraction).
+	 */
+	getCopyLineInfo?(row: number): CopyLineInfo | null;
 
 	/**
 	 * Optional handler for keyboard input when component has focus.
@@ -255,6 +276,8 @@ type OverlayFocusRestorePolicy = "clear" | "preserve";
  */
 export class Container implements Component {
 	children: Component[] = [];
+	/** 最近一次 render 时每个子组件的渲染行数（用于 getCopyLineInfo 的行号映射） */
+	private childRenderLineCounts: number[] = [];
 
 	addChild(component: Component): void {
 		this.children.push(component);
@@ -279,13 +302,28 @@ export class Container implements Component {
 
 	render(width: number): string[] {
 		const lines: string[] = [];
+		const counts: number[] = [];
 		for (const child of this.children) {
 			const childLines = child.render(width);
+			counts.push(childLines.length);
 			for (const line of childLines) {
 				lines.push(line);
 			}
 		}
+		this.childRenderLineCounts = counts;
 		return lines;
+	}
+
+	getCopyLineInfo(row: number): CopyLineInfo | null {
+		let offset = 0;
+		for (let i = 0; i < this.children.length; i++) {
+			const count = this.childRenderLineCounts[i] ?? 0;
+			if (row < offset + count) {
+				return this.children[i]!.getCopyLineInfo?.(row - offset) ?? null;
+			}
+			offset += count;
+		}
+		return null;
 	}
 }
 
@@ -1008,6 +1046,8 @@ export class TUI extends Container {
 			endCol = endRow === sel.anchorRow ? sel.anchorCol : sel.focusCol;
 		}
 		const parts: string[] = [];
+		let childIndex = 0;
+		let childOffset = 0;
 		for (let row = startRow; row <= endRow; row++) {
 			if (row < 0 || row >= lines.length) continue;
 			// Apply selectionClip from overlays that cover this screen row
@@ -1029,10 +1069,43 @@ export class TUI extends Container {
 				clipEnd = Math.min(clipEnd, clip.col + clip.width - 1);
 			}
 			if (clipStart > clipEnd) continue;
-			const extracted = stripAnsi(sliceByColumn(line, clipStart, clipEnd - clipStart + 1));
-			// Trim trailing whitespace from composited lines since compositeLineAt
-			// pads them to terminal width with spaces, followed by ANSI resets.
-			parts.push(clip ? extracted.trimEnd() : extracted);
+
+			// Prefer component-provided copy text (strips render prefixes like padding
+			// and code-block indent, plus trailing padding). Overlay-covered rows fall
+			// back to composited-line extraction.
+			let extracted: string | null = null;
+			if (clip == null) {
+				// Map buffer row to the direct child that rendered it (aligned with
+				// currentFullLines via childLineCounts from doRender), then delegate
+				// down the component tree via getCopyLineInfo.
+				while (childIndex < this.children.length && row >= childOffset + (this.childLineCounts[childIndex] ?? 0)) {
+					childOffset += this.childLineCounts[childIndex] ?? 0;
+					childIndex++;
+				}
+				const info =
+					childIndex < this.children.length
+						? (this.children[childIndex]!.getCopyLineInfo?.(row - childOffset) ?? null)
+						: null;
+				if (info) {
+					const textStart = Math.max(0, rowStartCol - info.colOffset);
+					const textEnd = Math.min(visibleWidth(info.text) - 1, rowEndCol - info.colOffset);
+					if (textStart > textEnd) continue;
+					extracted = sliceByColumn(info.text, textStart, textEnd - textStart + 1);
+					// Wrapped continuation segments join the previous logical line
+					// (copying wraps yields no newline, matching terminal copy habits)
+					if (info.continuation && parts.length > 0) {
+						parts[parts.length - 1] += extracted;
+						continue;
+					}
+				}
+			}
+			if (extracted === null) {
+				extracted = stripAnsi(sliceByColumn(line, clipStart, clipEnd - clipStart + 1));
+				// Trim trailing whitespace: render lines are padded to terminal width
+				// with spaces (and composited overlay lines carry ANSI resets).
+				extracted = extracted.trimEnd();
+			}
+			parts.push(extracted);
 		}
 		return parts.join("\n");
 	}

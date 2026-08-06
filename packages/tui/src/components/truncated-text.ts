@@ -1,5 +1,5 @@
-import type { Component } from "../tui.ts";
-import { truncateToWidth, visibleWidth } from "../utils.ts";
+import type { Component, CopyLineInfo } from "../tui.ts";
+import { stripAnsi, truncateToWidth, visibleWidth } from "../utils.ts";
 
 /**
  * Text component that truncates to fit viewport width
@@ -8,6 +8,8 @@ export class TruncatedText implements Component {
 	private text: string;
 	private paddingX: number;
 	private paddingY: number;
+	// Copyable text for the single content line (built during render)
+	private copyInfo: CopyLineInfo | null = null;
 
 	constructor(text: string, paddingX: number = 0, paddingY: number = 0) {
 		this.text = text;
@@ -42,6 +44,7 @@ export class TruncatedText implements Component {
 
 		// Truncate text if needed (accounting for ANSI codes)
 		const displayText = truncateToWidth(singleLineText, availableWidth);
+		this.copyInfo = { text: stripAnsi(displayText), colOffset: this.paddingX, continuation: false };
 
 		// Add horizontal padding
 		const leftPadding = " ".repeat(this.paddingX);
@@ -61,5 +64,10 @@ export class TruncatedText implements Component {
 		}
 
 		return result;
+	}
+
+	getCopyLineInfo(row: number): CopyLineInfo | null {
+		const contentRow = row - this.paddingY;
+		return contentRow === 0 ? this.copyInfo : null;
 	}
 }

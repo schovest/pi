@@ -1,5 +1,5 @@
-import type { Component } from "../tui.ts";
-import { applyBackgroundToLine, visibleWidth, wrapTextWithAnsi } from "../utils.ts";
+import type { Component, CopyLineInfo } from "../tui.ts";
+import { applyBackgroundToLine, stripAnsi, visibleWidth, wrapTextWithAnsiDetailed } from "../utils.ts";
 
 /**
  * Text component - displays multi-line text with word wrapping
@@ -14,6 +14,9 @@ export class Text implements Component {
 	private cachedText?: string;
 	private cachedWidth?: number;
 	private cachedLines?: string[];
+
+	// Copyable text per rendered content line (aligned with render output minus paddingY)
+	private copyLineInfos: CopyLineInfo[] = [];
 
 	constructor(text: string = "", paddingX: number = 1, paddingY: number = 1, customBgFn?: (text: string) => string) {
 		this.text = text;
@@ -51,6 +54,7 @@ export class Text implements Component {
 		// Don't render anything if there's no actual text
 		if (!this.text || this.text.trim() === "") {
 			const result: string[] = [];
+			this.copyLineInfos = [];
 			this.cachedText = this.text;
 			this.cachedWidth = width;
 			this.cachedLines = result;
@@ -64,14 +68,19 @@ export class Text implements Component {
 		const contentWidth = Math.max(1, width - this.paddingX * 2);
 
 		// Wrap text (this preserves ANSI codes but does NOT pad)
-		const wrappedLines = wrapTextWithAnsi(normalizedText, contentWidth);
+		const wrappedDetailed = wrapTextWithAnsiDetailed(normalizedText, contentWidth);
+		const copyLineInfos: CopyLineInfo[] = wrappedDetailed.map((w) => ({
+			text: stripAnsi(w.line),
+			colOffset: this.paddingX,
+			continuation: !w.firstOfLine,
+		}));
 
 		// Add margins and background to each line
 		const leftMargin = " ".repeat(this.paddingX);
 		const rightMargin = " ".repeat(this.paddingX);
 		const contentLines: string[] = [];
 
-		for (const line of wrappedLines) {
+		for (const { line } of wrappedDetailed) {
 			// Add margins
 			const lineWithMargins = leftMargin + line + rightMargin;
 
@@ -95,6 +104,7 @@ export class Text implements Component {
 		}
 
 		const result = [...emptyLines, ...contentLines, ...emptyLines];
+		this.copyLineInfos = copyLineInfos;
 
 		// Update cache
 		this.cachedText = this.text;
@@ -102,5 +112,15 @@ export class Text implements Component {
 		this.cachedLines = result;
 
 		return result.length > 0 ? result : [""];
+	}
+
+	/**
+	 * Copyable text for a rendered line: strips padding and trailing width
+	 * padding; wrapped continuation segments merge into their logical line.
+	 */
+	getCopyLineInfo(row: number): CopyLineInfo | null {
+		const contentRow = row - this.paddingY;
+		const info = this.copyLineInfos[contentRow];
+		return info ?? null;
 	}
 }

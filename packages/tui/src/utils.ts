@@ -700,29 +700,68 @@ function splitIntoTokensWithAnsi(text: string): string[] {
  * @param width - Maximum visible width per line
  * @returns Array of wrapped lines (NOT padded to width)
  */
-export function wrapTextWithAnsi(text: string, width: number): string[] {
+/**
+ * A wrapped line with a flag marking whether it starts a logical line
+ * (first wrap segment of an input line, i.e. not a continuation of a wrap).
+ */
+export interface WrappedAnsiLine {
+	line: string;
+	/** true when this segment starts a logical line (first wrap segment of an input line) */
+	firstOfLine: boolean;
+}
+
+/**
+ * Wrap text to a given visible width, marking wrap segment boundaries.
+ *
+ * ONLY does word wrapping - NO padding, NO background colors.
+ * Returns lines where each line is <= width visible chars.
+ * Active ANSI codes are preserved across line breaks.
+ *
+ * @param text - Text to wrap (may contain ANSI codes and newlines)
+ * @param width - Maximum visible width per line
+ * @returns Array of wrapped lines (NOT padded to width), each tagged with
+ * whether it is the first segment of its logical line
+ */
+export function wrapTextWithAnsiDetailed(text: string, width: number): WrappedAnsiLine[] {
 	if (!text) {
-		return [""];
+		return [{ line: "", firstOfLine: true }];
 	}
 
 	// Handle newlines by processing each line separately
 	// Track ANSI state across lines so styles carry over after literal newlines
 	const inputLines = text.split("\n");
-	const result: string[] = [];
+	const result: WrappedAnsiLine[] = [];
 	const tracker = new AnsiCodeTracker();
 
 	for (const inputLine of inputLines) {
 		// Prepend active ANSI codes from previous lines (except for first line)
 		const prefix = result.length > 0 ? tracker.getActiveCodes() : "";
 		const wrappedLines = wrapSingleLine(prefix + inputLine, width);
+		let firstOfLine = true;
 		for (const wrappedLine of wrappedLines) {
-			result.push(wrappedLine);
+			result.push({ line: wrappedLine, firstOfLine });
+			firstOfLine = false;
 		}
 		// Update tracker with codes from this line for next iteration
 		updateTrackerFromText(inputLine, tracker);
 	}
 
-	return result.length > 0 ? result : [""];
+	return result.length > 0 ? result : [{ line: "", firstOfLine: true }];
+}
+
+/**
+ * Wrap text to a given visible width.
+ *
+ * ONLY does word wrapping - NO padding, NO background colors.
+ * Returns lines where each line is <= width visible chars.
+ * Active ANSI codes are preserved across line breaks.
+ *
+ * @param text - Text to wrap (may contain ANSI codes and newlines)
+ * @param width - Maximum visible width per line
+ * @returns Array of wrapped lines (NOT padded to width)
+ */
+export function wrapTextWithAnsi(text: string, width: number): string[] {
+	return wrapTextWithAnsiDetailed(text, width).map((w) => w.line);
 }
 
 function wrapSingleLine(line: string, width: number): string[] {

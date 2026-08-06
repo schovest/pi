@@ -226,6 +226,10 @@ export interface EditorTheme {
 export interface EditorOptions {
 	paddingX?: number;
 	autocompleteMaxVisible?: number;
+	/** Prompt prefix rendered before the first input line (e.g. "> "). Continuation lines get blank padding of the same width. */
+	promptPrefix?: string;
+	/** Colorizer for the prompt prefix. */
+	promptColor?: (str: string) => string;
 }
 
 const SLASH_COMMAND_SELECT_LIST_LAYOUT: SelectListLayoutOptions = {
@@ -262,6 +266,8 @@ export class Editor implements Component, Focusable {
 	protected tui: TUI;
 	private theme: EditorTheme;
 	private paddingX: number = 0;
+	private promptPrefix: string = "";
+	private promptColor?: (str: string) => string;
 
 	// Store last render width for cursor navigation
 	private lastWidth: number = 80;
@@ -336,6 +342,8 @@ export class Editor implements Component, Focusable {
 		this.borderColor = theme.borderColor;
 		const paddingX = options.paddingX ?? 0;
 		this.paddingX = Number.isFinite(paddingX) ? Math.max(0, Math.floor(paddingX)) : 0;
+		this.promptPrefix = options.promptPrefix ?? "";
+		this.promptColor = options.promptColor;
 		const maxVisible = options.autocompleteMaxVisible ?? 5;
 		this.autocompleteMaxVisible = Number.isFinite(maxVisible) ? Math.max(3, Math.min(20, Math.floor(maxVisible))) : 5;
 	}
@@ -360,6 +368,17 @@ export class Editor implements Component, Focusable {
 			this.paddingX = newPadding;
 			this.tui.requestRender();
 		}
+	}
+
+	/**
+	 * Set the prompt prefix shown before the first input line (e.g. "> " or
+	 * "$ "). Continuation lines render blank padding of the same width so all
+	 * lines stay aligned. Pass an empty string to disable.
+	 */
+	setPromptPrefix(prefix: string, color?: (str: string) => string): void {
+		this.promptPrefix = prefix;
+		this.promptColor = color;
+		this.tui.requestRender();
 	}
 
 	getAutocompleteMaxVisible(): number {
@@ -466,7 +485,10 @@ export class Editor implements Component, Focusable {
 	render(width: number): string[] {
 		const maxPadding = Math.max(0, Math.floor((width - 1) / 2));
 		const paddingX = Math.min(this.paddingX, maxPadding);
-		const contentWidth = Math.max(1, width - paddingX * 2);
+		// Prompt prefix width: rendered before the first input line; continuation
+		// lines carry blank padding of the same width so all lines stay aligned.
+		const promptWidth = this.promptPrefix ? visibleWidth(this.promptPrefix) : 0;
+		const contentWidth = Math.max(1, width - paddingX * 2 - promptWidth);
 
 		// Layout width: with padding the cursor can overflow into it,
 		// without padding we reserve 1 column for the cursor.
@@ -505,6 +527,7 @@ export class Editor implements Component, Focusable {
 		const result: string[] = [];
 		const leftPadding = " ".repeat(paddingX);
 		const rightPadding = leftPadding;
+		const promptBlank = " ".repeat(promptWidth);
 
 		// Render top border (with scroll indicator if scrolled down, or title if set)
 		if (this.scrollOffset > 0) {
@@ -593,7 +616,8 @@ export class Editor implements Component, Focusable {
 		// autocomplete (e.g. slash-command menu) is visible.
 		const emitCursorMarker = this.focused;
 
-		for (const layoutLine of visibleLines) {
+		for (let i = 0; i < visibleLines.length; i++) {
+			const layoutLine = visibleLines[i]!;
 			let displayText = layoutLine.text;
 			let lineVisibleWidth = visibleWidth(layoutLine.text);
 			let cursorInPadding = false;
@@ -631,8 +655,15 @@ export class Editor implements Component, Focusable {
 			const padding = " ".repeat(Math.max(0, contentWidth - lineVisibleWidth));
 			const lineRightPadding = cursorInPadding ? rightPadding.slice(1) : rightPadding;
 
+			// First logical line carries the prompt prefix; all other lines get
+			// blank padding of the same width so wrapped lines stay aligned.
+			const linePrompt =
+				this.scrollOffset + i === 0 && this.promptPrefix
+					? (this.promptColor?.(this.promptPrefix) ?? this.promptPrefix)
+					: promptBlank;
+
 			// Render the line (no side borders, just horizontal lines above and below)
-			result.push(`${leftPadding}${displayText}${padding}${lineRightPadding}`);
+			result.push(`${leftPadding}${linePrompt}${displayText}${padding}${lineRightPadding}`);
 		}
 
 		// Render bottom border (with scroll indicator if more content below)
@@ -651,7 +682,7 @@ export class Editor implements Component, Focusable {
 			for (const line of autocompleteResult) {
 				const lineWidth = visibleWidth(line);
 				const linePadding = " ".repeat(Math.max(0, contentWidth - lineWidth));
-				result.push(`${leftPadding}${line}${linePadding}${rightPadding}`);
+				result.push(`${leftPadding}${promptBlank}${line}${linePadding}${rightPadding}`);
 			}
 		}
 

@@ -16,6 +16,7 @@ interface Component {
   handleInput?(data: string): void;
   wantsKeyRelease?: boolean;
   invalidate(): void;
+  getCopyLineInfo?(row: number): CopyLineInfo | null;
 }
 ```
 
@@ -25,6 +26,7 @@ interface Component {
 | `handleInput?(data)` | Receive keyboard input when component has focus. |
 | `wantsKeyRelease?` | If true, component receives key release events (Kitty protocol). Default: false. |
 | `invalidate()` | Clear cached render state. Called on theme changes. |
+| `getCopyLineInfo?(row)` | Optional: return the copyable logical text for the `row`-th rendered line (`{ text, colOffset, continuation }`), letting mouse-selection copy strip render prefixes (padding/code indent) and trailing padding, and merge wrapped continuation segments. `row` must align with `render(width)` output. Return `null` to fall back to display-line extraction. |
 
 The TUI appends a full SGR reset and OSC 8 reset at the end of each rendered line. Styles do not carry across lines. If you emit multi-line text with styling, reapply styles per line or use `wrapTextWithAnsi()` so styles are preserved for each wrapped line.
 
