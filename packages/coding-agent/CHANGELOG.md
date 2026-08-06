@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- 安装脚本（`install.sh`）默认扩展源切换：`@juicesharp/rpiv-todo`/`rpiv-ask-user-question`/`rpiv-btw` 改为 `@schovest/pi-todo`/`pi-ask-user-question`/`pi-btw`
+
 ## [0.13.2] - 2026-08-04
 
 ### Fixed

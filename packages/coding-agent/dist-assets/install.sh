@@ -76,13 +76,13 @@ fi
 # shellcheck disable=SC2034 # used via nameref in run_menu
 EXT_NAMES=(
 	"@schovest/pi-mcp-adapter"
-	"@juicesharp/rpiv-todo"
-	"@juicesharp/rpiv-ask-user-question"
+	"@schovest/pi-todo"
+	"@schovest/pi-ask-user-question"
 	"@schovest/pi-tps"
 	"@schovest/pi-sudo-helper"
 	"@narumitw/pi-goal"
 	"context-mode"
-	"@juicesharp/rpiv-btw"
+	"@schovest/pi-btw"
 	"superpowers"
 	"pi-plugin-manager"
 	"pi-lens"
@@ -108,13 +108,13 @@ EXT_DEFAULTS=(1 1 1 0 0 0 0 0 0 1 0 0)
 # shellcheck disable=SC2034 # used via nameref in run_menu
 EXT_INSTALLS=(
 	"npm:@schovest/pi-mcp-adapter"
-	"npm:@juicesharp/rpiv-todo"
-	"npm:@juicesharp/rpiv-ask-user-question"
+	"npm:@schovest/pi-todo"
+	"npm:@schovest/pi-ask-user-question"
 	"npm:@schovest/pi-tps"
 	"npm:@schovest/pi-sudo-helper"
 	"npm:@narumitw/pi-goal"
 	"npm:context-mode"
-	"npm:@juicesharp/rpiv-btw"
+	"npm:@schovest/pi-btw"
 	"git:github.com/obra/superpowers"
 	"npm:pi-plugin-manager"
 	"npm:pi-lens"
