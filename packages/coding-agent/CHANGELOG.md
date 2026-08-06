@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.13.3] - 2026-08-07
+
 ### Added
 
 - 输入编辑器 prompt 前缀：输入区首行固定显示绿色 `>`，输入以 `!` 开头进入命令行模式时变为绿色 `$`；换行/滚动后的所有行保留同宽空白对齐（tui `Editor.setPromptPrefix`，扩展自定义编辑器可选实现 `EditorComponent.setPromptPrefix`）
