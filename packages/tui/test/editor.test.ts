@@ -827,6 +827,87 @@ describe("Editor component", () => {
 		});
 	});
 
+	describe("Prompt prefix", () => {
+		it("renders the prompt on the first line and blank padding on continuation lines", () => {
+			const editor = new Editor(createTestTUI(), defaultEditorTheme);
+			editor.setPromptPrefix("> ");
+			editor.setText("hello world this is a long line that wraps");
+			const width = 20;
+			const lines = editor.render(width);
+
+			// All rendered lines (between borders) keep full width
+			for (let i = 1; i < lines.length - 1; i++) {
+				assert.strictEqual(
+					visibleWidth(lines[i]!),
+					width,
+					`Line ${i} has width ${visibleWidth(lines[i]!)}, expected ${width}`,
+				);
+			}
+
+			// First content line starts with the prompt
+			const firstLine = stripVTControlCharacters(lines[1]!);
+			assert.ok(firstLine.startsWith("> "), `first line should start with "> ", got: ${JSON.stringify(firstLine)}`);
+
+			// Continuation lines carry blank padding of the same width (no prompt char)
+			for (let i = 2; i < lines.length - 1; i++) {
+				const line = stripVTControlCharacters(lines[i]!);
+				assert.ok(line.startsWith("  "), `line ${i} should start with blank padding, got: ${JSON.stringify(line)}`);
+				assert.ok(!line.trimStart().startsWith(">"), `line ${i} should not carry a prompt char`);
+			}
+		});
+
+		it("reduces the content layout width by the prompt width", () => {
+			const editor = new Editor(createTestTUI(), defaultEditorTheme);
+			editor.setText("abcdefghijklmnopqrstuvwxyz");
+			const width = 20;
+			const plainFirst = stripVTControlCharacters(editor.render(width)[1]!);
+			assert.strictEqual(plainFirst.trim().length, 19); // layoutWidth = 19 without prompt
+
+			editor.setPromptPrefix("> ");
+			const withPromptFirst = stripVTControlCharacters(editor.render(width)[1]!);
+			assert.ok(withPromptFirst.startsWith("> "), `expected prompt prefix, got: ${JSON.stringify(withPromptFirst)}`);
+			assert.strictEqual(withPromptFirst.slice(2).trim().length, 17); // 19 - 2 prompt columns
+		});
+
+		it("switches the prompt prefix dynamically (e.g. > to $)", () => {
+			const editor = new Editor(createTestTUI(), defaultEditorTheme);
+			editor.setText("!ls");
+			editor.setPromptPrefix("$ ");
+			const line = stripVTControlCharacters(editor.render(20)[1]!);
+			assert.ok(line.startsWith("$ "), `expected "$ " prefix, got: ${JSON.stringify(line)}`);
+			assert.ok(!line.startsWith("> "), "prompt should have switched away from >");
+		});
+
+		it("applies the prompt color function", () => {
+			const editor = new Editor(createTestTUI(), defaultEditorTheme);
+			editor.setPromptPrefix("> ", (str) => `\x1b[32m${str}\x1b[0m`);
+			editor.setText("hello");
+			const raw = editor.render(20)[1]!;
+			assert.ok(raw.startsWith("\x1b[32m> \x1b[0m"), `expected colored prompt, got: ${JSON.stringify(raw)}`);
+			assert.ok(stripVTControlCharacters(raw).startsWith("> "), "stripped text should keep the prompt");
+		});
+
+		it("renders the prompt on the empty editor", () => {
+			const editor = new Editor(createTestTUI(), defaultEditorTheme);
+			editor.setPromptPrefix("> ");
+			const line = stripVTControlCharacters(editor.render(20)[1]!);
+			assert.ok(line.startsWith("> "), `expected prompt on empty editor, got: ${JSON.stringify(line)}`);
+		});
+
+		it("hides the prompt when scrolled past the first line", () => {
+			const editor = new Editor(createTestTUI(80, 24), defaultEditorTheme);
+			editor.setPromptPrefix("> ");
+			// 10 lines > maxVisibleLines (max(5, floor(24*0.3)) = 7); cursor lands on the last line
+			editor.setText(Array.from({ length: 10 }, (_, i) => `line ${i}`).join("\n"));
+			const firstVisible = stripVTControlCharacters(editor.render(40)[1]!);
+			assert.ok(
+				firstVisible.startsWith("  "),
+				`scrolled first visible line should carry blank padding, got: ${JSON.stringify(firstVisible)}`,
+			);
+			assert.ok(!firstVisible.trimStart().startsWith(">"), "scrolled first visible line should not show the prompt");
+		});
+	});
+
 	describe("Word wrapping", () => {
 		it("wraps at word boundaries instead of mid-word", () => {
 			const editor = new Editor(createTestTUI(), defaultEditorTheme);

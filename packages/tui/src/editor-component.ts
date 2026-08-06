@@ -75,6 +75,13 @@ export interface EditorComponent extends Component {
 	/** Set horizontal padding */
 	setPaddingX?(padding: number): void;
 
+	/**
+	 * Set the prompt prefix shown before the first input line (e.g. "> " or "$ ").
+	 * Continuation lines render blank padding of the same width so all lines stay
+	 * aligned. Pass an empty string to disable.
+	 */
+	setPromptPrefix?(prefix: string, color?: (str: string) => string): void;
+
 	/** Set max visible items in autocomplete dropdown */
 	setAutocompleteMaxVisible?(maxVisible: number): void;
 }

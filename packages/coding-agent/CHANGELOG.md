@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- 输入编辑器 prompt 前缀：输入区首行固定显示绿色 `>`，输入以 `!` 开头进入命令行模式时变为绿色 `$`；换行/滚动后的所有行保留同宽空白对齐（tui `Editor.setPromptPrefix`，扩展自定义编辑器可选实现 `EditorComponent.setPromptPrefix`）
+
 ### Fixed
 
 - TUI 鼠标选择复制还原逻辑文本（通性）：复制任意内容（markdown 消息、thinking、工具调用、普通文本等）不再携带渲染多余空格——行首 padding/代码块缩进等渲染前缀与行尾填充空格一律剥离（代码块原有内容缩进保留）；长行 wrap 产生的显示换行在复制时合并回逻辑行（不产生 `\n`），符合终端复制习惯；无渲染元数据的组件行与 overlay 覆盖区域统一剥离行尾填充空格，粘贴进 bash/heredoc 不再因行尾空格失效

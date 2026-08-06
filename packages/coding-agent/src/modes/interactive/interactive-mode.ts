@@ -2386,6 +2386,9 @@ export class InteractiveMode {
 				newEditor.setAutocompleteProvider(this.autocompleteProvider);
 			}
 
+			// Sync prompt prefix onto the custom editor
+			this.applyEditorPrompt(newEditor);
+
 			// If extending CustomEditor, copy app-level handlers
 			// Use duck typing since instanceof fails across jiti module boundaries
 			const customEditor = newEditor as unknown as Record<string, unknown>;
@@ -4292,7 +4295,15 @@ export class InteractiveMode {
 			const level = this.session.thinkingLevel || "off";
 			this.editor.borderColor = theme.getThinkingBorderColor(level);
 		}
+		this.applyEditorPrompt(this.editor);
 		this.ui.requestRender();
+	}
+
+	/**
+	 * Prompt prefix: green ">" normally, green "$" in bash mode (text starts with !).
+	 */
+	private applyEditorPrompt(editor: EditorComponent): void {
+		editor.setPromptPrefix?.(this.isBashMode ? "$ " : "> ", (text) => theme.fg("bashMode", text));
 	}
 
 	private cycleThinkingLevel(): void {
