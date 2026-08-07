@@ -141,6 +141,7 @@ Expected: 全部 PASS（含新增 2 个用例）。
 ### Added
 
 - `TUI.doRender` 渲染期 `scrollOffset` 被隐式修正（内容缩短 clamp、滚动中内容增长推挤）时补发 `onScrollOffsetChange` 通知，回调语义统一为"offset 变化即通知"
+```
 
 - [ ] **Step 6: Commit**
 
@@ -342,6 +343,7 @@ Expected: 3 个用例 PASS。
 ### Added
 
 - 滚动底部提示：用户不在消息底部（向上滚动过）时，在 working 行上方显示 `↓ 新消息` 提示行，回到底部自动消失（纯显示，无交互）
+```
 
 - [ ] **Step 6: Commit**
 
