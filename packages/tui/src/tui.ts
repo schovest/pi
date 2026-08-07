@@ -1809,6 +1809,7 @@ export class TUI extends Container {
 
 		// Apply scrollOffset to scrollable content only
 		const maxScroll = Math.max(0, scrollableLines.length - scrollableViewport);
+		const prevScrollOffset = this.scrollOffset;
 		const lineCountDelta = scrollableLines.length - this.previousScrollableLineCount;
 		if (lineCountDelta > 0) {
 			if (this.autoFollow) {
@@ -1819,6 +1820,9 @@ export class TUI extends Container {
 		}
 		if (this.scrollOffset > maxScroll) this.scrollOffset = maxScroll;
 		this.previousScrollableLineCount = scrollableLines.length;
+		if (this.scrollOffset !== prevScrollOffset) {
+			this.onScrollOffsetChange?.(this.scrollOffset);
+		}
 
 		// Cache full lines (pre-overlay, pre-highlight) for selection text extraction
 		// and absolute-row coordinate mapping
