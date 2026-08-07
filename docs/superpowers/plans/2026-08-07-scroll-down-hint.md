@@ -364,7 +364,7 @@ git commit -m "feat(interactive): working 上方滚动底部提示行（不在�
 - [ ] **Step 1: 跑相关包全量测试**
 
 ```bash
-cd packages/tui && node --test test/ 2>&1 | tail -5
+cd packages/tui && node --test test/*.test.ts 2>&1 | tail -5
 cd /data/mine/pi && npx vitest run --dir packages/coding-agent/test interactive-mode 2>&1 | tail -10
 ```
 
