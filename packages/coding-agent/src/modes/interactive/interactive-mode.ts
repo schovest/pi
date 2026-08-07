@@ -313,8 +313,12 @@ export class InteractiveMode {
 	private chatContainer: Container;
 	private pendingMessagesContainer: Container;
 	private statusContainer: Container;
-	private scrollHint: Text;
 	private scrollHintVisible = false;
+	/** 滚动底部提示行：不在消息底部时居中显示 ↓ 新消息 */
+	private readonly scrollHint: Component = {
+		render: (width: number): string[] => InteractiveMode.renderScrollHint(width, this.scrollHintVisible),
+		invalidate: () => {},
+	};
 	private defaultEditor: CustomEditor;
 	private editor: EditorComponent;
 	private editorComponentFactory: EditorFactory | undefined;
@@ -463,7 +467,6 @@ export class InteractiveMode {
 		this.chatContainer = new Container();
 		this.pendingMessagesContainer = new Container();
 		this.statusContainer = new Container();
-		this.scrollHint = new Text("", 0, 0);
 		this.widgetContainerAbove = new Container();
 		this.widgetContainerBelow = new Container();
 		this.keybindings = KeybindingsManager.create();
@@ -1875,8 +1878,15 @@ export class InteractiveMode {
 		const visible = offset > 0;
 		if (visible === this.scrollHintVisible) return;
 		this.scrollHintVisible = visible;
-		this.scrollHint.setText(visible ? theme.fg("muted", "↓ 新消息") : "");
 		this.ui.requestRender();
+	}
+
+	/** 居中渲染滚动底部提示行；visible=false 时返回空（0 行，无布局残留） */
+	private static renderScrollHint(width: number, visible: boolean): string[] {
+		if (!visible) return [];
+		const text = theme.fg("muted", "↓ 新消息");
+		const leftPad = Math.max(0, Math.floor((width - visibleWidth(text)) / 2));
+		return [" ".repeat(leftPad) + text];
 	}
 
 	private setHiddenThinkingLabel(label?: string): void {

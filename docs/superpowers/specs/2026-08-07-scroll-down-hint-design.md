@@ -6,7 +6,7 @@
 
 - **显示条件**：任何时刻只要 `scrollOffset > 0`（用户不在消息底部）就显示，不限于 streaming 中
 - **交互**：纯显示，无点击/按键行为
-- **形式**：带文字的提示，`↓ 新消息`（`theme.fg("muted", …)`，与 working 文字一致）
+- **形式**：带文字的提示，`↓ 新消息`，**水平居中显示**（`theme.fg("muted", …)`，与 working 文字一致）
 
 ## 技术实现
 
@@ -25,12 +25,13 @@
 
 | 改动 | 内容 |
 | ------ | ------ |
-| 字段 | 新增 `private scrollHint: Text`（构造器初始化，paddingX=0, paddingY=0） |
+| 字段 | 新增 `private readonly scrollHint: Component`（自渲染组件对象，持有 `scrollHintVisible` 状态） |
 | 布局 | `init()` 中在 `statusContainer` **之前** `addChild(this.scrollHint)`（保证箭头行位于 working 行上方）；`setFixedBottomCount(5)` → `6` |
 | 挂接 | `this.ui.onScrollOffsetChange = (offset) => this.updateScrollHint(offset)`（init 中，`ui.start()` 前后均可，放在布局 setup 之后） |
-| 更新 | `updateScrollHint(offset)`：`offset > 0` 时 `setText(theme.fg("muted", "↓ 新消息"))`，否则 `setText("")`；仅当文本变化时 `requestRender()` |
+| 更新 | `updateScrollHint(offset)`：`offset > 0` 时置 `scrollHintVisible`，否则清；仅当状态变化时 `requestRender()` |
+| 渲染 | `renderScrollHint(width, visible)`：visible 时水平居中输出一行 `theme.fg("muted", "↓ 新消息")`（左填充 `floor((width - visibleWidth) / 2)` 空格），否则返回 `[]` |
 
-Text 组件空文本时 `render` 返回 `[]`（0 行），非滚动状态下布局零残留；滚动时渲染 1 行，位于固定区域顶部。
+`scrollHint` 隐藏时 `render` 返回 `[]`（0 行），非滚动状态下布局零残留；滚动时渲染 1 行居中提示，位于固定区域顶部。
 
 布局顺序（fixedBottomCount = 6）：
 
@@ -58,11 +59,11 @@ Text 组件空文本时 `render` 返回 `[]`（0 行），非滚动状态下布�
 
 ### coding-agent 层（新增 `packages/coding-agent/test/interactive-mode-scroll-hint.test.ts`，vitest）
 
-参照 `interactive-mode-status.test.ts` 的 fakeThis 模式，直接调用 prototype 方法：
+参照 `interactive-mode-status.test.ts` 的 fakeThis 模式，直接调用 prototype/静态方法：
 
-- `updateScrollHint(0)` → scrollHint 文本为空（渲染 0 行）
-- `updateScrollHint(5)` → 文本包含 `↓` 与 `新消息`
-- `updateScrollHint(5)` 后再 `updateScrollHint(0)` → 文本清空
+- `renderScrollHint(120, false)` → 返回 `[]`（0 行，无布局残留）
+- `renderScrollHint(120, true)` → 1 行，左填充 `floor((120 - visibleWidth) / 2)` 空格后为 `↓ 新消息`（水平居中）
+- `updateScrollHint(5)` → `scrollHintVisible` 置 true；再 `updateScrollHint(8)` 幂等不重复渲染；`updateScrollHint(0)` 清回 false
 - init 布局断言：`ui.children` 中 scrollHint 位于 statusContainer 之前；`setFixedBottomCount(6)`
 - 真实 TUI + VirtualTerminal 集成：`setScrollOffset(3)` 后渲染输出含提示行；`setScrollOffset(0)` 后消失
 
