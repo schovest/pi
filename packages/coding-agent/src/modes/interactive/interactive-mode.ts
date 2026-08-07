@@ -313,6 +313,8 @@ export class InteractiveMode {
 	private chatContainer: Container;
 	private pendingMessagesContainer: Container;
 	private statusContainer: Container;
+	private scrollHint: Text;
+	private scrollHintVisible = false;
 	private defaultEditor: CustomEditor;
 	private editor: EditorComponent;
 	private editorComponentFactory: EditorFactory | undefined;
@@ -461,6 +463,7 @@ export class InteractiveMode {
 		this.chatContainer = new Container();
 		this.pendingMessagesContainer = new Container();
 		this.statusContainer = new Container();
+		this.scrollHint = new Text("", 0, 0);
 		this.widgetContainerAbove = new Container();
 		this.widgetContainerBelow = new Container();
 		this.keybindings = KeybindingsManager.create();
@@ -788,6 +791,7 @@ export class InteractiveMode {
 
 		this.ui.addChild(this.chatContainer);
 		this.ui.addChild(this.pendingMessagesContainer);
+		this.ui.addChild(this.scrollHint);
 		this.ui.addChild(this.statusContainer);
 		this.renderWidgets(); // Initialize with default spacer
 		this.ui.addChild(this.widgetContainerAbove);
@@ -804,8 +808,10 @@ export class InteractiveMode {
 			await copyToClipboard(text);
 		};
 
+		this.ui.onScrollOffsetChange = (offset) => this.updateScrollHint(offset);
+
 		this.ui.start();
-		this.ui.setFixedBottomCount(5);
+		this.ui.setFixedBottomCount(6);
 		this.isInitialized = true;
 
 		// Initialize extensions first so resources are shown before messages
@@ -1862,6 +1868,14 @@ export class InteractiveMode {
 	private setWorkingIndicator(options?: LoaderIndicatorOptions): void {
 		this.workingIndicatorOptions = options;
 		this.loadingAnimation?.setIndicator(options);
+		this.ui.requestRender();
+	}
+
+	private updateScrollHint(offset: number): void {
+		const visible = offset > 0;
+		if (visible === this.scrollHintVisible) return;
+		this.scrollHintVisible = visible;
+		this.scrollHint.setText(visible ? theme.fg("muted", "↓ 新消息") : "");
 		this.ui.requestRender();
 	}
 
