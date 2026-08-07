@@ -1820,9 +1820,6 @@ export class TUI extends Container {
 		}
 		if (this.scrollOffset > maxScroll) this.scrollOffset = maxScroll;
 		this.previousScrollableLineCount = scrollableLines.length;
-		if (this.scrollOffset !== prevScrollOffset) {
-			this.onScrollOffsetChange?.(this.scrollOffset);
-		}
 
 		// Cache full lines (pre-overlay, pre-highlight) for selection text extraction
 		// and absolute-row coordinate mapping
@@ -1860,6 +1857,13 @@ export class TUI extends Container {
 		// Update viewport-top state before selection highlight, so bufferToScreenRow
 		// inside applySelectionHighlight uses the correct viewport offset.
 		this.currentScrollableViewportTop = scrollableViewportTop;
+
+		// Notify offset changes after the internal state caches (currentFullLines /
+		// currentScrollableLinesLength / currentScrollableViewportTop) are updated,
+		// so a consumer reading those fields inside the callback sees fresh values.
+		if (this.scrollOffset !== prevScrollOffset) {
+			this.onScrollOffsetChange?.(this.scrollOffset);
+		}
 
 		// Selection highlight: buffer-absolute row iteration via bufferToScreenRow
 		this.applySelectionHighlight(newLines, height);
