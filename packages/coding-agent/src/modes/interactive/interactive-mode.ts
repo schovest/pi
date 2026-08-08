@@ -313,6 +313,12 @@ export class InteractiveMode {
 	private chatContainer: Container;
 	private pendingMessagesContainer: Container;
 	private statusContainer: Container;
+	private scrollHintVisible = false;
+	/** 滚动底部提示行：不在消息底部时居中显示 ↓ 新消息 */
+	private readonly scrollHint: Component = {
+		render: (width: number): string[] => InteractiveMode.renderScrollHint(width, this.scrollHintVisible),
+		invalidate: () => {},
+	};
 	private defaultEditor: CustomEditor;
 	private editor: EditorComponent;
 	private editorComponentFactory: EditorFactory | undefined;
@@ -788,6 +794,7 @@ export class InteractiveMode {
 
 		this.ui.addChild(this.chatContainer);
 		this.ui.addChild(this.pendingMessagesContainer);
+		this.ui.addChild(this.scrollHint);
 		this.ui.addChild(this.statusContainer);
 		this.renderWidgets(); // Initialize with default spacer
 		this.ui.addChild(this.widgetContainerAbove);
@@ -804,8 +811,10 @@ export class InteractiveMode {
 			await copyToClipboard(text);
 		};
 
+		this.ui.onScrollOffsetChange = (offset) => this.updateScrollHint(offset);
+
 		this.ui.start();
-		this.ui.setFixedBottomCount(5);
+		this.ui.setFixedBottomCount(6);
 		this.isInitialized = true;
 
 		// Initialize extensions first so resources are shown before messages
@@ -1863,6 +1872,21 @@ export class InteractiveMode {
 		this.workingIndicatorOptions = options;
 		this.loadingAnimation?.setIndicator(options);
 		this.ui.requestRender();
+	}
+
+	private updateScrollHint(offset: number): void {
+		const visible = offset > 0;
+		if (visible === this.scrollHintVisible) return;
+		this.scrollHintVisible = visible;
+		this.ui.requestRender();
+	}
+
+	/** 居中渲染滚动底部提示行；visible=false 时返回空（0 行，无布局残留） */
+	private static renderScrollHint(width: number, visible: boolean): string[] {
+		if (!visible) return [];
+		const text = theme.fg("muted", "↓ 新消息");
+		const leftPad = Math.max(0, Math.floor((width - visibleWidth(text)) / 2));
+		return [" ".repeat(leftPad) + text];
 	}
 
 	private setHiddenThinkingLabel(label?: string): void {

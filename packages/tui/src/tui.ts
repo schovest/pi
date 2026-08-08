@@ -1809,6 +1809,7 @@ export class TUI extends Container {
 
 		// Apply scrollOffset to scrollable content only
 		const maxScroll = Math.max(0, scrollableLines.length - scrollableViewport);
+		const prevScrollOffset = this.scrollOffset;
 		const lineCountDelta = scrollableLines.length - this.previousScrollableLineCount;
 		if (lineCountDelta > 0) {
 			if (this.autoFollow) {
@@ -1856,6 +1857,13 @@ export class TUI extends Container {
 		// Update viewport-top state before selection highlight, so bufferToScreenRow
 		// inside applySelectionHighlight uses the correct viewport offset.
 		this.currentScrollableViewportTop = scrollableViewportTop;
+
+		// Notify offset changes after the internal state caches (currentFullLines /
+		// currentScrollableLinesLength / currentScrollableViewportTop) are updated,
+		// so a consumer reading those fields inside the callback sees fresh values.
+		if (this.scrollOffset !== prevScrollOffset) {
+			this.onScrollOffsetChange?.(this.scrollOffset);
+		}
 
 		// Selection highlight: buffer-absolute row iteration via bufferToScreenRow
 		this.applySelectionHighlight(newLines, height);

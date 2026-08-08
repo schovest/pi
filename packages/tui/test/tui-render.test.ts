@@ -583,3 +583,56 @@ describe("TUI differential rendering", () => {
 		tui.stop();
 	});
 });
+
+describe("TUI scroll offset change notification", () => {
+	it("notifies when the offset is clamped during render", async () => {
+		const terminal = new VirtualTerminal(40, 10);
+		const tui = new TUI(terminal);
+		const component = new TestComponent();
+		tui.addChild(component);
+		const offsets: number[] = [];
+		tui.onScrollOffsetChange = (offset) => offsets.push(offset);
+		tui.start();
+
+		// 30 行内容 → maxScroll = 20（终端高 10）
+		component.lines = Array.from({ length: 30 }, (_, i) => `line-${i}`);
+		tui.requestRender(true);
+		await terminal.waitForRender();
+		tui.setScrollOffset(10);
+		assert.equal(tui.getScrollOffset(), 10);
+
+		// 内容缩短到 1 行 → maxScroll = 0，offset 被 clamp 到 0，必须通知
+		offsets.length = 0;
+		component.lines = ["only-line"];
+		tui.requestRender(true);
+		await terminal.waitForRender();
+
+		assert.equal(tui.getScrollOffset(), 0);
+		assert.deepEqual(offsets, [0]);
+	});
+
+	it("notifies when growing content pushes the offset while scrolled up", async () => {
+		const terminal = new VirtualTerminal(40, 10);
+		const tui = new TUI(terminal);
+		const component = new TestComponent();
+		tui.addChild(component);
+		const offsets: number[] = [];
+		tui.onScrollOffsetChange = (offset) => offsets.push(offset);
+		tui.start();
+
+		component.lines = Array.from({ length: 30 }, (_, i) => `line-${i}`);
+		tui.requestRender(true);
+		await terminal.waitForRender();
+		tui.setScrollOffset(5);
+		assert.equal(tui.getScrollOffset(), 5);
+
+		// 内容 30 → 40 行（delta 10），autoFollow=false 且 offset>0 → offset 被推到 15，必须通知
+		offsets.length = 0;
+		component.lines = Array.from({ length: 40 }, (_, i) => `line-${i}`);
+		tui.requestRender(true);
+		await terminal.waitForRender();
+
+		assert.equal(tui.getScrollOffset(), 15);
+		assert.deepEqual(offsets, [15]);
+	});
+});

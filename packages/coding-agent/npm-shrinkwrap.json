@@ -1,17 +1,17 @@
 {
 	"name": "@schovest/pi-coding-agent",
-	"version": "0.13.3",
+	"version": "0.13.4",
 	"lockfileVersion": 3,
 	"requires": true,
 	"packages": {
 		"": {
 			"name": "@schovest/pi-coding-agent",
-			"version": "0.13.3",
+			"version": "0.13.4",
 			"license": "MIT",
 			"dependencies": {
 				"@earendil-works/pi-agent-core": "0.81.1",
 				"@earendil-works/pi-ai": "0.81.1",
-				"@schovest/pi-tui": "^0.13.3",
+				"@schovest/pi-tui": "^0.13.4",
 				"@silvia-odwyer/photon-node": "0.3.4",
 				"chalk": "5.6.2",
 				"cross-spawn": "7.0.6",
@@ -845,8 +845,8 @@
 			"license": "BSD-3-Clause"
 		},
 		"node_modules/@schovest/pi-tui": {
-			"version": "0.13.3",
-			"resolved": "https://registry.npmjs.org/@schovest/pi-tui/-/pi-tui-0.13.3.tgz",
+			"version": "0.13.4",
+			"resolved": "https://registry.npmjs.org/@schovest/pi-tui/-/pi-tui-0.13.4.tgz",
 			"license": "MIT",
 			"dependencies": {
 				"get-east-asian-width": "1.6.0",
