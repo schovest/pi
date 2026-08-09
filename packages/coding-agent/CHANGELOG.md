@@ -6,6 +6,7 @@
 
 - 内置 subagent 新增 `reviewer`（代码审查，输出分级问题报告）；`explorer`/`worker`/`reviewer` 统一配置全工具（`includedTools: ["*"]`），行为由各自系统提示词约束（explorer/reviewer 只读）
 - 内联扩展（inline extension）支持命名：`extensionFactories` 接受 `{ name, factory, hidden? }` 对象（与上游一致），启动列表显示为 `<inline:name>`；内置 codex-hooks 桥接命名为 `<inline:codex-hooks>`，`hidden: true` 的扩展不出现在启动扩展列表
+- **API 兼容上游 0.81.1**：顶层导出补齐 16 个未导出符号（extensions 事件类型 8 个、model-resolver 6 个、session-manager 2 个）；新增 `./rpc-entry` 子路径导出；`hasTrustRequiringProjectResources` 兼容别名（上游 rename，保留旧名 `hasProjectTrustInputs`）；`generateSummary` 返回类型对齐上游（`Promise<string>`），新增 `generateSummaryWithUsage`（返回 `{ text, usage }`）；`compact`/`generateBranchSummary` 支持 `env`/`retry`/`callbacks` 透传，compaction 与 branch-summary 的 LLM 调用接入 `retryAssistantCall` 重试；`AgentSessionEvent` 新增 `entry_appended`/`summarization_retry_*` 事件；`SessionManager` 新增 `buildContextEntries()` 方法；`SessionInfo` 新增 `messageCount`（meta 缓存维护，零额外扫描；meta 缺失时回退头部近似）；`Settings` 新增 `showCacheMissNotices`/`externalEditor`/`outputPad` 字段及对应 `SettingsManager` 方法；`BranchSummaryResult` 新增 `usage` 字段；`GenerateBranchSummaryOptions` 新增 `retry`/`callbacks`
 
 ## [0.13.6] - 2026-08-09
 

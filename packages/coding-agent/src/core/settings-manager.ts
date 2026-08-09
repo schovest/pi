@@ -161,6 +161,9 @@ export interface Settings {
 	steeringMode?: "all" | "one-at-a-time";
 	followUpMode?: "all" | "one-at-a-time";
 	theme?: string;
+	showCacheMissNotices?: boolean; // default: false - show transcript notices for significant prompt-cache misses
+	externalEditor?: string; // Command for Ctrl+G external editor; takes precedence over VISUAL/EDITOR
+	outputPad?: 0 | 1; // Horizontal padding for chat message output (default: 1)
 	compaction?: CompactionSettings;
 	branchSummary?: BranchSummarySettings;
 	retry?: RetrySettings;
@@ -817,6 +820,44 @@ export class SettingsManager {
 	setTheme(theme: string): void {
 		this.globalSettings.theme = theme;
 		this.markModified("theme");
+		this.save();
+	}
+
+	getThemeSetting(): string | undefined {
+		const value = this.settings.theme;
+		if (typeof value === "string") return value;
+		return undefined;
+	}
+
+	getShowCacheMissNotices(): boolean {
+		return this.settings.showCacheMissNotices ?? false;
+	}
+
+	setShowCacheMissNotices(show: boolean): void {
+		this.globalSettings.showCacheMissNotices = show;
+		this.markModified("showCacheMissNotices");
+		this.save();
+	}
+
+	getExternalEditorCommand(): string | undefined {
+		const configuredEditor = this.settings.externalEditor;
+		if (typeof configuredEditor === "string" && configuredEditor.trim() !== "") {
+			return configuredEditor;
+		}
+		const environmentEditor = process.env.VISUAL || process.env.EDITOR;
+		if (environmentEditor) {
+			return environmentEditor;
+		}
+		return process.platform === "win32" ? "notepad" : "nano";
+	}
+
+	getOutputPad(): 0 | 1 {
+		return this.settings.outputPad === 0 ? 0 : 1;
+	}
+
+	setOutputPad(padding: 0 | 1): void {
+		this.globalSettings.outputPad = padding;
+		this.markModified("outputPad");
 		this.save();
 	}
 

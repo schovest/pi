@@ -24,6 +24,7 @@ import {
 	type PrepareNextTurnContext,
 	type ThinkingLevel,
 } from "@earendil-works/pi-agent-core";
+import type { RetryCallbacks } from "@earendil-works/pi-ai";
 import type {
 	AssistantMessage,
 	AuthResult,
@@ -169,6 +170,7 @@ export type AgentSessionEvent =
 			followUp: readonly string[];
 	  }
 	| { type: "compaction_start"; reason: "manual" | "threshold" | "overflow" }
+	| { type: "entry_appended"; entry: SessionEntry }
 	| { type: "session_info_changed"; sessionFile?: string; name: string | undefined }
 	| { type: "agent_settled" }
 	| { type: "thinking_level_changed"; level: ThinkingLevel }
@@ -182,7 +184,21 @@ export type AgentSessionEvent =
 	  }
 	| { type: "auto_retry_start"; attempt: number; maxAttempts: number; delayMs: number; errorMessage: string }
 	| { type: "primary_agent_changed"; name: string; previousName: string }
-	| { type: "auto_retry_end"; success: boolean; attempt: number; finalError?: string };
+	| { type: "auto_retry_end"; success: boolean; attempt: number; finalError?: string }
+	| {
+			type: "summarization_retry_scheduled";
+			attempt: number;
+			maxAttempts: number;
+			delayMs: number;
+			errorMessage: string;
+	  }
+	| { type: "summarization_retry_attempt_start"; source: "branchSummary" }
+	| {
+			type: "summarization_retry_attempt_start";
+			source: "compaction";
+			reason: "manual" | "threshold" | "overflow";
+	  }
+	| { type: "summarization_retry_finished" };
 
 /** Listener function for agent session events */
 export type AgentSessionEventListener = (event: AgentSessionEvent) => void;
@@ -2098,6 +2114,8 @@ export class AgentSession {
 					this.thinkingLevel,
 					this.agent.streamFunction,
 					env,
+					this.settingsManager.getRetrySettings(),
+					this._summarizationRetryCallbacks({ source: "compaction", reason: "manual" }),
 				);
 				summary = result.summary;
 				firstKeptEntryId = result.firstKeptEntryId;
@@ -2400,6 +2418,8 @@ export class AgentSession {
 					this.thinkingLevel,
 					this.agent.streamFunction,
 					env,
+					this.settingsManager.getRetrySettings(),
+					this._summarizationRetryCallbacks({ source: "compaction", reason }),
 				);
 				summary = compactResult.summary;
 				firstKeptEntryId = compactResult.firstKeptEntryId;
@@ -2643,7 +2663,11 @@ export class AgentSession {
 					});
 				},
 				appendEntry: (customType, data) => {
-					this.sessionManager.appendCustomEntry(customType, data);
+					const entryId = this.sessionManager.appendCustomEntry(customType, data);
+					const entry = this.sessionManager.getEntry(entryId);
+					if (entry) {
+						this._emit({ type: "entry_appended", entry });
+					}
 				},
 				setSessionName: (name) => {
 					this.setSessionName(name);
@@ -2939,6 +2963,37 @@ export class AgentSession {
 		return /overloaded|provider.?returned.?error|rate.?limit|too many requests|429|500|502|503|504|service.?unavailable|server.?error|internal.?error|network.?error|connection.?error|connection.?refused|connection.?lost|websocket.?closed|websocket.?error|other side closed|fetch failed|upstream.?connect|reset before headers|socket hang up|ended without|stream ended before message_stop|http2 request did not get a response|timed? out|timeout|terminated|retry delay/i.test(
 			err,
 		);
+	}
+
+	/**
+	 * Retry policy + callbacks shared by compaction and branch-summary summarization calls.
+	 * Uses the same `settings.retry` budget/backoff as agent-turn retries so a single transient
+	 * stream drop no longer fails the whole operation. `source` carries the context
+	 * the TUI needs to render the retry and recreate the underlying indicator.
+	 */
+	private _summarizationRetryCallbacks(
+		source: { source: "branchSummary" } | { source: "compaction"; reason: "manual" | "threshold" | "overflow" },
+	): RetryCallbacks {
+		return {
+			onRetryScheduled: (attempt, maxAttempts, delayMs, errorMessage) => {
+				this._emit({
+					type: "summarization_retry_scheduled",
+					attempt,
+					maxAttempts,
+					delayMs,
+					errorMessage,
+				});
+			},
+			onRetryAttemptStart: () => {
+				this._emit({
+					type: "summarization_retry_attempt_start",
+					...source,
+				});
+			},
+			onRetryFinished: () => {
+				this._emit({ type: "summarization_retry_finished" });
+			},
+		};
 	}
 
 	/**
@@ -3306,6 +3361,8 @@ export class AgentSession {
 					replaceInstructions,
 					reserveTokens: branchSummarySettings.reserveTokens,
 					streamFn: this.agent.streamFunction,
+					retry: this.settingsManager.getRetrySettings(),
+					callbacks: this._summarizationRetryCallbacks({ source: "branchSummary" }),
 				});
 				if (result.aborted) {
 					return { cancelled: true, aborted: true };

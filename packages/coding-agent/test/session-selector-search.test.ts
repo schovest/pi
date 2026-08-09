@@ -13,6 +13,7 @@ function makeSession(
 		created: overrides.created ?? new Date(0),
 		modified: overrides.modified,
 		fileSize: overrides.fileSize ?? 1,
+		messageCount: overrides.messageCount ?? 0,
 		firstMessage: overrides.firstMessage,
 	};
 }

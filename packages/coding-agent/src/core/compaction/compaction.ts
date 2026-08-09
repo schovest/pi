@@ -6,6 +6,7 @@
  */
 
 import type { AgentMessage, StreamFn, ThinkingLevel } from "@earendil-works/pi-agent-core";
+import { contentText, type RetryCallbacks, type RetryPolicy, retryAssistantCall } from "@earendil-works/pi-ai";
 import type { AssistantMessage, Context, Model, SimpleStreamOptions, Usage } from "@earendil-works/pi-ai/compat";
 import { completeSimple } from "@earendil-works/pi-ai/compat";
 import { convertToLlm } from "../messages.ts";
@@ -521,34 +522,32 @@ function createSummarizationOptions(
 	maxTokens: number,
 	apiKey: string | undefined,
 	headers: Record<string, string> | undefined,
+	env: Record<string, string> | undefined,
 	signal: AbortSignal | undefined,
 	thinkingLevel: ThinkingLevel | undefined,
 ): SimpleStreamOptions {
-	const options: SimpleStreamOptions = { maxTokens, signal, apiKey, headers };
+	const options: SimpleStreamOptions = { maxTokens, signal, apiKey, headers, env };
 	if (model.reasoning && thinkingLevel && thinkingLevel !== "off") {
 		options.reasoning = thinkingLevel;
 	}
 	return options;
 }
 
-async function completeSummarization(
+export async function completeSummarization(
 	model: Model<any>,
 	context: Context,
 	options: SimpleStreamOptions,
 	streamFn?: StreamFn,
+	retry?: RetryPolicy,
+	callbacks?: RetryCallbacks,
 ): Promise<AssistantMessage> {
-	if (!streamFn) {
-		return completeSimple(model, context, options);
-	}
-	const stream = await streamFn(model, context, options);
-	return stream.result();
+	const produce = async (): Promise<AssistantMessage> =>
+		streamFn ? (await streamFn(model, context, options)).result() : completeSimple(model, context, options);
+	return retryAssistantCall(produce, retry, options.signal, callbacks);
 }
 
-/**
- * Generate a summary of the conversation using the LLM.
- * If previousSummary is provided, uses the update prompt to merge.
- */
-export async function generateSummary(
+/** Generate or update a conversation summary and return its provider usage. */
+export async function generateSummaryWithUsage(
 	currentMessages: AgentMessage[],
 	model: Model<any>,
 	reserveTokens: number,
@@ -559,7 +558,10 @@ export async function generateSummary(
 	previousSummary?: string,
 	thinkingLevel?: ThinkingLevel,
 	streamFn?: StreamFn,
-): Promise<{ summary: string; usage: Usage }> {
+	env?: Record<string, string>,
+	retry?: RetryPolicy,
+	callbacks?: RetryCallbacks,
+): Promise<{ text: string; usage: Usage }> {
 	const maxTokens = Math.min(
 		Math.floor(0.8 * reserveTokens),
 		model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY,
@@ -591,25 +593,60 @@ export async function generateSummary(
 		},
 	];
 
-	const completionOptions = createSummarizationOptions(model, maxTokens, apiKey, headers, signal, thinkingLevel);
+	const completionOptions = createSummarizationOptions(model, maxTokens, apiKey, headers, env, signal, thinkingLevel);
 
 	const response = await completeSummarization(
 		model,
 		{ systemPrompt: SUMMARIZATION_SYSTEM_PROMPT, messages: summarizationMessages },
 		completionOptions,
 		streamFn,
+		retry,
+		callbacks,
 	);
 
 	if (response.stopReason === "error") {
 		throw new Error(`Summarization failed: ${response.errorMessage || "Unknown error"}`);
 	}
 
-	const textContent = response.content
-		.filter((c): c is { type: "text"; text: string } => c.type === "text")
-		.map((c) => c.text)
-		.join("\n");
+	return { text: contentText(response.content), usage: response.usage };
+}
 
-	return { summary: textContent, usage: response.usage };
+/**
+ * Generate a summary of the conversation using the LLM.
+ * If previousSummary is provided, uses the update prompt to merge.
+ */
+export async function generateSummary(
+	currentMessages: AgentMessage[],
+	model: Model<any>,
+	reserveTokens: number,
+	apiKey: string | undefined,
+	headers?: Record<string, string>,
+	signal?: AbortSignal,
+	customInstructions?: string,
+	previousSummary?: string,
+	thinkingLevel?: ThinkingLevel,
+	streamFn?: StreamFn,
+	env?: Record<string, string>,
+	retry?: RetryPolicy,
+	callbacks?: RetryCallbacks,
+): Promise<string> {
+	return (
+		await generateSummaryWithUsage(
+			currentMessages,
+			model,
+			reserveTokens,
+			apiKey,
+			headers,
+			signal,
+			customInstructions,
+			previousSummary,
+			thinkingLevel,
+			streamFn,
+			env,
+			retry,
+			callbacks,
+		)
+	).text;
 }
 
 // ============================================================================
@@ -757,7 +794,9 @@ export async function compact(
 	signal?: AbortSignal,
 	thinkingLevel?: ThinkingLevel,
 	streamFn?: StreamFn,
-	_env?: Record<string, string>,
+	env?: Record<string, string>,
+	retry?: RetryPolicy,
+	callbacks?: RetryCallbacks,
 ): Promise<CompactionResult> {
 	const {
 		firstKeptEntryId,
@@ -778,7 +817,7 @@ export async function compact(
 		// Generate both summaries in parallel
 		const [historyResult, turnPrefixResult] = await Promise.all([
 			messagesToSummarize.length > 0
-				? generateSummary(
+				? generateSummaryWithUsage(
 						messagesToSummarize,
 						model,
 						settings.reserveTokens,
@@ -789,25 +828,33 @@ export async function compact(
 						previousSummary,
 						thinkingLevel,
 						streamFn,
+						env,
+						retry,
+						callbacks,
 					)
-				: Promise.resolve({ summary: "No prior history.", usage: undefined as Usage | undefined }),
+				: Promise.resolve({ text: "No prior history.", usage: undefined as Usage | undefined }),
 			generateTurnPrefixSummary(
 				turnPrefixMessages,
 				model,
 				settings.reserveTokens,
 				apiKey,
 				headers,
+				env,
 				signal,
 				thinkingLevel,
 				streamFn,
+				retry,
+				callbacks,
 			),
 		]);
 		// Merge into single summary
-		summary = `${historyResult.summary}\n\n---\n\n**Turn Context (split turn):**\n\n${turnPrefixResult.summary}`;
-		compactionUsage = historyResult.usage ?? turnPrefixResult.usage;
+		summary = `${historyResult.text}\n\n---\n\n**Turn Context (split turn):**\n\n${turnPrefixResult.text}`;
+		compactionUsage = historyResult.usage
+			? combineUsage(historyResult.usage, turnPrefixResult.usage)
+			: turnPrefixResult.usage;
 	} else {
 		// Just generate history summary
-		const result = await generateSummary(
+		const result = await generateSummaryWithUsage(
 			messagesToSummarize,
 			model,
 			settings.reserveTokens,
@@ -818,8 +865,11 @@ export async function compact(
 			previousSummary,
 			thinkingLevel,
 			streamFn,
+			env,
+			retry,
+			callbacks,
 		);
-		summary = result.summary;
+		summary = result.text;
 		compactionUsage = result.usage;
 	}
 
@@ -840,6 +890,29 @@ export async function compact(
 	};
 }
 
+function combineUsage(first: Usage, second: Usage): Usage {
+	return {
+		input: first.input + second.input,
+		output: first.output + second.output,
+		cacheRead: first.cacheRead + second.cacheRead,
+		cacheWrite: first.cacheWrite + second.cacheWrite,
+		...(first.cacheWrite1h !== undefined || second.cacheWrite1h !== undefined
+			? { cacheWrite1h: (first.cacheWrite1h ?? 0) + (second.cacheWrite1h ?? 0) }
+			: {}),
+		...(first.reasoning !== undefined || second.reasoning !== undefined
+			? { reasoning: (first.reasoning ?? 0) + (second.reasoning ?? 0) }
+			: {}),
+		totalTokens: first.totalTokens + second.totalTokens,
+		cost: {
+			input: first.cost.input + second.cost.input,
+			output: first.cost.output + second.cost.output,
+			cacheRead: first.cost.cacheRead + second.cost.cacheRead,
+			cacheWrite: first.cost.cacheWrite + second.cost.cacheWrite,
+			total: first.cost.total + second.cost.total,
+		},
+	};
+}
+
 /**
  * Generate a summary for a turn prefix (when splitting a turn).
  */
@@ -849,10 +922,13 @@ async function generateTurnPrefixSummary(
 	reserveTokens: number,
 	apiKey: string | undefined,
 	headers?: Record<string, string>,
+	env?: Record<string, string>,
 	signal?: AbortSignal,
 	thinkingLevel?: ThinkingLevel,
 	streamFn?: StreamFn,
-): Promise<{ summary: string; usage: Usage }> {
+	retry?: RetryPolicy,
+	callbacks?: RetryCallbacks,
+): Promise<{ text: string; usage: Usage }> {
 	const maxTokens = Math.min(
 		Math.floor(0.5 * reserveTokens),
 		model.maxTokens > 0 ? model.maxTokens : Number.POSITIVE_INFINITY,
@@ -871,8 +947,10 @@ async function generateTurnPrefixSummary(
 	const response = await completeSummarization(
 		model,
 		{ systemPrompt: SUMMARIZATION_SYSTEM_PROMPT, messages: summarizationMessages },
-		createSummarizationOptions(model, maxTokens, apiKey, headers, signal, thinkingLevel),
+		createSummarizationOptions(model, maxTokens, apiKey, headers, env, signal, thinkingLevel),
 		streamFn,
+		retry,
+		callbacks,
 	);
 
 	if (response.stopReason === "error") {
@@ -880,10 +958,7 @@ async function generateTurnPrefixSummary(
 	}
 
 	return {
-		summary: response.content
-			.filter((c): c is { type: "text"; text: string } => c.type === "text")
-			.map((c) => c.text)
-			.join("\n"),
+		text: contentText(response.content),
 		usage: response.usage,
 	};
 }
