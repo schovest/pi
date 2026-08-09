@@ -16,7 +16,7 @@ import {
 } from "./config.ts";
 import { DEFAULT_CLAUDE_MARKETPLACE, PluginManager } from "./core/claude-plugin-manager.ts";
 import { CodexPluginManager, DEFAULT_CODEX_MARKETPLACE } from "./core/codex-plugin-manager.ts";
-import type { ExtensionFactory } from "./core/extensions/types.ts";
+import type { InlineExtension } from "./core/extensions/types.ts";
 import { DefaultPackageManager } from "./core/package-manager.ts";
 import { type AppMode, resolveProjectTrusted } from "./core/project-trust.ts";
 import { DefaultResourceLoader } from "./core/resource-loader.ts";
@@ -393,7 +393,7 @@ function parseProjectTrustOverride(args: readonly string[]): boolean | undefined
 }
 
 export interface PackageCommandRuntimeOptions {
-	extensionFactories?: ExtensionFactory[];
+	extensionFactories?: Array<InlineExtension>;
 }
 
 interface CommandSettingsResult {
@@ -415,7 +415,7 @@ async function createCommandSettingsManager(options: {
 	cwd: string;
 	agentDir: string;
 	projectTrustOverride?: boolean;
-	extensionFactories?: ExtensionFactory[];
+	extensionFactories?: Array<InlineExtension>;
 }): Promise<CommandSettingsResult> {
 	const settingsManager = SettingsManager.create(options.cwd, options.agentDir, { projectTrusted: false });
 	const projectTrustWarnings: string[] = [];
