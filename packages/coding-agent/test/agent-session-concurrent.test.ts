@@ -112,7 +112,7 @@ describe("AgentSession concurrent prompt guard", () => {
 		const settingsManager = SettingsManager.create(tempDir, tempDir);
 		settingsManager.applyOverrides({ gitSnapshotMaxCount: 0 });
 		const authStorage = AuthStorage.create(join(tempDir, "auth.json"));
-		const modelRegistry = await createModelRegistry(authStorage, tempDir);
+		const modelRegistry = await createModelRegistry(authStorage, join(tempDir, "models.json"));
 		// Set a runtime API key so validation passes
 		await authStorage.modify("anthropic", async () => ({ type: "api_key", key: "test-key" }));
 		await modelRegistry.refresh();
@@ -239,7 +239,7 @@ describe("AgentSession concurrent prompt guard", () => {
 		const settingsManager = SettingsManager.create(tempDir, tempDir);
 		settingsManager.applyOverrides({ gitSnapshotMaxCount: 0 });
 		const authStorage = AuthStorage.create(join(tempDir, "auth.json"));
-		const modelRegistry = await createModelRegistry(authStorage, tempDir);
+		const modelRegistry = await createModelRegistry(authStorage, join(tempDir, "models.json"));
 		await authStorage.modify("anthropic", async () => ({ type: "api_key", key: "test-key" }));
 		await modelRegistry.refresh();
 
@@ -319,7 +319,7 @@ describe("AgentSession concurrent prompt guard", () => {
 		const settingsManager = SettingsManager.create(tempDir, tempDir);
 		settingsManager.applyOverrides({ gitSnapshotMaxCount: 0 });
 		const authStorage = AuthStorage.create(join(tempDir, "auth.json"));
-		const modelRegistry = await createModelRegistry(authStorage, tempDir);
+		const modelRegistry = await createModelRegistry(authStorage, join(tempDir, "models.json"));
 		await authStorage.modify("anthropic", async () => ({ type: "api_key", key: "test-key" }));
 		await modelRegistry.refresh();
 
@@ -427,7 +427,7 @@ describe("AgentSession concurrent prompt guard", () => {
 		const settingsManager = SettingsManager.create(tempDir, tempDir);
 		settingsManager.applyOverrides({ gitSnapshotMaxCount: 0 });
 		const authStorage = AuthStorage.create(join(tempDir, "auth.json"));
-		const modelRegistry = await createModelRegistry(authStorage, tempDir);
+		const modelRegistry = await createModelRegistry(authStorage, join(tempDir, "models.json"));
 		await authStorage.modify("anthropic", async () => ({ type: "api_key", key: "test-key" }));
 		await modelRegistry.refresh();
 
@@ -576,7 +576,7 @@ describe("AgentSession concurrent prompt guard", () => {
 		const settingsManager = SettingsManager.create(tempDir, tempDir);
 		settingsManager.applyOverrides({ gitSnapshotMaxCount: 0 });
 		const authStorage = AuthStorage.create(join(tempDir, "auth.json"));
-		const modelRegistry = await createModelRegistry(authStorage, tempDir);
+		const modelRegistry = await createModelRegistry(authStorage, join(tempDir, "models.json"));
 		await authStorage.modify("anthropic", async () => ({ type: "api_key", key: "test-key" }));
 		await modelRegistry.refresh();
 

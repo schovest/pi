@@ -282,7 +282,7 @@ export default function(pi) {
 
 			const sessionManager = SessionManager.inMemory();
 			const authStorage = AuthStorage.create(join(tempDir, "auth.json"));
-			const modelRegistry = await createModelRegistry(authStorage);
+			const modelRegistry = await createModelRegistry(authStorage, join(tempDir, "models.json"));
 			const runner = new ExtensionRunner(
 				extensionsResult.extensions,
 				extensionsResult.runtime,
@@ -728,7 +728,7 @@ export default function(pi: ExtensionAPI) {
 
 			const sessionManager = SessionManager.inMemory();
 			const authStorage = AuthStorage.create(join(tempDir, "auth-explicit.json"));
-			const modelRegistry = await createModelRegistry(authStorage);
+			const modelRegistry = await createModelRegistry(authStorage, join(tempDir, "models.json"));
 			const runner = new ExtensionRunner(
 				extensionsResult.extensions,
 				extensionsResult.runtime,

@@ -11,11 +11,20 @@ function wrap(runtime: ModelRuntime): ModelRegistry {
 }
 
 export async function createModelRegistry(credentials: CredentialStore, modelsPath?: string): Promise<ModelRegistry> {
-	return wrap(await ModelRuntime.create({ credentials, modelsPath, allowModelNetwork: false }));
+	return wrap(
+		await ModelRuntime.create({ credentials, modelsPath, allowModelNetwork: false, modelNetworkEnabled: false }),
+	);
 }
 
 export async function createInMemoryModelRegistry(credentials: CredentialStore): Promise<ModelRegistry> {
-	return wrap(await ModelRuntime.create({ credentials, modelsPath: null, allowModelNetwork: false }));
+	return wrap(
+		await ModelRuntime.create({
+			credentials,
+			modelsPath: null,
+			allowModelNetwork: false,
+			modelNetworkEnabled: false,
+		}),
+	);
 }
 
 export function getModelRuntime(modelRegistry: ModelRegistry): ModelRuntime {
