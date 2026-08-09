@@ -3,6 +3,31 @@
 # Get list of staged files before running check
 STAGED_FILES=$(git diff --cached --name-only)
 
+# Block direct code commits on main branch (only doc files allowed, merge exempted)
+CURRENT_BRANCH=$(git branch --show-current)
+if [ "$CURRENT_BRANCH" = "main" ] && ! git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1; then
+  NON_DOC_FILES=""
+  for file in $STAGED_FILES; do
+    case "$file" in
+      *.md|*.markdown|*.txt|*.rst|*.adoc)
+        ;;
+      *)
+        NON_DOC_FILES="$NON_DOC_FILES $file"
+        ;;
+    esac
+  done
+  if [ -n "$NON_DOC_FILES" ]; then
+    echo "❌ main 分支只允许提交文档文件（.md/.markdown/.txt/.rst/.adoc），不允许直接提交代码文件"
+    echo "   被拦截的文件："
+    for file in $NON_DOC_FILES; do
+      echo "     - $file"
+    done
+    echo "   请切到 dev 分支提交代码，再通过 git merge 合入 main"
+    echo "   （确需绕过时可用 git commit --no-verify，但请确认符合分支策略）"
+    exit 1
+  fi
+fi
+
 node scripts/check-lockfile-commit.mjs
 if [ $? -ne 0 ]; then
   exit 1
