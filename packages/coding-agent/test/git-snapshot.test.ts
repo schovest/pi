@@ -57,7 +57,7 @@ describe("git-snapshot", () => {
 			expect(snapshot!.head).toMatch(/^[0-9a-f]{40}$/);
 		});
 
-		it("captures uncommitted changes in stashCommit (default mode=tracked-only)", async () => {
+		it("captures uncommitted changes in stashCommit (default mode=include-untracked)", async () => {
 			writeFileSync(join(repoDir, "file.txt"), "modified content");
 			const snapshot = await takeSnapshot(repoDir);
 			expect(snapshot).not.toBeNull();

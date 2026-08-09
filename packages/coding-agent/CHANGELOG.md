@@ -6,6 +6,10 @@
 
 - 编辑器默认快捷键新增 `ctrl+backspace`（删除光标前一个 word）/`ctrl+delete`（删除光标后一个 word），与原有 `ctrl+w`/`alt+backspace`、`alt+d`/`alt+delete` 并存（需终端支持 Kitty 协议或 modifyOtherKeys 才能精确识别组合键）
 
+### Changed
+
+- git snapshot 默认模式从 `tracked-only` 改回 `include-untracked`：未显式配置 `gitSnapshotMode` 时（`getGitSnapshotMode` 回退值、`takeSnapshot` 默认参数），快照捕获并回滚非忽略的 untracked 文件；已显式配置的用户行为不变
+
 ## [0.13.4] - 2026-08-08
 
 ### Added

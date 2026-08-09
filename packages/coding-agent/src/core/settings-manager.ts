@@ -202,7 +202,7 @@ export interface Settings {
 	httpProxy?: string; // Proxy URL applied as HTTP_PROXY and HTTPS_PROXY for Pi-managed HTTP clients
 	websocketConnectTimeoutMs?: number; // WebSocket connect/open handshake timeout in milliseconds; 0 disables it
 	bashBackgroundTimeout?: number; // Default timeout in seconds before a bash command is moved to background (default: 120)
-	/** Git snapshot mode: "tracked-only" captures tracked changes only (default); "include-untracked" also captures non-ignored untracked files; "all" also captures .gitignore'd files. */
+	/** Git snapshot mode: "tracked-only" captures tracked changes only; "include-untracked" also captures non-ignored untracked files (default); "all" also captures .gitignore'd files. */
 	gitSnapshotMode?: GitSnapshotMode;
 	/** Maximum number of git snapshot checkpoints to retain across all sessions in the cwd. Oldest are pruned when exceeded. Set to 0 to disable snapshots entirely. Default: 100 */
 	gitSnapshotMaxCount?: number;
@@ -1375,7 +1375,7 @@ export class SettingsManager {
 	getGitSnapshotMode(): GitSnapshotMode {
 		const mode = this.settings.gitSnapshotMode;
 		const valid: GitSnapshotMode[] = ["tracked-only", "include-untracked", "all"];
-		return mode && valid.includes(mode) ? mode : "tracked-only";
+		return mode && valid.includes(mode) ? mode : "include-untracked";
 	}
 
 	setGitSnapshotMode(mode: GitSnapshotMode): void {

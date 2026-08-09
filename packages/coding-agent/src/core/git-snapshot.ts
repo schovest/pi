@@ -41,14 +41,14 @@ export async function isGitRepo(cwd: string): Promise<boolean> {
  * commit that preserves both tracked modifications and untracked files.
  *
  * @param cwd Working directory
- * @param mode "tracked-only" captures tracked changes only (default);
- *             "include-untracked" also captures non-ignored untracked files;
+ * @param mode "tracked-only" captures tracked changes only;
+ *             "include-untracked" also captures non-ignored untracked files (default);
  *             "all" also captures .gitignore'd files
  * @returns GitSnapshotData, or null if not a git repository or on error
  */
 export async function takeSnapshot(
 	cwd: string,
-	mode: GitSnapshotMode = "tracked-only",
+	mode: GitSnapshotMode = "include-untracked",
 ): Promise<GitSnapshotData | null> {
 	if (!(await isGitRepo(cwd))) {
 		return null;
