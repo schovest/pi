@@ -4,6 +4,7 @@
 
 ### Added
 
+- `tui.editor.deleteWordBackward` 默认键新增 `ctrl+backspace`（删除光标前一个 word），`tui.editor.deleteWordForward` 默认键新增 `ctrl+delete`（删除光标后一个 word），与原有 `ctrl+w`/`alt+backspace`、`alt+d`/`alt+delete` 并存（需终端支持 Kitty 协议或 modifyOtherKeys 才能精确识别组合键）
 - `TUI.doRender` 渲染期 `scrollOffset` 被隐式修正（内容缩短 clamp、滚动中内容增长推挤）时补发 `onScrollOffsetChange` 通知，回调语义统一为"offset 变化即通知"
 - `Editor` 新增 prompt 前缀渲染：`EditorOptions.promptPrefix`/`promptColor` 或 `setPromptPrefix(prefix, color)`，首行渲染前缀（可上色），其余换行/滚动行渲染等宽空白对齐，布局宽度自动扣除前缀宽度；`EditorComponent` 接口新增可选 `setPromptPrefix`
 

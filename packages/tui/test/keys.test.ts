@@ -247,6 +247,16 @@ describe("matchesKey", () => {
 			assert.strictEqual(parseKey("\x1b[27;3;127~"), "alt+backspace");
 		});
 
+		it("should match Kitty protocol ctrl+backspace / ctrl+delete", () => {
+			setKittyProtocolActive(true);
+			// wezterm/ghostty/foot 在 Kitty 协议下：Backspace 用 CSI-u，Delete 用功能键 ~ 形式
+			assert.strictEqual(matchesKey("\x1b[127;5u", "ctrl+backspace"), true);
+			assert.strictEqual(parseKey("\x1b[127;5u"), "ctrl+backspace");
+			assert.strictEqual(matchesKey("\x1b[3;5~", "ctrl+delete"), true);
+			assert.strictEqual(parseKey("\x1b[3;5~"), "ctrl+delete");
+			setKittyProtocolActive(false);
+		});
+
 		it("should match xterm modifyOtherKeys Escape", () => {
 			setKittyProtocolActive(false);
 			assert.strictEqual(matchesKey("\x1b[27;1;27~", "escape"), true);

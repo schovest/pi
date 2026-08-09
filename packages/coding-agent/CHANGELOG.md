@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- 编辑器默认快捷键新增 `ctrl+backspace`（删除光标前一个 word）/`ctrl+delete`（删除光标后一个 word），与原有 `ctrl+w`/`alt+backspace`、`alt+d`/`alt+delete` 并存（需终端支持 Kitty 协议或 modifyOtherKeys 才能精确识别组合键）
+
 ## [0.13.4] - 2026-08-08
 
 ### Added
