@@ -21,6 +21,21 @@ describe("KeybindingsManager", () => {
 		assert.deepStrictEqual(keybindings.getKeys("tui.editor.cursorUp"), ["up"]);
 	});
 
+	it("binds ctrl+backspace / ctrl+delete to word deletion by default", () => {
+		const keybindings = new KeybindingsManager(TUI_KEYBINDINGS);
+
+		assert.deepStrictEqual(keybindings.getKeys("tui.editor.deleteWordBackward"), [
+			"ctrl+backspace",
+			"ctrl+w",
+			"alt+backspace",
+		]);
+		assert.deepStrictEqual(keybindings.getKeys("tui.editor.deleteWordForward"), [
+			"ctrl+delete",
+			"alt+d",
+			"alt+delete",
+		]);
+	});
+
 	it("still reports direct user binding conflicts without evicting defaults", () => {
 		const keybindings = new KeybindingsManager(TUI_KEYBINDINGS, {
 			"tui.input.submit": "ctrl+x",
