@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- 内置 subagent 新增 `reviewer`（代码审查，输出分级问题报告）；`explorer`/`worker`/`reviewer` 统一配置全工具（`includedTools: ["*"]`），行为由各自系统提示词约束（explorer/reviewer 只读）
+
 ## [0.13.6] - 2026-08-09
 
 ### Fixed
