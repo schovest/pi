@@ -101,7 +101,7 @@ describe.skipIf(!API_KEY)("Compaction extensions", () => {
 		const settingsManager = SettingsManager.create(tempDir, tempDir);
 		settingsManager.applyOverrides({ compaction: { keepRecentTokens: 1 } });
 		const authStorage = AuthStorage.create(join(tempDir, "auth.json"));
-		const modelRegistry = await createModelRegistry(authStorage);
+		const modelRegistry = await createModelRegistry(authStorage, join(tempDir, "models.json"));
 
 		const runtime = createExtensionRuntime();
 		const resourceLoader = {

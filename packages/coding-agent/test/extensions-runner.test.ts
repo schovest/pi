@@ -33,7 +33,7 @@ describe("ExtensionRunner", () => {
 		fs.mkdirSync(extensionsDir);
 		sessionManager = SessionManager.inMemory();
 		const authStorage = AuthStorage.create(path.join(tempDir, "auth.json"));
-		modelRegistry = await createModelRegistry(authStorage);
+		modelRegistry = await createModelRegistry(authStorage, path.join(tempDir, "models.json"));
 	});
 
 	afterEach(() => {

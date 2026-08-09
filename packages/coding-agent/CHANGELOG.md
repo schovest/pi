@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 测试 flaky 根因：`ModelRuntime` 新增 `modelNetworkEnabled` 选项（默认 `PI_OFFLINE` 未设置时为 true），测试 helper `createModelRegistry`/`createInMemoryModelRegistry` 显式传 `false`，避免单元测试中的 `registry.refresh()` 及 `registerProvider` 触发的 fire-and-forget refresh 访问真实 `https://pi.dev` 模型目录（网络挂起时无超时信号导致测试 60s 超时）；同时修正多测试文件把目录/默认路径传给 `createModelRegistry` 导致共享 `/tmp/models-store.json` 与真实 `~/.pi/agent/models-store.json` 的锁竞争问题
+
 ## [0.13.5] - 2026-08-09
 
 ### Added

@@ -66,6 +66,11 @@ export interface CreateModelRuntimeOptions {
 	allowModelNetwork?: boolean;
 	/** Timeout for the create-time network model refresh. */
 	modelRefreshTimeoutMs?: number;
+	/**
+	 * Override the default network-enabled state used by refresh() calls.
+	 * Defaults to `process.env.PI_OFFLINE === undefined`.
+	 */
+	modelNetworkEnabled?: boolean;
 	catalogBaseUrl?: string;
 }
 
@@ -159,7 +164,7 @@ export class ModelRuntime implements Models {
 			modelsPath,
 			modelsStore,
 			providers,
-			process.env.PI_OFFLINE === undefined,
+			options.modelNetworkEnabled ?? process.env.PI_OFFLINE === undefined,
 		);
 		runtime.configureRadiusProviders();
 		runtime.rebuildProviders();
