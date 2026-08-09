@@ -4,6 +4,9 @@
 
 ### Added
 
+- 补回 `sliceByColumn` 导出（`packages/tui` 包入口，与上游一致），修复依赖该 API 的扩展（如 pi-hermes-memory）渲染工具结果卡片时崩溃
+- 补回 `Marked`/`Token`/`Tokens` 导出（与上游一致，fork 的 `components/markdown.ts` 已依赖 `marked` 包但入口未 re-export）
+- 移植上游 `terminal-colors.ts` 并补回 `parseOsc11BackgroundColor`/`parseTerminalColorSchemeReport`/`RgbColor`/`TerminalColorScheme` 导出（与上游 v0.80.6 包入口一致，纯函数零依赖）
 - `tui.editor.deleteWordBackward` 默认键新增 `ctrl+backspace`（删除光标前一个 word），`tui.editor.deleteWordForward` 默认键新增 `ctrl+delete`（删除光标后一个 word），与原有 `ctrl+w`/`alt+backspace`、`alt+d`/`alt+delete` 并存（需终端支持 Kitty 协议或 modifyOtherKeys 才能精确识别组合键）
 - `TUI.doRender` 渲染期 `scrollOffset` 被隐式修正（内容缩短 clamp、滚动中内容增长推挤）时补发 `onScrollOffsetChange` 通知，回调语义统一为"offset 变化即通知"
 - `Editor` 新增 prompt 前缀渲染：`EditorOptions.promptPrefix`/`promptColor` 或 `setPromptPrefix(prefix, color)`，首行渲染前缀（可上色），其余换行/滚动行渲染等宽空白对齐，布局宽度自动扣除前缀宽度；`EditorComponent` 接口新增可选 `setPromptPrefix`
