@@ -4,7 +4,7 @@
 
 ### Added
 
-- 内置 skills 机制：主程序从自身包/二进制目录（`getPackageDir()/skills`）兑底加载内置 skills（`packages/coding-agent/skills/` → `dist/skills/`），随发行版分发、迁移不丢失；用户/项目级同名 skills 优先；`--no-skills` 语义不变。首批内置两个：`pi-config`（配置管理：文档优先原则、配置修改工作流、验证规则）与 `pi-docs-reference`（官方文档目录与查阅技巧）
+- 内置 skills 机制：主程序从自身包/二进制目录（`getPackageDir()/skills`）兑底加载内置 skills（`packages/coding-agent/skills/` → `dist/skills/`），随发行版分发、迁移不丢失；用户/项目级同名 skills 优先；`--no-skills` 语义不变。首批内置两个：`pi-config`（配置管理入口，渐进式披露组织：主 SKILL.md 为通用原则+工作流+专项索引，14 个配置领域要点按需加载于 `references/` 子目录）与 `pi-docs-reference`（官方文档目录与查阅技巧）
 
 ### Removed
 

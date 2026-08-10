@@ -24,7 +24,7 @@ Pi implements the [Agent Skills standard](https://agentskills.io/specification),
 Pi loads skills from:
 
 - Builtin (ships with the package/binary, loaded from the install dir `skills/`):
-  - `pi-config` — Pi Agent 配置管理（文档优先原则、配置修改工作流、验证规则）
+  - `pi-config` — Pi Agent 配置管理（入口：通用原则/工作流/专项索引；14 个配置领域要点按需加载于 `references/` 子目录，渐进式披露）
   - `pi-docs-reference` — 官方文档目录与查阅技巧
 - Global:
   - `~/.pi/agent/skills/`

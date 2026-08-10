@@ -74,6 +74,8 @@ Skill content here.`,
 			const { skills } = loader.getSkills();
 			expect(skills.some((s) => s.name === "pi-config")).toBe(true);
 			expect(skills.some((s) => s.name === "pi-docs-reference")).toBe(true);
+			// pi-config 的 references/ 子目录是内容文件，不应被识别为独立 skill
+			expect(skills.some((s) => s.name.startsWith("pi-config-"))).toBe(false);
 		});
 
 		it("should not load builtin skills when noSkills is true", async () => {
