@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
 import chalk from "chalk";
-import { CONFIG_DIR_NAME } from "../config.ts";
+import { CONFIG_DIR_NAME, getPackageDir } from "../config.ts";
 import { loadThemeFromPath, type Theme } from "../modes/interactive/theme/theme.ts";
 import type { ResourceDiagnostic } from "./diagnostics.ts";
 
@@ -450,6 +450,15 @@ export class DefaultResourceLoader implements ResourceLoader {
 					],
 					this.additionalSkillPaths,
 				);
+
+		// Builtin skills ship with the package/binary (packages/coding-agent/skills -> dist/skills).
+		// Appended last so user/project/settings skills take precedence on name collision.
+		if (!this.noSkills) {
+			const builtinSkillsDir = join(getPackageDir(), "skills");
+			if (existsSync(builtinSkillsDir) && !skillPaths.includes(builtinSkillsDir)) {
+				skillPaths.push(builtinSkillsDir);
+			}
+		}
 
 		this.lastSkillPaths = skillPaths;
 		this.updateSkillsFromPaths(skillPaths, metadataByPath);

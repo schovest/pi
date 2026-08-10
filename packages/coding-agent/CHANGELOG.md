@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- 内置 skills 机制：主程序从自身包/二进制目录（`getPackageDir()/skills`）兑底加载内置 skills（`packages/coding-agent/skills/` → `dist/skills/`），随发行版分发、迁移不丢失；用户/项目级同名 skills 优先；`--no-skills` 语义不变。首批内置两个：`pi-config`（配置管理：文档优先原则、配置修改工作流、验证规则）与 `pi-docs-reference`（官方文档目录与查阅技巧）
+
+### Removed
+
+- 移除内置主 agent `config`（`dist-assets/primary-agents/config.md` 及 install.sh 对应条目），配置管理能力由内置 skill `pi-config` 承载（任意主 agent 在配置类任务中可发现并加载）；已安装环境的用户级 `config.md` 需手动删除
+
 ### Changed
 
 - 内置主 agent `build` 重命名为 `code`，默认 agent 变为 `code`（description/systemPrompt 不变，即默认系统提示词不变）

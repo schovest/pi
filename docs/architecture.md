@@ -133,7 +133,7 @@ AssistantMessageEventStream              ← ai/utils/event-stream.ts
 - Subagent 工具通过 `includedTools`/`excludedTools` glob 模式控制工具权限；旧 `tools` 字段自动映射
 - Primary agent 的 system prompt 始终 prepend 在 SYSTEM.md 之前
 - 内置工具默认启用 `read, bash, edit, write`；`grep, find, ls` 按需启用
-- 发行版资产目录 `packages/coding-agent/dist-assets/` 包含随二进制分发的内置扩展（tps.ts、sudo-helper.ts）、内置 primary agents（coding.md、config.md、plan.md）和 `install.sh` 安装脚本
+- 发行版资产目录 `packages/coding-agent/dist-assets/` 包含随二进制分发的内置扩展（tps.ts、sudo-helper.ts）、内置 primary agents（coding.md、plan.md）和 `install.sh` 安装脚本；内置 skills（pi-config、pi-docs-reference）位于 `packages/coding-agent/skills/`，随构建拷贝至 `dist/skills/` 并由 resource-loader 兜底加载
 
 ## 关键路径入口
 

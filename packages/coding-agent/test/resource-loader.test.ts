@@ -63,6 +63,44 @@ Skill content here.`,
 			expect(skills.some((s) => s.name === "test-skill")).toBe(true);
 		});
 
+		it("should load builtin skills shipped with the package", async () => {
+			const loader = new DefaultResourceLoader({ cwd, agentDir });
+			await loader.reload();
+
+			const { skills } = loader.getSkills();
+			expect(skills.some((s) => s.name === "pi-config")).toBe(true);
+			expect(skills.some((s) => s.name === "pi-docs-reference")).toBe(true);
+		});
+
+		it("should not load builtin skills when noSkills is true", async () => {
+			const loader = new DefaultResourceLoader({ cwd, agentDir, noSkills: true });
+			await loader.reload();
+
+			const { skills } = loader.getSkills();
+			expect(skills.some((s) => s.name === "pi-config")).toBe(false);
+		});
+
+		it("should let user skills take precedence over builtin skills on name collision", async () => {
+			const skillDir = join(agentDir, "skills", "pi-config");
+			mkdirSync(skillDir, { recursive: true });
+			writeFileSync(
+				join(skillDir, "SKILL.md"),
+				`---
+name: pi-config
+description: User override
+---
+User content`,
+			);
+
+			const loader = new DefaultResourceLoader({ cwd, agentDir });
+			await loader.reload();
+
+			const { skills } = loader.getSkills();
+			const skill = skills.find((s) => s.name === "pi-config");
+			expect(skill).toBeDefined();
+			expect(skill?.filePath).toContain(agentDir);
+		});
+
 		it("should ignore extra markdown files in auto-discovered skill dirs", async () => {
 			const skillDir = join(agentDir, "skills", "pi-skills", "browser-tools");
 			mkdirSync(skillDir, { recursive: true });
