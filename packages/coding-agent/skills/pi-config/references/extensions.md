@@ -28,3 +28,18 @@
 - execute 抛错才置 isError（返回值永不置错）；`terminate:true` 可跳过后续 LLM 调用
 - promptGuidelines 追加到 Guidelines 段无工具名前缀，必须自带工具名
 - 输出截断内置限制 50KB / 2000 行；`truncateHead/truncateTail/truncateLine/formatSize` 辅助
+## 文档兜底（本文件不足时）
+
+本文件为要点提炼，遇到以下情况**必须**转查阅官方文档，禁止凭猜测继续：
+
+- 字段含义、格式、允许值不确定
+- 需要默认值、生效范围、生效方式等细节
+- 本文件未覆盖的场景
+
+```text
+read(path: "~/.local/share/pi/docs/extensions.md")
+```
+
+对应官方文档：`extensions.md`。查阅方法见 `pi-docs-reference`。
+
+文档仍无法覆盖时：查看现有配置文件作为参考，并如实告知用户文档未覆盖该主题。

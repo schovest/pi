@@ -31,3 +31,18 @@
 - 版本化 npm spec 被钉死，`pi update` 跳过；git ref（tag/commit）钉死不自动升级，改 ref 需重新 `pi install git:...@new-ref`
 - 包可同现全局+项目，项目条目优先；身份：npm=包名、git=去 ref 的 URL、local=绝对路径
 - CI 用 `GIT_TERMINAL_PROMPT=0`、`GIT_SSH_COMMAND` 防 git 挂起
+## 文档兜底（本文件不足时）
+
+本文件为要点提炼，遇到以下情况**必须**转查阅官方文档，禁止凭猜测继续：
+
+- 字段含义、格式、允许值不确定
+- 需要默认值、生效范围、生效方式等细节
+- 本文件未覆盖的场景
+
+```text
+read(path: "~/.local/share/pi/docs/packages.md")
+```
+
+对应官方文档：`packages.md`。查阅方法见 `pi-docs-reference`。
+
+文档仍无法覆盖时：查看现有配置文件作为参考，并如实告知用户文档未覆盖该主题。

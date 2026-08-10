@@ -36,3 +36,18 @@
 - 连接失败查命令路径/env/debug:true/重连；OAuth 失败查 URL、配置、token 目录
 - 工具未显示查 excludeTools、directTools，必要时删元数据缓存
 - `disableProxyTool:true` 且无 direct tools 时 proxy 不注册；`samplingAutoApprove` 在非交互模式必须 true
+## 文档兜底（本文件不足时）
+
+本文件为要点提炼，遇到以下情况**必须**转查阅官方文档，禁止凭猜测继续：
+
+- 字段含义、格式、允许值不确定
+- 需要默认值、生效范围、生效方式等细节
+- 本文件未覆盖的场景
+
+```text
+read(path: "~/.local/share/pi/docs/mcp.md")
+```
+
+对应官方文档：`mcp.md`。查阅方法见 `pi-docs-reference`。
+
+文档仍无法覆盖时：查看现有配置文件作为参考，并如实告知用户文档未覆盖该主题。

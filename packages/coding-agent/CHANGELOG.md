@@ -12,6 +12,7 @@
 
 ### Changed
 
+- 内置 skill `pi-config` 渐进式深化：14 个配置领域要点全部归于 `references/` 子目录（渐进式披露，主 SKILL.md 为入口索引）；每个专项新增「文档兜底」小节——references 无法指导配置时（字段不明/格式存疑/场景未覆盖）必须转阅官方文档，禁止凭猜测继续；`pi-docs-reference` 补充与 pi-config 的两级查阅配合说明
 - 内置主 agent `build` 重命名为 `code`，默认 agent 变为 `code`（description/systemPrompt 不变，即默认系统提示词不变）
 
 ### Fixed

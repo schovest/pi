@@ -37,3 +37,18 @@
 - 不支持 reasoning_effort → `compat.supportsReasoningEffort: false`
 - shell 命令在请求时解析、无内置 TTL/缓存，需自包脚本实现缓存
 - anthropic 兼容代理默认发 per-tool `eager_input_streaming: true`，不接受时设 `supportsEagerToolInputStreaming: false`
+## 文档兜底（本文件不足时）
+
+本文件为要点提炼，遇到以下情况**必须**转查阅官方文档，禁止凭猜测继续：
+
+- 字段含义、格式、允许值不确定
+- 需要默认值、生效范围、生效方式等细节
+- 本文件未覆盖的场景
+
+```text
+read(path: "~/.local/share/pi/docs/models.md")
+```
+
+对应官方文档：`models.md`。查阅方法见 `pi-docs-reference`。
+
+文档仍无法覆盖时：查看现有配置文件作为参考，并如实告知用户文档未覆盖该主题。

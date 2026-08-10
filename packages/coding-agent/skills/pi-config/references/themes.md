@@ -28,3 +28,18 @@
 
 - Pi 用 24-bit RGB，旧终端自动回退 256 色近似（`echo $COLORTERM` 应为 truecolor/24bit）
 - 51 token 分组：核心 UI 11、背景/内容 11、Markdown 10、工具 diff 3、语法高亮 9、思考层级边框 7、bashMode 1
+## 文档兜底（本文件不足时）
+
+本文件为要点提炼，遇到以下情况**必须**转查阅官方文档，禁止凭猜测继续：
+
+- 字段含义、格式、允许值不确定
+- 需要默认值、生效范围、生效方式等细节
+- 本文件未覆盖的场景
+
+```text
+read(path: "~/.local/share/pi/docs/themes.md")
+```
+
+对应官方文档：`themes.md`。查阅方法见 `pi-docs-reference`。
+
+文档仍无法覆盖时：查看现有配置文件作为参考，并如实告知用户文档未覆盖该主题。

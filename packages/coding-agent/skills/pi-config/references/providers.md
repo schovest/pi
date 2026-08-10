@@ -30,3 +30,18 @@
 
 - `$FOO_BAR` 整个是变量名，字面后缀用 `${FOO}_BAR`；缺失环境变量视为未解析
 - 上下文溢出自动压缩重试仅在 errorMessage 匹配内置模式时触发；改写溢出错误勿把 rate limit 类错误改写成 context_length_exceeded
+## 文档兜底（本文件不足时）
+
+本文件为要点提炼，遇到以下情况**必须**转查阅官方文档，禁止凭猜测继续：
+
+- 字段含义、格式、允许值不确定
+- 需要默认值、生效范围、生效方式等细节
+- 本文件未覆盖的场景
+
+```text
+read(path: "~/.local/share/pi/docs/providers.md")
+```
+
+对应官方文档：`providers.md、custom-provider.md`。查阅方法见 `pi-docs-reference`。
+
+文档仍无法覆盖时：查看现有配置文件作为参考，并如实告知用户文档未覆盖该主题。

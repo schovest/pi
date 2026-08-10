@@ -27,3 +27,18 @@
 
 - **Pi 包与 Claude 插件互不相通**：`pi install` 管原生包，`pi claude-plugin` 管市场插件
 - 内置默认市场不可删除；marketplace remove 只删覆盖
+## 文档兜底（本文件不足时）
+
+本文件为要点提炼，遇到以下情况**必须**转查阅官方文档，禁止凭猜测继续：
+
+- 字段含义、格式、允许值不确定
+- 需要默认值、生效范围、生效方式等细节
+- 本文件未覆盖的场景
+
+```text
+read(path: "~/.local/share/pi/docs/plugins.md")
+```
+
+对应官方文档：`plugins.md`。查阅方法见 `pi-docs-reference`。
+
+文档仍无法覆盖时：查看现有配置文件作为参考，并如实告知用户文档未覆盖该主题。
