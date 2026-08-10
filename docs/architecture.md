@@ -114,7 +114,7 @@ AssistantMessageEventStream              ← ai/utils/event-stream.ts
 | 项目级扩展 | `.pi/extensions/*.ts` | ExtensionAPI 注册 | tps.ts, redraws.ts |
 | 内置工具 | `coding-agent/core/tools/` | `createXxxTool()` 工厂 | bash, read, edit, write, find, grep, ls |
 | 工具匹配 | `coding-agent/core/tool-matcher.ts` | glob 模式（minimatch），支持 `includedTools`/`excludedTools` | subagent 工具过滤、`--tools`/`--exclude-tools` CLI |
-| Primary Agent | `~/.pi/agent/primary-agents/*.md` 或 `.pi/primary-agents/*.md` | `defaultPrimaryAgent` settings | build, plan |
+| Primary Agent | `~/.pi/agent/primary-agents/*.md` 或 `.pi/primary-agents/*.md` | `defaultPrimaryAgent` settings | code, plan |
 | Subagent | `~/.pi/agent/subagents/*.md` 或 `.pi/subagents/*.md` | `includedTools`/`excludedTools` + `skills` glob 模式 frontmatter | explorer, worker |
 | MCP 工具 | Claude-compatible 插件（写入 `mcp.json`） | `claudePlugins` / `claudePluginMarketplaces` settings | 外部 MCP server |
 | Claude 兼容插件 | npm 包安装 | `claudePlugins` / `claudePluginMarketplaces` settings | 社区插件 |

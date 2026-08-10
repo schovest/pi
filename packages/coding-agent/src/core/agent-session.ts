@@ -365,7 +365,7 @@ export class AgentSession {
 	private _runningSubagents = new Map<string, SubagentRunEvent>();
 
 	// Primary agent state
-	private _currentPrimaryAgent = "build";
+	private _currentPrimaryAgent = "code";
 	private _primaryAgentPrompt = "";
 	private _primaryAgentSkills?: Skill[];
 
@@ -1026,7 +1026,7 @@ export class AgentSession {
 	/** Restore the previously persisted primary agent from project settings. */
 	async restorePrimaryAgent(): Promise<void> {
 		const savedAgent = this.settingsManager.getDefaultPrimaryAgent();
-		if (!savedAgent || savedAgent === "build") return;
+		if (!savedAgent || savedAgent === "code") return;
 		const definitions = await discoverPrimaryAgents({ cwd: this._cwd, agentDir: this._agentDir });
 		if (definitions.some((d) => d.name === savedAgent)) {
 			await this.switchPrimaryAgent(savedAgent);

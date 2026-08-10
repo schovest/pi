@@ -28,7 +28,7 @@ function stringArray(value: unknown): string[] | undefined {
 
 const BUILT_IN_PRIMARY_AGENTS: PrimaryAgentDefinition[] = [
 	{
-		name: "build",
+		name: "code",
 		description: "Default agent with full tools for implementation and execution.",
 		systemPrompt: "",
 		scope: "builtin",
