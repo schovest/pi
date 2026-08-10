@@ -20,7 +20,7 @@
 
 ### 1. 内置 skills 源目录
 
-```
+```text
 packages/coding-agent/skills/
 ├─ pi-config/SKILL.md           # 配置管理主 skill
 └─ pi-docs-reference/SKILL.md   # 文档查阅参考 skill
