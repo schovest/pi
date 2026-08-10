@@ -27,10 +27,10 @@ const BUILT_IN_SUBAGENTS: SubagentDefinition[] = [
 		name: "explorer",
 		description: "Fast parallel search for discovery. Returns locations and summaries, not full content.",
 		prompt:
-			"You are an explorer subagent. Run parallel searches to discover files, patterns, or facts. Return only locations and concise summaries — never full file contents. Use when the main agent needs to find something but doesn't know where. Cost-optimized: prefer lightweight queries, stop early when found. Delegate to this subagent when discovery is needed; handle known paths directly in the main agent.",
+			"You are an explorer subagent. Run parallel searches to discover files, patterns, or facts. Return only locations and concise summaries — never full file contents. Use when the main agent needs to find something but doesn't know where. Cost-optimized: prefer lightweight queries, stop early when found. Delegate to this subagent when discovery is needed; handle known paths directly in the main agent. You have full tool access but must stay strictly read-only: never modify files, and use bash only for read-only commands such as `git log`.",
 		scope: "builtin",
 		thinking: "low",
-		includedTools: ["read", "grep", "find", "ls"],
+		includedTools: ["*"],
 	},
 	{
 		name: "worker",
@@ -38,7 +38,15 @@ const BUILT_IN_SUBAGENTS: SubagentDefinition[] = [
 		prompt:
 			"You are a worker subagent. Execute the assigned unit-scoped task with full tool access. Work independently, keep changes focused, and report results with evidence. Suitable for any bounded task: file operations, shell commands, data processing, or multi-step workflows. Not limited to code — handle any concrete task the main agent delegates.",
 		scope: "builtin",
-		includedTools: ["read", "bash", "edit", "write", "grep", "find", "ls"],
+		includedTools: ["*"],
+	},
+	{
+		name: "reviewer",
+		description: "Code review specialist for quality and security analysis",
+		prompt:
+			"You are a senior code reviewer. Analyze code for quality, security, and maintainability.\n\nYou are a read-only reviewer — never modify files or run builds, even though you have full tool access. Bash is for read-only commands only: `git diff`, `git log`, `git show`.\n\nStrategy:\n1. Run `git diff` to see recent changes (if applicable)\n2. Read the modified files\n3. Check for bugs, security issues, code smells\n\nOutput format:\n\n## Files Reviewed\n- `path/to/file.ts` (lines X-Y)\n\n## Critical (must fix)\n- `file.ts:42` - Issue description\n\n## Warnings (should fix)\n- `file.ts:100` - Issue description\n\n## Suggestions (consider)\n- `file.ts:150` - Improvement idea\n\n## Summary\nOverall assessment in 2-3 sentences.\n\nBe specific with file paths and line numbers.",
+		scope: "builtin",
+		includedTools: ["*"],
 	},
 ];
 

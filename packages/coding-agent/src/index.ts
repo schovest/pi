@@ -43,6 +43,7 @@ export {
 	type GenerateBranchSummaryOptions,
 	generateBranchSummary,
 	generateSummary,
+	generateSummaryWithUsage,
 	getLastAssistantUsage,
 	prepareBranchEntries,
 	serializeConversation,
@@ -52,6 +53,7 @@ export { createEventBus, type EventBus, type EventBusController } from "./core/e
 // Extension system
 export type {
 	AgentEndEvent,
+	AgentSettledEvent,
 	AgentStartEvent,
 	AgentToolResult,
 	AgentToolUpdateCallback,
@@ -60,6 +62,7 @@ export type {
 	BashToolCallEvent,
 	BeforeAgentStartEvent,
 	BeforeAgentStartEventResult,
+	BeforeProviderHeadersEvent,
 	BeforeProviderRequestEvent,
 	BeforeProviderRequestEventResult,
 	BuildSystemPromptOptions,
@@ -68,6 +71,8 @@ export type {
 	ContextUsage,
 	CustomToolCallEvent,
 	EditToolCallEvent,
+	EntryRenderer,
+	EntryRenderOptions,
 	ExecOptions,
 	ExecResult,
 	Extension,
@@ -117,6 +122,7 @@ export type {
 	SessionBeforeSwitchEvent,
 	SessionBeforeTreeEvent,
 	SessionCompactEvent,
+	SessionInfoChangedEvent,
 	SessionShutdownEvent,
 	SessionStartEvent,
 	SessionTreeEvent,
@@ -127,7 +133,10 @@ export type {
 	ToolCallEvent,
 	ToolCallEventResult,
 	ToolDefinition,
+	ToolExecutionEndEvent,
 	ToolExecutionMode,
+	ToolExecutionStartEvent,
+	ToolExecutionUpdateEvent,
 	ToolInfo,
 	ToolRenderResultOptions,
 	ToolResultEvent,
@@ -159,6 +168,14 @@ export {
 export type { ReadonlyFooterDataProvider } from "./core/footer-data-provider.ts";
 export { convertToLlm } from "./core/messages.ts";
 export { ModelRegistry } from "./core/model-registry.ts";
+// Model resolution (CLI scoping/selection)
+export type {
+	ModelScopeDiagnostic,
+	ResolveCliModelResult,
+	ResolveModelScopeResult,
+	ScopedModel,
+} from "./core/model-resolver.ts";
+export { resolveCliModel, resolveModelScopeWithDiagnostics } from "./core/model-resolver.ts";
 export {
 	type CreateModelRuntimeOptions,
 	ModelRuntime,
@@ -205,6 +222,7 @@ export {
 } from "./core/sdk.ts";
 export {
 	type BranchSummaryEntry,
+	buildContextEntries,
 	buildSessionContext,
 	type CompactionEntry,
 	CURRENT_SESSION_VERSION,
@@ -224,6 +242,8 @@ export {
 	type SessionInfoEntry,
 	SessionManager,
 	type SessionMessageEntry,
+	type SessionTreeNode,
+	sessionEntryToContextMessages,
 	type ThinkingLevelChangeEntry,
 } from "./core/session-manager.ts";
 export type {
@@ -324,6 +344,7 @@ export {
 } from "./core/tools/index.ts";
 export {
 	hasProjectTrustInputs,
+	hasTrustRequiringProjectResources,
 	type ProjectTrustDecision,
 	ProjectTrustStore,
 	type ProjectTrustStoreEntry,

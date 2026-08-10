@@ -20,6 +20,7 @@ function makeSession(overrides: Partial<SessionInfo> & { id: string }): SessionI
 		created: overrides.created ?? new Date(0),
 		modified: overrides.modified ?? new Date(0),
 		fileSize: overrides.fileSize ?? 1,
+		messageCount: overrides.messageCount ?? 0,
 		firstMessage: overrides.firstMessage ?? "hello",
 	};
 }

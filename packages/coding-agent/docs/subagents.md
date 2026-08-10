@@ -5,9 +5,10 @@ Subagent 是一种任务委托机制，允许主 agent 将任务分配给专门�
 ## 内置 Agent
 
 | Agent | 描述 | 默认工具 | thinking |
-|-------|------|----------|----------|
-| `explorer` | 快速并行搜索，返回定位和摘要 | read, grep, find, ls | low |
-| `worker` | 单元化任务执行，拥有全部权限 | read, bash, edit, write, grep, find, ls | —（继承主 agent） |
+| ------- | ------ | ---------- | ---------- |
+| `explorer` | 快速并行搜索，返回定位和摘要 | 全工具（prompt 约束只读） | low |
+| `worker` | 单元化任务执行，拥有全部权限 | 全工具 | —（继承主 agent） |
+| `reviewer` | 代码审查（质量、安全、可维护性），输出分级问题报告 | 全工具（prompt 约束只读） | —（继承主 agent） |
 
 ## 自定义 Agent
 

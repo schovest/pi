@@ -173,7 +173,8 @@ describe("codex hooks bridge primitives", () => {
 			registerCommand: () => {},
 			sendUserMessage: () => {},
 		};
-		const factory = createCodexHooksExtensionFactory(deps);
+		const extension = createCodexHooksExtensionFactory(deps);
+		const factory = typeof extension === "function" ? extension : extension.factory;
 		factory(fakePi as never);
 		expect(registered).toContain("session_start");
 		expect(registered).toContain("tool_call");

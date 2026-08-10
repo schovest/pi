@@ -1,6 +1,6 @@
 # 自定义 Agents 开发规则
 
-本仓库基于上游 `0.80.6` 的 Pi 开发自己的 agents、工具链和发行版。默认目标不是维护上游 `pi`，而是在保留 Pi 核心能力的基础上，迭代适合本地工作流的 agent 运行时、内置扩展、MCP 能力、技能和二进制分发。
+本仓库基于上游(`https://github.com/earendil-works/pi`) release `v0.81.1` 的 Pi 开发自己的 agents、工具链和发行版。默认目标不是维护上游 `pi`，而是在保留 Pi 核心能力的基础上，构建通用agent，包括编程和其他功能。
 
 ## 项目目标
 
@@ -21,11 +21,11 @@
 
 | 章节 | 文件 | 摘要 |
 | ------ | ------ | ------ |
-| 包依赖关系 | `docs/architecture.md#包依赖关系` | coding-agent → agent + tui → ai |
-| 各包职责 | `docs/architecture.md#各包职责` | agent/ai/tui/coding-agent 四包职责与关键导出 |
+| 包依赖关系 | `docs/architecture.md#包依赖关系` | coding-agent → tui（工作区包）+ agent/ai（外部 npm @earendil-works） |
+| 各包职责 | `docs/architecture.md#各包职责` | tui/coding-agent 两工作区包职责与关键导出；agent/ai 为外部 npm 依赖 |
 | 核心数据流 | `docs/architecture.md#核心数据流` | 一次 prompt 的完整调用链：Mode → AgentSession → Agent → runAgentLoop → streamSimple → Provider → EventStream |
 | Agent 抽象层 | `docs/architecture.md#agent-抽象层` | 低层 agentLoop → 中层 Agent → 应用层 AgentSession；AgentHarness 为独立抽象，不在主调用链 |
-| 扩展点与能力归属 | `docs/architecture.md#扩展点与能力归属` | 17 类能力的归属位置、配置方式和关键约束 |
+| 扩展点与能力归属 | `docs/architecture.md#扩展点与能力归属` | 18 类能力的归属位置、配置方式和关键约束 |
 | 关键路径入口 | `docs/architecture.md#关键路径入口` | 14 个功能模块的入口文件和调用链（含 ModelRuntime 认证运行时） |
 
 ## 交流风格
@@ -43,7 +43,7 @@
 - 不通过删除或降级功能修复类型错误；依赖过旧时优先升级
 - 外部 API 类型以 `node_modules` 或官方文档为准，不猜测
 - 不硬编码快捷键；默认快捷键放入 `keybindings` 配置
-- 不手改 `packages/ai/src/models.generated.ts` ,`image-models.generated.ts`；这是编译自动生成的
+- 不手改编译自动生成的文件（如模型注册表等生成物）；需要修改时走生成流程
 - 删除内容前需充分考量是否会影响其他功能，如果有影响需要向用户汇报，得到批准以后进行。
 - 不为兼容旧行为保留复杂分支，除非用户要求
 - **每次变更完毕后必须自查 `packages/coding-agent/docs/` 是否需要更新**：对照变更内容逐项检查 docs 下各文件，确认文档与代码一致；不需要更新时也须明确说明"已自查，docs 无需更新"，禁止跳过此步。
@@ -66,9 +66,6 @@ npm run check
 
 # 仅 TypeScript 类型检查（更快，跳过 lint/shrinkwrap）
 npx tsgo --noEmit
-
-# 排除已知错误（packages/ai/test/ 有预存的模型类型错误，与业务无关）
-npx tsgo --noEmit 2>&1 | grep -v "packages/ai/test/"
 ```
 
 #### 单元测试
@@ -82,8 +79,6 @@ node --test packages/<pkg>/test/specific.test.ts
 npx vitest run --dir packages/<pkg>/test <pattern>
 # 示例：运行 subagents 相关测试
 npx vitest run --dir packages/coding-agent/test subagents
-# 示例：运行 agent-loop 测试
-npx vitest run --dir packages/agent/test agent-loop
 
 # 注意：不要从子包目录直接调用 vitest CLI，路径解析会出错。
 # 以下命令**不可用**：
@@ -99,13 +94,11 @@ npx vitest run --dir packages/agent/test agent-loop
 | 包 | Runner | 命令 | 断言风格 |
 | --- | --- | --- | --- |
 | **tui** | `node:test` | `node --test test/*.test.ts`（从包目录） | `import assert from "node:assert"` |
-| **agent** | vitest | `npx vitest run --dir packages/agent/test <pattern>` | `import { describe, expect, it } from "vitest"` |
-| **ai** | vitest | `npx vitest run --dir packages/ai/test <pattern>` | `import { describe, expect, it } from "vitest"` |
 | **coding-agent** | vitest | `npx vitest run --dir packages/coding-agent/test <pattern>` | `import { describe, expect, it } from "vitest"` |
 
 - 测试文件 `import { describe, it } from "node:test"` → `node --test`（仅 tui）
-- 测试文件 `import { describe, it } from "vitest"` 或使用 `expect()` → `npx vitest run --dir`（agent/ai/coding-agent）
-- **禁止混用**：tui 测试只用 `node:test` + `node:assert`，其他包只用 vitest；新增测试文件须遵循所属包的 runner
+- 测试文件 `import { describe, it } from "vitest"` 或使用 `expect()` → `npx vitest run --dir`（coding-agent）
+- **禁止混用**：tui 测试只用 `node:test` + `node:assert`，coding-agent 只用 vitest；新增测试文件须遵循所属包的 runner
 
 **vitest 扫描问题**：
 

@@ -308,6 +308,8 @@ export interface SessionInfo {
 	modified: Date;
 	/** 会话文件大小（字节）——列表展示会话体量，无需解析内容，stat 直接可得。 */
 	fileSize: number;
+	/** 消息数（meta 缓存准确值；meta 缺失/过期时回退头部扫描近似值）。 */
+	messageCount: number;
 	firstMessage: string;
 }
 
@@ -322,6 +324,7 @@ export type ReadonlySessionManager = Pick<
 	| "getEntry"
 	| "getLabel"
 	| "getBranch"
+	| "buildContextEntries"
 	| "getHeader"
 	| "getEntries"
 	| "getTree"
@@ -474,6 +477,89 @@ export function sessionEntryToContextMessages(entry: SessionEntry): AgentMessage
 		return [createCompactionSummaryMessage(entry.summary, entry.tokensBefore, entry.timestamp)];
 	}
 	return [];
+}
+
+function buildEntryIndex(entries: SessionEntry[], byId?: Map<string, SessionEntry>): Map<string, SessionEntry> {
+	if (byId) return byId;
+	const index = new Map<string, SessionEntry>();
+	for (const entry of entries) {
+		index.set(entry.id, entry);
+	}
+	return index;
+}
+
+function buildSessionPath(
+	entries: SessionEntry[],
+	leafId?: string | null,
+	byId?: Map<string, SessionEntry>,
+): SessionEntry[] {
+	const index = buildEntryIndex(entries, byId);
+	let leaf: SessionEntry | undefined;
+	if (leafId === null) {
+		return [];
+	}
+	if (leafId) {
+		leaf = index.get(leafId);
+	}
+	leaf ??= entries[entries.length - 1];
+	if (!leaf) {
+		return [];
+	}
+
+	const path: SessionEntry[] = [];
+	let current: SessionEntry | undefined = leaf;
+	while (current) {
+		path.push(current);
+		current = current.parentId ? index.get(current.parentId) : undefined;
+	}
+	path.reverse();
+	return path;
+}
+
+/**
+ * Build the active, compaction-aware session entry list.
+ *
+ * This follows the current leaf path. If the path contains compaction entries,
+ * the latest compaction is represented by the compaction entry itself, followed
+ * by the kept entries starting at firstKeptEntryId and all entries after the
+ * compaction entry. Older summarized entries are omitted.
+ */
+export function buildContextEntries(
+	entries: SessionEntry[],
+	leafId?: string | null,
+	byId?: Map<string, SessionEntry>,
+): SessionEntry[] {
+	const path = buildSessionPath(entries, leafId, byId);
+	let compaction: CompactionEntry | null = null;
+
+	for (const entry of path) {
+		if (entry.type === "compaction") {
+			compaction = entry;
+		}
+	}
+
+	if (!compaction) {
+		return path;
+	}
+
+	const compactionIdx = path.findIndex((entry) => entry.id === compaction.id);
+	if (compactionIdx < 0) {
+		return path;
+	}
+
+	const contextEntries: SessionEntry[] = [compaction];
+	let foundFirstKept = false;
+	for (let i = 0; i < compactionIdx; i++) {
+		const entry = path[i];
+		if (entry.id === compaction.firstKeptEntryId) {
+			foundFirstKept = true;
+		}
+		if (foundFirstKept) {
+			contextEntries.push(entry);
+		}
+	}
+	contextEntries.push(...path.slice(compactionIdx + 1));
+	return contextEntries;
 }
 
 /**
@@ -861,6 +947,8 @@ interface SessionMeta {
 	lastActivityMs?: number;
 	name?: string;
 	hasSessionInfo: boolean;
+	/** 全文件消息数（append 时递增维护），列表展示无需扫描内容。 */
+	messageCount?: number;
 }
 
 /** 读伴生 meta 文件（${filePath}.meta）。不存在/损坏/字段不合法返回 undefined。 */
@@ -873,6 +961,7 @@ function readSessionMeta(filePath: string): SessionMeta | undefined {
 			lastActivityMs?: unknown;
 			name?: unknown;
 			hasSessionInfo?: unknown;
+			messageCount?: unknown;
 		};
 		if (typeof data.size !== "number") return undefined;
 		return {
@@ -880,6 +969,7 @@ function readSessionMeta(filePath: string): SessionMeta | undefined {
 			lastActivityMs: typeof data.lastActivityMs === "number" ? data.lastActivityMs : undefined,
 			name: typeof data.name === "string" ? data.name : undefined,
 			hasSessionInfo: data.hasSessionInfo === true,
+			messageCount: typeof data.messageCount === "number" ? data.messageCount : undefined,
 		};
 	} catch {
 		return undefined;
@@ -892,9 +982,11 @@ async function buildSessionInfo(filePath: string): Promise<SessionInfo | null> {
 		let header: SessionHeader | null = null;
 		let firstMessage = "";
 		let name: string | undefined;
+		let headMessageCount = 0;
 
 		// 只扫描文件头部：header + 标题（firstMessage/name）均取自此处。
 		// 不读整个文件——几百 MB 会话的列表构建只开销头部 I/O。
+		// messageCount 优先取 meta 缓存（准确）；头部计数仅作 meta 缺失/过期时的回退近似。
 		const rl = createInterface({
 			input: createReadStream(filePath, { encoding: "utf8" }),
 			crlfDelay: Infinity,
@@ -921,6 +1013,7 @@ async function buildSessionInfo(filePath: string): Promise<SessionInfo | null> {
 			}
 
 			if (entry.type !== "message") continue;
+			headMessageCount++;
 
 			const message = entry.message;
 			if (!isMessageWithContent(message)) continue;
@@ -963,6 +1056,7 @@ async function buildSessionInfo(filePath: string): Promise<SessionInfo | null> {
 			created: new Date(header.timestamp),
 			modified,
 			fileSize: stats.size,
+			messageCount: metaIsCurrent && typeof meta.messageCount === "number" ? meta.messageCount : headMessageCount,
 			firstMessage: firstMessage || "(no messages)",
 		};
 	} catch {
@@ -1071,6 +1165,8 @@ export class SessionManager {
 	private metaName: string | undefined;
 	private metaHasSessionInfo = false;
 	private metaLastActivityMs: number | undefined;
+	/** 全文件消息数（fileEntries 统计 + append 递增），写入 meta 供列表展示。 */
+	private metaMessageCount: number | undefined;
 	/** entryId → fileEntries 下标。避免 materialize 时 O(N) findIndex（大会话文件 O(N²) 热点）。 */
 	private entryIndex: Map<string, number> = new Map();
 	private labelsById: Map<string, string> = new Map();
@@ -1357,8 +1453,14 @@ export class SessionManager {
 		this.metaName = undefined;
 		this.metaHasSessionInfo = false;
 		this.metaLastActivityMs = undefined;
+		this.metaMessageCount = undefined;
+		let messageCount = 0;
 		for (let i = this.fileEntries.length - 1; i >= 0; i--) {
 			const e = this.fileEntries[i];
+			if (e.type === "message") {
+				// LazyEntry 占位 type 亦为 "message"，可全量统计（不触发内容读取）
+				messageCount++;
+			}
 			if (e.type === "session_info" && !this.metaHasSessionInfo) {
 				this.metaName = e.name?.trim() || undefined;
 				this.metaHasSessionInfo = true;
@@ -1367,6 +1469,7 @@ export class SessionManager {
 				if (typeof t === "number") this.metaLastActivityMs = t;
 			}
 		}
+		this.metaMessageCount = messageCount;
 	}
 
 	/**
@@ -1379,9 +1482,12 @@ export class SessionManager {
 		if (entry.type === "session_info") {
 			this.metaName = entry.name?.trim() || undefined;
 			this.metaHasSessionInfo = true;
-		} else if (entry.type === "message" && !isLazyEntry(entry)) {
-			const t = getMessageActivityTime(entry as SessionMessageEntry);
-			if (typeof t === "number") this.metaLastActivityMs = t;
+		} else if (entry.type === "message") {
+			this.metaMessageCount = (this.metaMessageCount ?? 0) + 1;
+			if (!isLazyEntry(entry)) {
+				const t = getMessageActivityTime(entry as SessionMessageEntry);
+				if (typeof t === "number") this.metaLastActivityMs = t;
+			}
 		}
 	}
 
@@ -1394,6 +1500,7 @@ export class SessionManager {
 				lastActivityMs: this.metaLastActivityMs,
 				name: this.metaName,
 				hasSessionInfo: this.metaHasSessionInfo,
+				messageCount: this.metaMessageCount,
 			};
 			writeFileSync(`${this.sessionFile}.meta`, `${JSON.stringify(meta)}\n`);
 		} catch {
@@ -1717,6 +1824,13 @@ export class SessionManager {
 			current = current.parentId ? this.byId.get(current.parentId) : undefined;
 		}
 		return null;
+	}
+
+	/**
+	 * Build the active, compaction-aware session entry list for the current leaf.
+	 */
+	buildContextEntries(): SessionEntry[] {
+		return buildContextEntries(this.getEntries(), this.leafId, this.byId);
 	}
 
 	/**

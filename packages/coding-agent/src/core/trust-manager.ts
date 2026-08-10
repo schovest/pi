@@ -206,6 +206,11 @@ export function hasProjectTrustInputs(cwd: string): boolean {
 	}
 }
 
+/** 上游 0.81.1 命名；fork 保留旧名 hasProjectTrustInputs，此为兼容别名。 */
+export function hasTrustRequiringProjectResources(cwd: string): boolean {
+	return hasProjectTrustInputs(cwd);
+}
+
 export class ProjectTrustStore {
 	private trustPath: string;
 

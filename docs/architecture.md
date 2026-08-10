@@ -107,7 +107,7 @@ AssistantMessageEventStream              ← ai/utils/event-stream.ts
 
 | 能力类型 | 归属位置 | 配置/注册方式 | 示例 |
 | --- | --- | --- | --- |
-| 核心运行时能力 | `packages/agent/src/` | 修改源码，需上游同步考虑 | 新的 AgentLoop 策略、新的 Session 条目类型 |
+| 核心运行时能力 | `@earendil-works/pi-agent-core`（外部 npm） | 修改需上游同步考虑；工作区内无 agent 源码 | 新的 AgentLoop 策略、新的 Session 条目类型 |
 | 可安装扩展 | `pi install <source>` 或 `.pi/extensions/*.ts` | `dist-assets/install.sh` 交互选择 + settings.json | todo、ask-user-question、tps 等 |
 | 项目级 skill | `.pi/skills/*.md` | SKILL.md frontmatter | add-llm-provider.md |
 | 项目级 prompt | `.pi/prompts/*.md` | YAML frontmatter | pr.md, is.md |

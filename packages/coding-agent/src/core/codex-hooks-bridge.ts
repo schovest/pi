@@ -10,7 +10,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import type { CodexPluginManager, ConfiguredCodexPlugin } from "./codex-plugin-manager.ts";
-import type { ExtensionAPI, ExtensionContext, ExtensionFactory } from "./extensions/types.ts";
+import type { ExtensionAPI, ExtensionContext, InlineExtension } from "./extensions/types.ts";
 import type {
 	CodexEventName,
 	CodexHookGroupSpec,
@@ -554,8 +554,11 @@ export function createCodexHooksHandlers(pi: ExtensionAPI, deps: CodexHooksBridg
 }
 
 /** 生成内置 inline 扩展工厂，随 resource-loader 每次扩展加载（含 reload）执行注册。 */
-export function createCodexHooksExtensionFactory(deps: CodexHooksBridgeDeps): ExtensionFactory {
-	return (pi: ExtensionAPI) => {
-		createCodexHooksHandlers(pi, deps);
+export function createCodexHooksExtensionFactory(deps: CodexHooksBridgeDeps): InlineExtension {
+	return {
+		name: "codex-hooks",
+		factory: (pi: ExtensionAPI) => {
+			createCodexHooksHandlers(pi, deps);
+		},
 	};
 }
