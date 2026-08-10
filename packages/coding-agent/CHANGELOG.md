@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 修复 `build:binary` 失败：`copy-binary-assets` 脚本仍引用已删除的 `dist-assets/extensions` 目录（`78a5e159` 清理扩展时漏删 `package.json` 中的对应 cp 行，与 `26e3263e` 对 `build-binaries.sh` 的修复属同类遗漏）
+
 ## [0.13.7] - 2026-08-10
 
 ### Added
