@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## [0.13.8] - 2026-08-11
+
+### Added
+
+- 内置 skills 机制：主程序从自身包/二进制目录（`getPackageDir()/skills`）兑底加载内置 skills（`packages/coding-agent/skills/` → `dist/skills/`），随发行版分发、迁移不丢失；用户/项目级同名 skills 优先；`--no-skills` 语义不变。首批内置两个：`pi-config`（配置管理入口，渐进式披露组织：主 SKILL.md 为通用原则+工作流+专项索引，14 个配置领域要点按需加载于 `references/` 子目录）与 `pi-docs-reference`（官方文档目录与查阅技巧）
+
+### Removed
+
+- 移除内置主 agent `config`（`dist-assets/primary-agents/config.md` 及 install.sh 对应条目），配置管理能力由内置 skill `pi-config` 承载（任意主 agent 在配置类任务中可发现并加载）；已安装环境的用户级 `config.md` 需手动删除
+
+### Changed
+
+- 内置 skill `pi-config` 渐进式深化：14 个配置领域要点全部归于 `references/` 子目录（渐进式披露，主 SKILL.md 为入口索引）；每个专项新增「文档兜底」小节——references 无法指导配置时（字段不明/格式存疑/场景未覆盖）必须转阅官方文档，禁止凭猜测继续；`pi-docs-reference` 补充与 pi-config 的两级查阅配合说明
+- 内置主 agent `build` 重命名为 `code`，默认 agent 变为 `code`（description/systemPrompt 不变，即默认系统提示词不变）
+
+### Fixed
+
+- 修复 `build:binary` 失败：`copy-binary-assets` 脚本仍引用已删除的 `dist-assets/extensions` 目录（`78a5e159` 清理扩展时漏删 `package.json` 中的对应 cp 行，与 `26e3263e` 对 `build-binaries.sh` 的修复属同类遗漏）
+
 ## [0.13.7] - 2026-08-10
 
 ### Added

@@ -22,10 +22,10 @@ Primary agent 通过以下方式影响 agent 行为：
 
 | Agent | 描述 | 工具 | 角色 Prompt |
 |-------|------|------|-------------|
-| `build` | 默认 agent，拥有全部工具，用于实现和执行 | 全部内置工具（read, bash, edit, write, grep, find, ls）+ `subagent` + 扩展注册的工具 | 无（使用默认系统提示词） |
+| `code` | 默认 agent，拥有全部工具，用于实现和执行 | 全部内置工具（read, bash, edit, write, grep, find, ls）+ `subagent` + 扩展注册的工具 | 无（使用默认系统提示词） |
 | `plan` | 规划 agent，只读工具，用于分析和设计 | 排除 `bash` 和 `subagent`；剩余工具（read, edit, write, grep, find, ls）均在列表中，但 prompt 约束为只读行为 | "You are a planning agent..." |
 
-`build` 是初始默认值，每次启动时如果未恢复其他 agent 则使用 `build`。`build` 的 `systemPrompt` 为空，意味着使用 Pi 的默认系统提示词（无额外角色 prompt）。
+`code` 是初始默认值，每次启动时如果未恢复其他 agent 则使用 `code`。`code` 的 `systemPrompt` 为空，意味着使用 Pi 的默认系统提示词（无额外角色 prompt）。
 
 `plan` 的实现是 `excludedTools: ["bash", "subagent"]`，未设置 `includedTools`，因此除 bash 和 subagent 外的所有工具都在可用列表中。plan 的 systemPrompt 要求不修改文件、不执行命令，实际效果为只读。
 
@@ -120,7 +120,7 @@ excludedTools: [subagent]
 
 Frontmatter 之后的 Markdown body 是 agent 的角色 prompt。它 **始终 prepend** 在完整系统提示词的最前面。这意味着即使存在 `SYSTEM.md` 或 `--system-prompt`，primary agent 的角色 prompt 依然在它们之前生效。
 
-**`build` agent 的特殊情况**：`build` 的 systemPrompt 为空字符串，因此不注入额外的角色 prompt，直接使用默认系统提示词（或 `SYSTEM.md` 自定义 prompt）。
+**`code` agent 的特殊情况**：`code` 的 systemPrompt 为空字符串，因此不注入额外的角色 prompt，直接使用默认系统提示词（或 `SYSTEM.md` 自定义 prompt）。
 
 ## 系统提示词构成
 
@@ -138,7 +138,7 @@ Frontmatter 之后的 Markdown body 是 agent 的角色 prompt。它 **始终 pr
 
 ### 示例
 
-**使用默认 build agent**（systemPrompt 为空）：
+**使用默认 code agent**（systemPrompt 为空）：
 
 ```
 [默认系统提示词]
@@ -199,7 +199,7 @@ const agents = await session.listPrimaryAgents();
 await session.switchPrimaryAgent("plan");
 
 // 获取当前 agent
-const currentAgent = session.currentPrimaryAgent;  // "build" | "plan" | ...
+const currentAgent = session.currentPrimaryAgent;  // "code" | "plan" | ...
 ```
 
 ### RPC
@@ -219,7 +219,7 @@ const currentAgent = session.currentPrimaryAgent;  // "build" | "plan" | ...
 }
 ```
 
-下次在相同项目启动会话时，自动恢复上次使用的 agent（除非恢复的是 `build`，则不写入 settings）。恢复逻辑在 `restorePrimaryAgent()` 中实现，仅在 `savedAgent !== "build"` 且 agent 仍然存在时才切换。
+下次在相同项目启动会话时，自动恢复上次使用的 agent（除非恢复的是 `code`，则不写入 settings）。恢复逻辑在 `restorePrimaryAgent()` 中实现，仅在 `savedAgent !== "code"` 且 agent 仍然存在时才切换。
 
 ## Agent 选择器
 

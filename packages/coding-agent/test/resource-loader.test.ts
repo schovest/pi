@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { AuthStorage } from "../src/core/auth-storage.ts";
 import { ExtensionRunner } from "../src/core/extensions/runner.ts";
@@ -12,6 +12,10 @@ import type { Skill } from "../src/core/skills.ts";
 import { createSyntheticSourceInfo } from "../src/core/source-info.ts";
 
 import { createModelRegistry } from "./model-runtime-test-utils.ts";
+
+// Theme source lives next to src in the package; resolve via import.meta.url so
+// tests pass regardless of the vitest invocation cwd.
+const themeSrcDir = resolve(dirname(fileURLToPath(import.meta.url)), "../src/modes/interactive/theme");
 
 describe("DefaultResourceLoader", () => {
 	let tempDir: string;
@@ -61,6 +65,46 @@ Skill content here.`,
 
 			const { skills } = loader.getSkills();
 			expect(skills.some((s) => s.name === "test-skill")).toBe(true);
+		});
+
+		it("should load builtin skills shipped with the package", async () => {
+			const loader = new DefaultResourceLoader({ cwd, agentDir });
+			await loader.reload();
+
+			const { skills } = loader.getSkills();
+			expect(skills.some((s) => s.name === "pi-config")).toBe(true);
+			expect(skills.some((s) => s.name === "pi-docs-reference")).toBe(true);
+			// pi-config 的 references/ 子目录是内容文件，不应被识别为独立 skill
+			expect(skills.some((s) => s.name.startsWith("pi-config-"))).toBe(false);
+		});
+
+		it("should not load builtin skills when noSkills is true", async () => {
+			const loader = new DefaultResourceLoader({ cwd, agentDir, noSkills: true });
+			await loader.reload();
+
+			const { skills } = loader.getSkills();
+			expect(skills.some((s) => s.name === "pi-config")).toBe(false);
+		});
+
+		it("should let user skills take precedence over builtin skills on name collision", async () => {
+			const skillDir = join(agentDir, "skills", "pi-config");
+			mkdirSync(skillDir, { recursive: true });
+			writeFileSync(
+				join(skillDir, "SKILL.md"),
+				`---
+name: pi-config
+description: User override
+---
+User content`,
+			);
+
+			const loader = new DefaultResourceLoader({ cwd, agentDir });
+			await loader.reload();
+
+			const { skills } = loader.getSkills();
+			const skill = skills.find((s) => s.name === "pi-config");
+			expect(skill).toBeDefined();
+			expect(skill?.filePath).toContain(agentDir);
 		});
 
 		it("should ignore extra markdown files in auto-discovered skill dirs", async () => {
@@ -135,9 +179,10 @@ description: project
 Project skill`,
 			);
 
-			const baseTheme = JSON.parse(
-				readFileSync(join(process.cwd(), "src", "modes", "interactive", "theme", "dark.json"), "utf-8"),
-			) as { name: string; vars?: Record<string, string> };
+			const baseTheme = JSON.parse(readFileSync(join(themeSrcDir, "dark.json"), "utf-8")) as {
+				name: string;
+				vars?: Record<string, string>;
+			};
 			baseTheme.name = "collision-theme";
 			const userThemePath = join(agentDir, "themes", "collision.json");
 			const projectThemePath = join(cwd, ".pi", "themes", "collision.json");
@@ -405,9 +450,7 @@ description: Project skill
 Project skill content`,
 			);
 			writeFileSync(join(promptsDir, "project.md"), "Project prompt");
-			const themeData = JSON.parse(
-				readFileSync(join(process.cwd(), "src", "modes", "interactive", "theme", "dark.json"), "utf-8"),
-			) as { name: string };
+			const themeData = JSON.parse(readFileSync(join(themeSrcDir, "dark.json"), "utf-8")) as { name: string };
 			themeData.name = "project-theme";
 			writeFileSync(join(themesDir, "project.json"), JSON.stringify(themeData, null, 2));
 			const settingsManager = SettingsManager.create(cwd, agentDir, { projectTrusted: false });

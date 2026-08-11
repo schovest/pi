@@ -42,7 +42,7 @@ else
 	cp -r "$SCRIPT_DIR/CHANGELOG.md" "$PREFIX/CHANGELOG.md"
 	cp -r "$SCRIPT_DIR/photon_rs_bg.wasm" "$PREFIX/photon_rs_bg.wasm"
 
-	for dir in theme assets export-html docs examples extensions primary-agents; do
+	for dir in theme assets export-html docs examples extensions primary-agents skills; do
 		if [ -d "$SCRIPT_DIR/$dir" ]; then
 			cp -r "$SCRIPT_DIR/$dir" "$PREFIX/$dir"
 		fi
@@ -131,21 +131,18 @@ EXT_INSTALLS=(
 AGENT_NAMES=(
 	"plan"
 	"coding"
-	"config"
 )
 # shellcheck disable=SC2034 # used via nameref in run_menu
 AGENT_DESCS=(
 	"规划与探索 Agent"
 	"编码实现 Agent"
-	"配置管理 Agent"
 )
 # shellcheck disable=SC2034 # used via nameref in run_menu
-AGENT_DEFAULTS=(1 1 1)
+AGENT_DEFAULTS=(1 1)
 # shellcheck disable=SC2034 # used via nameref in run_menu
 AGENT_INSTALLS=(
 	"agent:plan.md"
 	"agent:coding.md"
-	"agent:config.md"
 )
 
 # -- Colors ----------------------------------------------------------------
