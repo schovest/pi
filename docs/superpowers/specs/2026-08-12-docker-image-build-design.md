@@ -40,7 +40,7 @@
 
 ```dockerfile
 # syntax=docker/dockerfile:1
-FROM --platform=$BUILDPLATFORM node:24-bookworm-slim AS base
+FROM --platform=$TARGETPLATFORM node:24-bookworm-slim
 RUN apt-get update \
   && apt-get install -y --no-install-recommends git ca-certificates \
   && rm -rf /var/lib/apt/lists/*
@@ -59,6 +59,7 @@ ENTRYPOINT ["pi"]
 - 必须 glibc：Bun 编译二进制（`target=bun-linux-*`）依赖 glibc，不能用 alpine。
 - `git` + `ca-certificates`：pi 运行必需（git 操作、HTTPS）。
 - 多平台通过 buildx **命名 context** + `TARGETARCH` 实现：workflow 中为每个平台产出二进制目录，Dockerfile 用 `COPY --from=linux-$TARGETARCH / /opt/pi` 选择对应平台目录。
+- `FROM` 用 `--platform=$TARGETPLATFORM`（而非 BUILDPLATFORM）：apt 安装的 git/ca-certificates 必须是目标架构（BUILDPLATFORM 下 apt 会装构建机架构的 git，导致 arm64 镜像内是 amd64 二进制）。
 - 整个二进制产物目录（pi 可执行文件、package.json、README、CHANGELOG、photon wasm、theme/、assets/、export-html/、docs/、examples/、primary-agents/、clipboard 原生库）COPY 到 `/opt/pi`。
 - 默认 root 运行（与现有文档行为一致，挂载卷无权限问题）。
 
@@ -93,7 +94,7 @@ job `docker`，`runs-on: ubuntu-latest`，`permissions: { contents: read, packag
 9. docker/metadata-action：tags 为 `<version>`（RELEASE_TAG 去 v 前缀）+ `latest`，images `ghcr.io/schovest/pi`
 10. docker/build-push-action：
     - `context: .`
-    - `contexts`: `linux-amd64: /tmp/pi-linux-x64/linux-x64`、`linux-arm64: /tmp/pi-linux-arm64/linux-arm64`
+    - `build-contexts`: `linux-amd64: /tmp/pi-linux-x64/linux-x64`、`linux-arm64: /tmp/pi-linux-arm64/linux-arm64`（docker/build-push-action@v6 的命名 context 输入名为 `build-contexts`）
     - `platforms: linux/amd64,linux/arm64`
     - `push: true`，tags 来自 metadata-action
 

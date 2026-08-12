@@ -152,7 +152,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          contexts: |
+          build-contexts: |
             linux-amd64: /tmp/pi-linux-x64/linux-x64
             linux-arm64: /tmp/pi-linux-arm64/linux-arm64
           file: Dockerfile
