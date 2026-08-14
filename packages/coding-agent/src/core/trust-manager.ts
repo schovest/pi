@@ -182,9 +182,10 @@ export function hasProjectConfigDir(cwd: string): boolean {
 	return existsSync(join(canonicalizePath(resolvePath(cwd)), CONFIG_DIR_NAME));
 }
 
-export function hasProjectTrustInputs(cwd: string): boolean {
+export function hasProjectTrustInputs(cwd: string, opts?: { enableAgentsSkills?: boolean }): boolean {
 	const homeDir = canonicalizePath(resolvePath(process.env.HOME || homedir()));
 	const userAgentsSkillsDir = join(homeDir, ".agents", "skills");
+	const checkAgentsSkills = opts?.enableAgentsSkills !== false;
 	let currentDir = canonicalizePath(resolvePath(cwd));
 
 	const configDir = join(currentDir, CONFIG_DIR_NAME);
@@ -193,9 +194,11 @@ export function hasProjectTrustInputs(cwd: string): boolean {
 	}
 
 	while (true) {
-		const agentsSkillsDir = join(currentDir, ".agents", "skills");
-		if (agentsSkillsDir !== userAgentsSkillsDir && existsSync(agentsSkillsDir)) {
-			return true;
+		if (checkAgentsSkills) {
+			const agentsSkillsDir = join(currentDir, ".agents", "skills");
+			if (agentsSkillsDir !== userAgentsSkillsDir && existsSync(agentsSkillsDir)) {
+				return true;
+			}
 		}
 
 		const parentDir = dirname(currentDir);

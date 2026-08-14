@@ -603,7 +603,10 @@ export async function main(args: string[], options?: MainOptions) {
 	const trustStore = new ProjectTrustStore(agentDir);
 	const sessionCwd = sessionManager.getCwd();
 	const autoTrustOnReloadCwd =
-		parsed.projectTrustOverride === undefined && !hasProjectTrustInputs(sessionCwd) ? sessionCwd : undefined;
+		parsed.projectTrustOverride === undefined &&
+		!hasProjectTrustInputs(sessionCwd, { enableAgentsSkills: startupSettingsManager.getEnableAgentsSkills() })
+			? sessionCwd
+			: undefined;
 	const trustPromptMode: AppMode = parsed.help || parsed.listModels !== undefined ? "print" : appMode;
 	const projectTrustByCwd = new Map<string, boolean>();
 
@@ -621,7 +624,9 @@ export async function main(args: string[], options?: MainOptions) {
 		const isInitialRuntime = sessionStartEvent === undefined;
 		const projectTrustDiagnostics: AgentSessionRuntimeDiagnostic[] = [];
 		const cachedProjectTrust = projectTrustByCwd.get(cwd);
-		const hasTrustInputs = hasProjectTrustInputs(cwd);
+		const hasTrustInputs = hasProjectTrustInputs(cwd, {
+			enableAgentsSkills: startupSettingsManager.getEnableAgentsSkills(),
+		});
 		const shouldResolveProjectTrust =
 			parsed.projectTrustOverride === undefined && cachedProjectTrust === undefined && hasTrustInputs;
 		const projectTrusted = shouldResolveProjectTrust
@@ -642,6 +647,7 @@ export async function main(args: string[], options?: MainOptions) {
 								trustOverride: parsed.projectTrustOverride,
 								defaultProjectTrust: startupSettingsManager.getDefaultProjectTrust(),
 								extensionsResult,
+								enableAgentsSkills: startupSettingsManager.getEnableAgentsSkills(),
 								projectTrustContext:
 									projectTrustContext ??
 									createProjectTrustContext({

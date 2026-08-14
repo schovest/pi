@@ -18,6 +18,7 @@ export interface ResolveProjectTrustedOptions {
 	extensionsResult?: LoadExtensionsResult;
 	projectTrustContext: ProjectTrustContext;
 	onExtensionError?: (message: string) => void;
+	enableAgentsSkills?: boolean;
 }
 
 function formatProjectTrustPrompt(cwd: string): string {
@@ -46,7 +47,7 @@ export async function resolveProjectTrusted(options: ResolveProjectTrustedOption
 	if (options.trustOverride !== undefined) {
 		return options.trustOverride;
 	}
-	if (!hasProjectTrustInputs(options.cwd)) {
+	if (!hasProjectTrustInputs(options.cwd, { enableAgentsSkills: options.enableAgentsSkills })) {
 		return true;
 	}
 
