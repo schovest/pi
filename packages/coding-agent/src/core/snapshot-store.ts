@@ -22,7 +22,7 @@ import { type GitSnapshotData, protectSnapshot, unprotectSnapshot } from "./git-
  * This makes the {@link Settings.gitSnapshotMaxCount} limit apply to the total
  * count across sessions, instead of per-session.
  *
- * The file lives at `<sessionDir>/snapshots.jsonl` (one JSON object per line).
+ * The file lives at `<sessionDir>/sessions.snapshots` (one JSON object per line).
  * Each session tree keeps a lightweight `git_snapshot` custom entry ("anchor")
  * whose `data` is `{ refId }`, pointing into this index. `findGitSnapshot` tree
  * traversal is unchanged; the anchor's refId resolves to the real snapshot here.
@@ -50,7 +50,9 @@ export interface SnapshotDataUpdate {
 	data: unknown;
 }
 
-const SNAPSHOTS_FILENAME = "snapshots.jsonl";
+const SNAPSHOTS_FILENAME = "sessions.snapshots";
+/** Pre-rename index filename; migrated lazily on first access. */
+const LEGACY_SNAPSHOTS_FILENAME = "snapshots.jsonl";
 const LOCK_SUFFIX = ".lock";
 const LOCK_TIMEOUT_MS = 5000;
 const LOCK_POLL_MS = 20;
@@ -84,7 +86,26 @@ function parseEntry(line: string): SnapshotIndexEntry | null {
 	}
 }
 
+/**
+ * One-time lazy migration: rename the legacy `snapshots.jsonl` index to
+ * `sessions.snapshots` on first access. Same-directory rename is atomic;
+ * a concurrent migration by another process leaves the source missing,
+ * which is caught and ignored.
+ */
+function migrateLegacyIndexFile(sessionDir: string): void {
+	const file = indexPath(sessionDir);
+	const legacy = join(sessionDir, LEGACY_SNAPSHOTS_FILENAME);
+	if (!existsSync(file) && existsSync(legacy)) {
+		try {
+			renameSync(legacy, file);
+		} catch {
+			// Another process migrated it; ignore.
+		}
+	}
+}
+
 function readAll(sessionDir: string): SnapshotIndexEntry[] {
+	migrateLegacyIndexFile(sessionDir);
 	const file = indexPath(sessionDir);
 	if (!existsSync(file)) return [];
 	const entries: SnapshotIndexEntry[] = [];

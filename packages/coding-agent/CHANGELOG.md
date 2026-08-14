@@ -2,9 +2,12 @@
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-08-14
+
 ### Changed
 
 - `.agents/skills` 通用技能目录（`~/.agents/skills` 与项目级 `.agents/skills`）默认不再自动加载，需在 settings 中设置 `enableAgentsSkills: true` 开启（breaking change；显式 `skills` 数组路径不受影响）
+- 快照索引文件由 `snapshots.jsonl` 重命名为 `sessions.snapshots`（cwd 级全局索引语义不变；首次访问时自动迁移旧文件，现有快照与 Revert 不受影响）
 
 ## [0.14.0] - 2026-08-14
 

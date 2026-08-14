@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -143,6 +143,27 @@ describe("snapshot-store", () => {
 
 			expect(removed).toEqual([old, mid]);
 			expect(getSnapshot(dir, newest)).not.toBeNull();
+		});
+	});
+
+	describe("legacy index file migration", () => {
+		it("renames snapshots.jsonl to sessions.snapshots on first read", () => {
+			const refId = createSnapshotRefId();
+			const entry = makeEntry(refId, "2024-01-01T00:00:00.000Z", makeSnapshot("legacy-head"));
+			writeFileSync(join(dir, "snapshots.jsonl"), `${JSON.stringify(entry)}\n`, "utf8");
+
+			// Reader path (no writer first) still sees the legacy data and migrates.
+			expect(getSnapshot(dir, refId)).toEqual(entry.snapshot);
+			expect(existsSync(join(dir, "sessions.snapshots"))).toBe(true);
+			expect(existsSync(join(dir, "snapshots.jsonl"))).toBe(false);
+
+			// Subsequent reads work against the migrated file.
+			expect(countSnapshots(dir)).toBe(1);
+		});
+
+		it("is a no-op when no legacy index exists", () => {
+			expect(getSnapshot(dir, createSnapshotRefId())).toBeNull();
+			expect(existsSync(join(dir, "sessions.snapshots"))).toBe(false);
 		});
 	});
 
