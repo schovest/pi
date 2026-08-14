@@ -28,10 +28,10 @@ Pi loads skills from:
   - `pi-docs-reference` — 官方文档目录与查阅技巧
 - Global:
   - `~/.pi/agent/skills/`
-  - `~/.agents/skills/`
+  - `~/.agents/skills/`（默认禁用，settings 中设 `"enableAgentsSkills": true` 开启）
 - Project (only after the project is trusted):
   - `.pi/skills/`
-  - `.agents/skills/` in `cwd` and ancestor directories (up to git repo root, or filesystem root when not in a repo)
+  - `.agents/skills/` in `cwd` and ancestor directories (up to git repo root, or filesystem root when not in a repo)（默认禁用，同上）
 - Packages: `skills/` directories or `pi.skills` entries in `package.json`
 - Settings: `skills` array with files or directories
 - CLI: `--skill <path>` (repeatable, additive even with `--no-skills`)
@@ -44,6 +44,8 @@ Discovery rules:
 - In `~/.agents/skills/` and project `.agents/skills/`, root `.md` files are ignored
 
 Disable discovery with `--no-skills` (explicit `--skill` paths still load).
+
+`~/.agents/skills` 与项目 `.agents/skills` 的自动发现默认关闭（`enableAgentsSkills` 默认 `false`）；settings `skills` 数组显式列出的路径不受影响。
 
 ### Using Skills from Other Harnesses
 

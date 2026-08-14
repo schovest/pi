@@ -348,7 +348,7 @@ const { session } = await createAgentSession({
 - Project extensions (`.pi/extensions/`)
 - Project skills:
   - `.pi/skills/`
-  - `.agents/skills/` in `cwd` and ancestor directories (up to git repo root, or filesystem root when not in a repo)
+  - `.agents/skills/` in `cwd` and ancestor directories (up to git repo root, or filesystem root when not in a repo) (disabled by default; loaded only when `enableAgentsSkills: true` in settings)
 - Project prompts (`.pi/prompts/`)
 - Context files (`AGENTS.md` walking up from cwd)
 - Session directory naming
@@ -358,7 +358,7 @@ const { session } = await createAgentSession({
 - Global extensions (`extensions/`)
 - Global skills:
   - `skills/` under `agentDir` (for example `~/.pi/agent/skills/`)
-  - `~/.agents/skills/`
+  - `~/.agents/skills/` (disabled by default; loaded only when `enableAgentsSkills: true` in settings)
 - Global prompts (`prompts/`)
 - Global context file (`AGENTS.md`)
 - Settings (`settings.json`)
