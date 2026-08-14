@@ -9,9 +9,9 @@ Project trust controls whether pi loads project-local settings, resources, packa
 Pi considers a project to have trust inputs when it finds any of these from the current working directory:
 
 - `.pi/` in the current directory
-- `.agents/skills` in the current directory or an ancestor directory
+- `.agents/skills` in the current directory or an ancestor directory, when `enableAgentsSkills` is set to `true` in settings (default `false`, in which case `.agents/skills` is not considered a trust input)
 
-When an interactive session starts in a project with configs in `.pi` or `.agents/skills` and no saved decision for the current directory or a parent directory, pi follows `defaultProjectTrust` from global settings. The default value is `"ask"`, which asks whether to trust the project when UI is available. Saved decisions are stored by canonical directory in `~/.pi/agent/trust.json`, and the closest saved decision on the current or parent path applies before the global default.
+When an interactive session starts in a project with configs in `.pi` or (with `enableAgentsSkills: true`) `.agents/skills` and no saved decision for the current directory or a parent directory, pi follows `defaultProjectTrust` from global settings. The default value is `"ask"`, which asks whether to trust the project when UI is available. Saved decisions are stored by canonical directory in `~/.pi/agent/trust.json`, and the closest saved decision on the current or parent path applies before the global default.
 
 Trusting a project allows pi to load trust-gated project inputs, including:
 
