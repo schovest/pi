@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.13.9] - 2026-08-14
+
 ### Added
 
 - 容器镜像发布：新增 `.github/workflows/docker-image.yml` 与根目录 `Dockerfile`，tag 触发或手动 dispatch 将 pi 构建为多平台镜像（linux/amd64、linux/arm64）并发布到 `ghcr.io/schovest/pi`（`<版本号>` + `latest` tag）；镜像基于 `node:24-bookworm-slim`（内置最新 LTS Node + npm），内置 `git`/`ca-certificates`，部署方式见 README「Container Image」与 `docs/containerization.md`
