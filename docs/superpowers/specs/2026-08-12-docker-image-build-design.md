@@ -94,7 +94,7 @@ job `docker`，`runs-on: ubuntu-latest`，`permissions: { contents: read, packag
 9. docker/metadata-action：tags 为 `<version>`（RELEASE_TAG 去 v 前缀）+ `latest`，images `ghcr.io/schovest/pi`
 10. docker/build-push-action：
     - `context: .`
-    - `build-contexts`: `linux-amd64: /tmp/pi-linux-x64/linux-x64`、`linux-arm64: /tmp/pi-linux-arm64/linux-arm64`（docker/build-push-action@v6 的命名 context 输入名为 `build-contexts`）
+    - `build-contexts`: `linux-amd64=/tmp/pi-linux-x64/linux-x64`、`linux-arm64=/tmp/pi-linux-arm64/linux-arm64`（docker/build-push-action@v6 的命名 context 输入名为 `build-contexts`，每行格式 `name=value`）
     - `platforms: linux/amd64,linux/arm64`
     - `push: true`，tags 来自 metadata-action
 
