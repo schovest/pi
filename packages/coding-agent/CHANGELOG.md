@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- `.agents/skills` 通用技能目录（`~/.agents/skills` 与项目级 `.agents/skills`）默认不再自动加载，需在 settings 中设置 `enableAgentsSkills: true` 开启（breaking change；显式 `skills` 数组路径不受影响）
+
 ## [0.14.0] - 2026-08-14
 
 ## [0.13.9] - 2026-08-14
