@@ -334,6 +334,7 @@ Content`,
 				const skillPath = join(agentsBaseDir, "skills", "user-agents", "SKILL.md");
 				mkdirSync(join(agentsBaseDir, "skills", "user-agents"), { recursive: true });
 				writeFileSync(skillPath, "---\nname: user-agents\ndescription: user agents\n---\n");
+				settingsManager.setEnableAgentsSkills(true);
 
 				const result = await packageManager.resolve();
 				const skill = result.skills.find((r) => r.path === skillPath);
@@ -371,6 +372,7 @@ Content`,
 				agentDir,
 				settingsManager,
 			});
+			settingsManager.setEnableAgentsSkills(true);
 
 			const result = await pm.resolve();
 			const resolvedRepoSkill = result.skills.find((r) => r.path === repoSkill);
@@ -409,6 +411,7 @@ Content`,
 				agentDir,
 				settingsManager,
 			});
+			settingsManager.setEnableAgentsSkills(true);
 
 			const result = await pm.resolve();
 			expect(result.skills.some((r) => r.path === repoRootSkill && r.enabled)).toBe(true);
@@ -434,6 +437,7 @@ Content`,
 				agentDir,
 				settingsManager,
 			});
+			settingsManager.setEnableAgentsSkills(true);
 
 			const result = await pm.resolve();
 			expect(result.skills.some((r) => r.path === rootSkill && r.enabled)).toBe(true);
@@ -454,6 +458,7 @@ Content`,
 				settingsManager,
 			});
 			mkdirSync(join(tempDir, "work"), { recursive: true });
+			settingsManager.setEnableAgentsSkills(true);
 
 			const result = await pm.resolve();
 			expect(result.skills.some((r) => r.path === rootSkill)).toBe(false);
@@ -480,6 +485,7 @@ Content`,
 					agentDir: localAgentDir,
 					settingsManager: localSettingsManager,
 				});
+				localSettingsManager.setEnableAgentsSkills(true);
 
 				const result = await pm.resolve();
 				const matchingSkills = result.skills.filter((r) => r.path === homeSkill);
@@ -512,10 +518,61 @@ Content`,
 				mkdirSync(join(agentsSkillsDir, "foo"), { recursive: true });
 				writeFileSync(skillPath, "---\nname: foo\ndescription: foo\n---\n");
 
+				settingsManager.setEnableAgentsSkills(true);
 				const result = await packageManager.resolve();
 				const fooSkills = result.skills.filter((r) => pathEndsWith(r.path, "foo/SKILL.md"));
 
 				expect(fooSkills).toHaveLength(1);
+			} finally {
+				if (previousHome === undefined) {
+					delete process.env.HOME;
+				} else {
+					process.env.HOME = previousHome;
+				}
+			}
+		});
+
+		it("should not load .agents/skills by default", async () => {
+			const previousHome = process.env.HOME;
+			process.env.HOME = tempDir;
+			try {
+				// 用户级
+				const userSkill = join(tempDir, ".agents", "skills", "user-off", "SKILL.md");
+				mkdirSync(join(tempDir, ".agents", "skills", "user-off"), { recursive: true });
+				writeFileSync(userSkill, "---\nname: user-off\ndescription: user off\n---\n");
+
+				// 项目级
+				const repoRoot = join(tempDir, "repo-off");
+				mkdirSync(join(repoRoot, ".git"), { recursive: true });
+				const repoSkill = join(repoRoot, ".agents", "skills", "repo-off", "SKILL.md");
+				mkdirSync(join(repoRoot, ".agents", "skills", "repo-off"), { recursive: true });
+				writeFileSync(repoSkill, "---\nname: repo-off\ndescription: repo off\n---\n");
+
+				const pm = new DefaultPackageManager({ cwd: repoRoot, agentDir, settingsManager });
+				const result = await pm.resolve();
+				expect(result.skills.some((r) => r.path === userSkill)).toBe(false);
+				expect(result.skills.some((r) => r.path === repoSkill)).toBe(false);
+			} finally {
+				if (previousHome === undefined) {
+					delete process.env.HOME;
+				} else {
+					process.env.HOME = previousHome;
+				}
+			}
+		});
+
+		it("should load explicit .agents/skills path from skills array even when disabled", async () => {
+			const previousHome = process.env.HOME;
+			process.env.HOME = tempDir;
+			try {
+				const agentsSkillsDir = join(tempDir, ".agents", "skills");
+				const skillPath = join(agentsSkillsDir, "explicit", "SKILL.md");
+				mkdirSync(join(agentsSkillsDir, "explicit"), { recursive: true });
+				writeFileSync(skillPath, "---\nname: explicit\ndescription: explicit\n---\n");
+
+				settingsManager.setSkillPaths([agentsSkillsDir]);
+				const result = await packageManager.resolve();
+				expect(result.skills.some((r) => r.path === skillPath && r.enabled)).toBe(true);
 			} finally {
 				if (previousHome === undefined) {
 					delete process.env.HOME;
