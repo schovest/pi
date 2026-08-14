@@ -65,6 +65,27 @@ If you need stronger boundaries, containerize or sandbox Pi. See [packages/codin
 - **Gondolin extension**: keep `pi` and provider auth on the host while routing built-in tools and `!` commands into a local Linux micro-VM.
 - **Plain Docker**: run the whole `pi` process in a local container for simple isolation.
 
+### Container Image
+
+An official container image is published to GitHub Container Registry:
+
+* **Image**: `ghcr.io/schovest/pi`
+* **Platforms**: linux/amd64, linux/arm64
+* **Tags**: `latest` plus a version tag per release (e.g. `0.13.8`)
+* **Bundled**: the `pi` binary with a Node.js LTS runtime (including npm) for extension installation, `git`, and `ca-certificates`
+
+Run pi in a container:
+
+```bash
+docker run --rm -it \
+  -e ANTHROPIC_API_KEY \
+  -v "$PWD:/workspace" \
+  -v pi-agent-home:/root/.pi/agent \
+  ghcr.io/schovest/pi
+```
+
+`-v "$PWD:/workspace"` mounts your current directory into the container so reads and writes in `/workspace` directly affect your host files. Use a named volume for `/root/.pi/agent` to keep container-local settings and sessions; mounting your host `~/.pi/agent` exposes host auth and session files to the container. The container runs as root by default, matching the Plain Docker pattern in [containerization.md](packages/coding-agent/docs/containerization.md).
+
 ## Quick Install
 
 ```bash

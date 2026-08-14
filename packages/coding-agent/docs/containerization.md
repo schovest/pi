@@ -3,6 +3,7 @@
 Pi runs with all permissions by default, but in some cases, you will want to have more control over what directories Pi can write to and which accesses it has.
 
 There are two general options. You can either
+
 1. run the whole `pi` process inside an isolated environment, or
 2. run `pi` on the host and route tool execution into an isolated environment.
 
@@ -79,6 +80,18 @@ Requirements: Node.js >= 23.6.0 for `@earendil-works/gondolin`, plus QEMU (requi
 ## Plain Docker
 
 Run the whole `pi` process in Docker when you want the simplest local container boundary.
+
+Instead of building your own image, use the official image `ghcr.io/schovest/pi` (linux/amd64 and linux/arm64, bundles the `pi` binary with a Node.js LTS runtime including npm, `git`, and `ca-certificates`):
+
+```bash
+docker run --rm -it \
+  -e ANTHROPIC_API_KEY \
+  -v "$PWD:/workspace" \
+  -v pi-agent-home:/root/.pi/agent \
+  ghcr.io/schovest/pi
+```
+
+If you need a custom image, build your own with `Dockerfile.pi`:
 
 `Dockerfile.pi`:
 
