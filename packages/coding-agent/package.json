@@ -1,6 +1,6 @@
 {
 	"name": "@schovest/pi-coding-agent",
-	"version": "0.13.9",
+	"version": "0.14.0",
 	"description": "Coding agent CLI with read, bash, edit, write tools and session management",
 	"type": "module",
 	"piConfig": {
@@ -42,7 +42,7 @@
 	"dependencies": {
 		"@earendil-works/pi-agent-core": "0.81.1",
 		"@earendil-works/pi-ai": "0.81.1",
-		"@schovest/pi-tui": "^0.13.9",
+		"@schovest/pi-tui": "^0.14.0",
 		"@silvia-odwyer/photon-node": "0.3.4",
 		"chalk": "5.6.2",
 		"cross-spawn": "7.0.6",
