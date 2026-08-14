@@ -113,4 +113,11 @@ describe("ProjectTrustStore", () => {
 		mkdirSync(join(cwd, ".agents", "skills"), { recursive: true });
 		expect(hasProjectTrustInputs(cwd)).toBe(true);
 	});
+
+	it("should ignore .agents/skills as trust input when enableAgentsSkills is false", () => {
+		mkdirSync(join(cwd, ".agents", "skills"), { recursive: true });
+		expect(hasProjectTrustInputs(cwd, { enableAgentsSkills: false })).toBe(false);
+		// 默认参数保持现状：仍视为信任输入
+		expect(hasProjectTrustInputs(cwd)).toBe(true);
+	});
 });

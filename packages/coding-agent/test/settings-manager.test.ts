@@ -395,4 +395,26 @@ describe("SettingsManager", () => {
 			expect(manager.getSessionDir()).toBe(join(homedir(), "sessions"));
 		});
 	});
+
+	describe("enableAgentsSkills", () => {
+		it("should default to false", () => {
+			const manager = SettingsManager.create(projectDir, agentDir);
+			expect(manager.getEnableAgentsSkills()).toBe(false);
+		});
+
+		it("should read from global settings", () => {
+			const settingsPath = join(agentDir, "settings.json");
+			writeFileSync(settingsPath, JSON.stringify({ enableAgentsSkills: true }));
+			const manager = SettingsManager.create(projectDir, agentDir);
+			expect(manager.getEnableAgentsSkills()).toBe(true);
+		});
+
+		it("should persist via setEnableAgentsSkills", () => {
+			const manager = SettingsManager.inMemory();
+			manager.setEnableAgentsSkills(true);
+			expect(manager.getEnableAgentsSkills()).toBe(true);
+			manager.setEnableAgentsSkills(false);
+			expect(manager.getEnableAgentsSkills()).toBe(false);
+		});
+	});
 });

@@ -3,7 +3,7 @@
 ## 信任机制
 
 - 信任决策存 `~/.pi/agent/trust.json`，按规范化目录路径保存；当前目录或父目录最近一条决策优先于全局默认
-- **项目信任判定**：cwd 下存在 `.pi/` 或当前目录/祖先目录存在 `.agents/skills` 即视为有信任输入
+- **项目信任判定**：cwd 下存在 `.pi/`，或（`enableAgentsSkills: true` 时）当前目录/祖先目录存在 `.agents/skills`，即视为有信任输入
 - 交互启动时按 `defaultProjectTrust`（默认 `"ask"`）弹信任询问；信任后允许加载 `.pi/settings.json`、`.pi` 下扩展/技能/提示/主题/system prompt、缺失的项目包、项目级扩展
 - 非交互模式（`-p`、`--mode json/rpc`）无提示：`"ask"`/`"never"` 忽略门禁资源，`"always"` 信任；`--approve`/`-a`、`--no-approve`/`-na` 单次覆盖
 - 信任解析前只加载：上下文文件（AGENTS.md/CLAUDE.md）、用户/全局扩展、CLI `-e` 扩展；扩展可处理 `project_trust` 事件
@@ -24,6 +24,7 @@
 
 - 项目信任不是安全边界，不做沙箱；隔离责任在用户侧
 - 安全问题走仓库 SECURITY 政策，不要开公开 issue
+
 ## 文档兜底（本文件不足时）
 
 本文件为要点提炼，遇到以下情况**必须**转查阅官方文档，禁止凭猜测继续：

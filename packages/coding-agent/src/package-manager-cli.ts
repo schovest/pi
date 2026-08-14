@@ -421,7 +421,8 @@ async function createCommandSettingsManager(options: {
 	const projectTrustWarnings: string[] = [];
 	const appMode = getCommandAppMode();
 	const extensionsResult =
-		options.projectTrustOverride === undefined && hasProjectTrustInputs(options.cwd)
+		options.projectTrustOverride === undefined &&
+		hasProjectTrustInputs(options.cwd, { enableAgentsSkills: settingsManager.getEnableAgentsSkills() })
 			? await new DefaultResourceLoader({
 					cwd: options.cwd,
 					agentDir: options.agentDir,
@@ -439,6 +440,7 @@ async function createCommandSettingsManager(options: {
 		trustOverride: options.projectTrustOverride,
 		defaultProjectTrust: settingsManager.getDefaultProjectTrust(),
 		extensionsResult,
+		enableAgentsSkills: settingsManager.getEnableAgentsSkills(),
 		projectTrustContext: createProjectTrustContext({
 			cwd: options.cwd,
 			mode: appMode,

@@ -49,6 +49,7 @@ export interface SettingsConfig {
 	autoResizeImages: boolean;
 	blockImages: boolean;
 	enableSkillCommands: boolean;
+	enableAgentsSkills: boolean;
 	steeringMode: "all" | "one-at-a-time";
 	followUpMode: "all" | "one-at-a-time";
 	transport: Transport;
@@ -82,6 +83,7 @@ export interface SettingsCallbacks {
 	onAutoResizeImagesChange: (enabled: boolean) => void;
 	onBlockImagesChange: (blocked: boolean) => void;
 	onEnableSkillCommandsChange: (enabled: boolean) => void;
+	onEnableAgentsSkillsChange: (enabled: boolean) => void;
 	onSteeringModeChange: (mode: "all" | "one-at-a-time") => void;
 	onFollowUpModeChange: (mode: "all" | "one-at-a-time") => void;
 	onTransportChange: (transport: Transport) => void;
@@ -443,6 +445,16 @@ export class SettingsSelectorComponent extends Container {
 			values: ["true", "false"],
 		});
 
+		// Agents skills toggle (insert after skill-commands)
+		const agentsSkillsIndex = items.findIndex((item) => item.id === "skill-commands");
+		items.splice(agentsSkillsIndex + 1, 0, {
+			id: "agents-skills",
+			label: "Agents skills",
+			description: "Load skills from ~/.agents/skills and project .agents/skills (default: off)",
+			currentValue: config.enableAgentsSkills ? "true" : "false",
+			values: ["true", "false"],
+		});
+
 		// Editor padding toggle (insert after show-hardware-cursor)
 		const hardwareCursorIndex = items.findIndex((item) => item.id === "show-hardware-cursor");
 		items.splice(hardwareCursorIndex + 1, 0, {
@@ -539,6 +551,9 @@ export class SettingsSelectorComponent extends Container {
 						break;
 					case "skill-commands":
 						callbacks.onEnableSkillCommandsChange(newValue === "true");
+						break;
+					case "agents-skills":
+						callbacks.onEnableAgentsSkillsChange(newValue === "true");
 						break;
 					case "steering-mode":
 						callbacks.onSteeringModeChange(newValue as "all" | "one-at-a-time");

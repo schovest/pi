@@ -2326,10 +2326,12 @@ export class DefaultPackageManager implements PackageManager {
 			themes: join(projectBaseDir, "themes"),
 		};
 		const userAgentsSkillsDir = join(getHomeDir(), ".agents", "skills");
+		const enableAgentsSkills = this.settingsManager.getEnableAgentsSkills();
 		const projectTrusted = this.settingsManager.isProjectTrusted();
-		const projectAgentsSkillDirs = projectTrusted
-			? collectAncestorAgentsSkillDirs(this.cwd).filter((dir) => resolve(dir) !== resolve(userAgentsSkillsDir))
-			: [];
+		const projectAgentsSkillDirs =
+			enableAgentsSkills && projectTrusted
+				? collectAncestorAgentsSkillDirs(this.cwd).filter((dir) => resolve(dir) !== resolve(userAgentsSkillsDir))
+				: [];
 
 		const addResources = (
 			resourceType: ResourceType,
@@ -2416,19 +2418,21 @@ export class DefaultPackageManager implements PackageManager {
 			globalBaseDir,
 		);
 
-		// User skills from ~/.agents/ (with its own baseDir)
-		const userAgentsBaseDir = dirname(userAgentsSkillsDir);
-		const userAgentsMetadata: PathMetadata = {
-			...userMetadata,
-			baseDir: userAgentsBaseDir,
-		};
-		addResources(
-			"skills",
-			collectAutoSkillEntries(userAgentsSkillsDir, "agents"),
-			userAgentsMetadata,
-			userOverrides.skills,
-			userAgentsBaseDir,
-		);
+		if (enableAgentsSkills) {
+			// User skills from ~/.agents/ (with its own baseDir)
+			const userAgentsBaseDir = dirname(userAgentsSkillsDir);
+			const userAgentsMetadata: PathMetadata = {
+				...userMetadata,
+				baseDir: userAgentsBaseDir,
+			};
+			addResources(
+				"skills",
+				collectAutoSkillEntries(userAgentsSkillsDir, "agents"),
+				userAgentsMetadata,
+				userOverrides.skills,
+				userAgentsBaseDir,
+			);
+		}
 
 		addResources(
 			"prompts",

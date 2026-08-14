@@ -3,8 +3,8 @@
 ## 存放位置
 
 - **内置**：安装目录 `skills/`（pi-config、pi-docs-reference，最后加载）
-- 全局：`~/.pi/agent/skills/`、`~/.agents/skills/`
-- 项目（信任后）：`.pi/skills/`、`.agents/skills/`（cwd 及祖先目录，至 git 根）
+- 全局：`~/.pi/agent/skills/`、`~/.agents/skills/`（默认禁用，需 `enableAgentsSkills: true`）
+- 项目（信任后）：`.pi/skills/`、`.agents/skills/`（cwd 及祖先目录，至 git 根；默认禁用，同上）
 - 包：`skills/` 目录或 package.json `pi.skills` 条目
 - 设置 `skills` 数组；CLI `--skill <path>`（可重复，`--no-skills` 时仍加载）；`--no-skills` 禁用发现
 
