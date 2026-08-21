@@ -4,6 +4,7 @@ import type { EditorComponent } from "@schovest/pi-tui";
 import { type Component, truncateToWidth, visibleWidth } from "@schovest/pi-tui";
 import type { AgentSession } from "../../../core/agent-session.ts";
 import type { ReadonlyFooterDataProvider } from "../../../core/footer-data-provider.ts";
+import { formatTokenCount } from "../../../utils/format-token-count.ts";
 import { theme } from "../theme/theme.ts";
 import { keyText } from "./keybinding-hints.ts";
 
@@ -17,17 +18,6 @@ function sanitizeStatusText(text: string): string {
 		.replace(/[\r\n\t]/g, " ")
 		.replace(/ +/g, " ")
 		.trim();
-}
-
-/**
- * Format token counts for compact footer display.
- */
-function formatTokens(count: number): string {
-	if (count < 1000) return count.toString();
-	if (count < 10000) return `${(count / 1000).toFixed(1)}k`;
-	if (count < 1000000) return `${Math.round(count / 1000)}k`;
-	if (count < 10000000) return `${(count / 1000000).toFixed(1)}M`;
-	return `${Math.round(count / 1000000)}M`;
 }
 
 export function formatCwdForFooter(cwd: string, home: string | undefined): string {
@@ -295,10 +285,10 @@ export class FooterComponent implements Component {
 
 		// Build stats line
 		const statsParts = [];
-		if (totalInput) statsParts.push(`↑${formatTokens(totalInput)}`);
-		if (totalOutput) statsParts.push(`↓${formatTokens(totalOutput)}`);
-		if (totalCacheRead) statsParts.push(`R${formatTokens(totalCacheRead)}`);
-		if (totalCacheWrite) statsParts.push(`W${formatTokens(totalCacheWrite)}`);
+		if (totalInput) statsParts.push(`↑${formatTokenCount(totalInput)}`);
+		if (totalOutput) statsParts.push(`↓${formatTokenCount(totalOutput)}`);
+		if (totalCacheRead) statsParts.push(`R${formatTokenCount(totalCacheRead)}`);
+		if (totalCacheWrite) statsParts.push(`W${formatTokenCount(totalCacheWrite)}`);
 		if ((totalCacheRead > 0 || totalCacheWrite > 0) && latestCacheHitRate !== undefined) {
 			statsParts.push(`CH${latestCacheHitRate.toFixed(1)}%`);
 		}
@@ -325,8 +315,8 @@ export class FooterComponent implements Component {
 		const autoIndicator = this.autoCompactEnabled ? " (auto)" : "";
 		const contextPercentDisplay =
 			contextPercent === "?"
-				? `?/${formatTokens(contextWindow)}${autoIndicator}`
-				: `${contextPercent}%/${formatTokens(contextWindow)}${autoIndicator}`;
+				? `?/${formatTokenCount(contextWindow)}${autoIndicator}`
+				: `${contextPercent}%/${formatTokenCount(contextWindow)}${autoIndicator}`;
 		if (contextPercentValue > 90) {
 			contextPercentStr = theme.fg("error", contextPercentDisplay);
 		} else if (contextPercentValue > 70) {

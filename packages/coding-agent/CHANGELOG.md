@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Working 行动态 token 计数器纯函数模块 `working-token-stats`（`accumulateBurst`/`formatElapsedTime`/`formatWorkingTokenSuffix`）+ `formatTokenCount` 从 footer 私有函数共享化（footer 行为不变）
+
 ### Fixed
 
 - 二进制发布包缺失内置 skills：`scripts/build-binaries.sh` 的平台目录复制清单漏掉 `dist/skills`，导致 `install.sh` 无从复制、二进制安装后无内置 `pi-config`/`pi-docs-reference` 技能（npm 包与本地 `build:binary` 路径不受影响）
