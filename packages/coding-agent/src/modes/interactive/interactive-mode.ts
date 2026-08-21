@@ -170,7 +170,7 @@ import {
 	type ThemeColor,
 	theme,
 } from "./theme/theme.ts";
-import { accumulateBurst, formatWorkingTokenSuffix } from "./working-token-stats.ts";
+import { accumulateBurst, nextWorkingSuffix, type WorkingSuffixCache } from "./working-token-stats.ts";
 
 /** Interface for components that can be expanded/collapsed */
 interface Expandable {
@@ -339,10 +339,8 @@ export class InteractiveMode {
 	private runOutputTokens = 0;
 	/** 本提问起始时间戳（performance.now()），agent_start 时起表。 */
 	private runStartTime = 0;
-	/** Working suffix 每秒节流：上次刷新时刻。 */
-	private lastSuffixRefresh = 0;
-	/** Working suffix 缓存文本。 */
-	private lastSuffixText = "";
+	/** Working suffix 每秒节流缓存：lastRefresh 时刻 + 缓存文本。 */
+	private workingSuffixCache: WorkingSuffixCache = { lastRefresh: 0, lastSuffix: "" };
 	private workingMessage: string | undefined = undefined;
 	private workingVisible = true;
 	private workingIndicatorOptions: LoaderIndicatorOptions | undefined = undefined;
@@ -1861,22 +1859,18 @@ export class InteractiveMode {
 	/** Working 行动态 suffix：每秒刷新一次，显示本提问累计输出 tokens（估算）与已耗时。 */
 	private getWorkingSuffix(): string {
 		const now = performance.now();
-		if (now - this.lastSuffixRefresh < 1000) {
-			return this.lastSuffixText;
-		}
-		this.lastSuffixRefresh = now;
 		const elapsedMs = this.runStartTime > 0 ? now - this.runStartTime : 0;
-		this.lastSuffixText = theme.fg(
-			"muted",
-			formatWorkingTokenSuffix(
-				{
-					runOutputTokens: this.runOutputTokens,
-					partialMessage: this.session.state.streamingMessage,
-				},
-				elapsedMs,
-			),
+		const { cache, suffix } = nextWorkingSuffix(
+			this.workingSuffixCache,
+			now,
+			{
+				runOutputTokens: this.runOutputTokens,
+				partialMessage: this.session.state.streamingMessage,
+			},
+			elapsedMs,
 		);
-		return this.lastSuffixText;
+		this.workingSuffixCache = cache;
+		return theme.fg("muted", suffix);
 	}
 
 	private stopWorkingLoader(): void {
@@ -3401,8 +3395,7 @@ export class InteractiveMode {
 				this.pendingTools.clear();
 				this.runOutputTokens = 0;
 				this.runStartTime = performance.now();
-				this.lastSuffixRefresh = 0;
-				this.lastSuffixText = "";
+				this.workingSuffixCache = { lastRefresh: 0, lastSuffix: "" };
 				if (this.settingsManager.getShowTerminalProgress()) {
 					this.ui.terminal.setProgress(true);
 				}

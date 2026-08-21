@@ -6,6 +6,9 @@ import {
 	accumulateBurst,
 	formatElapsedTime,
 	formatWorkingTokenSuffix,
+	nextWorkingSuffix,
+	type WorkingSuffixCache,
+	type WorkingTokenStats,
 } from "../src/modes/interactive/working-token-stats.ts";
 import { formatTokenCount } from "../src/utils/format-token-count.ts";
 
@@ -37,7 +40,9 @@ const singleTextBurst = burst([{ type: "text", text: "abcd" }]);
 describe("formatTokenCount", () => {
 	it("mirrors the footer abbreviation behavior", () => {
 		expect(formatTokenCount(342)).toBe("342");
+		expect(formatTokenCount(1000)).toBe("1.0k");
 		expect(formatTokenCount(1234)).toBe("1.2k");
+		expect(formatTokenCount(10000)).toBe("10k");
 		expect(formatTokenCount(12345)).toBe("12k");
 		expect(formatTokenCount(1234567)).toBe("1.2M");
 	});
@@ -61,6 +66,29 @@ describe("accumulateBurst", () => {
 	it("adds the estimated tokens of a completed assistant burst", () => {
 		expect(accumulateBurst(0, singleTextBurst)).toBe(1);
 		expect(accumulateBurst(5, singleTextBurst)).toBe(6);
+	});
+});
+
+describe("nextWorkingSuffix", () => {
+	it("recomputes after the 1s throttle window elapses", () => {
+		const empty: WorkingSuffixCache = { lastRefresh: 0, lastSuffix: "" };
+		const stats: WorkingTokenStats = { runOutputTokens: 342, partialMessage: null };
+
+		// now=1500，lastRefresh=0 → 超过 1s，需重算并得到新的 lastRefresh=1500。
+		const first = nextWorkingSuffix(empty, 1500, stats, 1500);
+		expect(first.suffix).toBe(" · ↓342 · 0:01");
+		expect(first.cache.lastRefresh).toBe(1500);
+		expect(first.cache.lastSuffix).toBe(" · ↓342 · 0:01");
+
+		// now=1600 < lastRefresh+1000 → 返回缓存，cache 不变。
+		const cached = nextWorkingSuffix(first.cache, 1600, stats, 1600);
+		expect(cached.suffix).toBe(first.suffix);
+		expect(cached.cache).toBe(first.cache);
+
+		// now=2600 再次跨越 1s → 重算。
+		const second = nextWorkingSuffix(cached.cache, 2600, stats, 2600);
+		expect(second.suffix).toBe(" · ↓342 · 0:02");
+		expect(second.cache.lastRefresh).toBe(2600);
 	});
 });
 

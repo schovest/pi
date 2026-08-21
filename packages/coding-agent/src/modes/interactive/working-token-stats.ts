@@ -9,6 +9,36 @@ export interface WorkingTokenStats {
 	partialMessage?: AgentMessage | null;
 }
 
+/** Working suffix 每秒节流缓存。 */
+export interface WorkingSuffixCache {
+	/** 上次刷新时刻（performance.now()）。 */
+	lastRefresh: number;
+	/** 上次生成的 suffix 文本。 */
+	lastSuffix: string;
+}
+
+const SUFFIX_REFRESH_INTERVAL_MS = 1000;
+
+/**
+ * 节流地计算 Working suffix：距离上次刷新不足 1s 时返回缓存，否则重建。
+ * 纯函数：不就地修改传入的 cache，而是返回新 cache 供调用方持有。
+ */
+export function nextWorkingSuffix(
+	cache: WorkingSuffixCache,
+	now: number,
+	stats: WorkingTokenStats,
+	elapsedMs: number,
+): { cache: WorkingSuffixCache; suffix: string } {
+	if (now - cache.lastRefresh < SUFFIX_REFRESH_INTERVAL_MS) {
+		return { cache, suffix: cache.lastSuffix };
+	}
+	const nextCache: WorkingSuffixCache = {
+		lastRefresh: now,
+		lastSuffix: formatWorkingTokenSuffix(stats, elapsedMs),
+	};
+	return { cache: nextCache, suffix: nextCache.lastSuffix };
+}
+
 /** 将一整波 assistant 消息的估算输出累加到 run 累计值。 */
 export function accumulateBurst(runOutputTokens: number, message: AgentMessage): number {
 	return runOutputTokens + estimateTokens(message);
