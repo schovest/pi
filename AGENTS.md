@@ -132,10 +132,11 @@ npx vitest run --dir packages/coding-agent/test subagents
 
 #### 分支策略
 
-- `dev`：日常开发分支，自由提交
-- `main`：保护分支，dev 上的改动经 `npm run check` 通过并完成相关测试后可合并，不限于版本升级
-- 合并使用 `--no-ff`，merge commit message 填写变更摘要
-- 版本 tag 打在 main 的 merge commit 上，不在 dev 上打 tag
+- `dev`：共享开发分支，多人直接 push（日常自由提交）
+- `main`：GitHub 保护分支（远程），**仅通过 PR 合并，不可直接 push**。门禁：至少 1 个 review 通过 + CI 全绿 + 维护人合并
+- dev → main 以 PR 合并且仅合并（merge commit，`--no-ff` 语义），merge commit message 填写变更摘要；PR 不限于版本升级
+- 日常开发在 dev 自主提交，合并 main 前需 `npm run check` 通过并完成相关测试（PR 上 CI 也会自动跑）
+- 版本 tag 打在 main 合并后的 commit 上，不在 dev 上打 tag：维护人在本地 `git pull origin main` 后 `git tag vX.Y.Z` + `git push origin vX.Y.Z`（GitHub 分支保护不拦 tag 推送，除非另设 tag 保护）
 
 ### 构建与测试
 
@@ -171,7 +172,7 @@ npx vitest run --dir packages/coding-agent/test subagents
 
 #### 版本发布与 CI 的关系
 
-执行 `/up` prompt 最后 push tag (`git push origin vx.y.z`) 触发 `build-binaries.yml`，CI 自动完成全部发布工作：
+执行 `/up` prompt：版本 commit 在 dev 上准备并提交 → 以 PR 合入 main（review + CI + 维护人，merge commit）→ 维护人在 main 合并 commit 上打 tag 并 `git push origin vx.y.z`，触发 `build-binaries.yml`，CI 自动完成全部发布工作：
 
 1. **构建二进制**：checkout tag → `scripts/build-binaries.sh` 构建 6 平台二进制 → 生成 `sha256sums.txt`
 2. **创建 GitHub Release**：从 CHANGELOG 提取 release notes → 创建 Release 并上传所有资产
