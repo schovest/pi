@@ -2,8 +2,13 @@
 
 ## [Unreleased]
 
+## [0.14.2] - 2026-08-21
+
 ### Added
 
+- editor 上边框标题改为 powerlevel10k 风格面包屑布局：`Π ⟩ agent ⟩ 📁path On branch`（“⟩” 分隔符；emoji/plain 两种风格统一；路径与 `On branch` 同段）
+- 上边框右侧 model 区域同步优化：provider/model 改用 `provider/model` 斜杠格式（provider 部分暗色，仅多个 provider 时显示，model 名用 text 亮色，原括号格式）；thinking level 以 `(max)` 括号形式呈现，颜色随思考强度切换（与 editor 边框线同色，原 `· max` 分隔）；会话名从左侧路径区移至右侧末尾，用 `⟩` 分隔并以 accent 高亮色显示（如 `deepseek/deepseek-v4-flash (max) ⟩ Dev Session`）
+- editor 上边框标题细节配色：路径段由暗色改为亮色（text），`On` 前缀改暗色，分支名保持 success 绿
 - Working 状态行动态显示本提问累计输出 tokens（估算，`↓` 缩写）与已耗时（`mm:ss`），每秒刷新，每次 `agent_start` 归零
 - Working 行动态 token 计数器纯函数模块 `working-token-stats`（`accumulateBurst`/`formatElapsedTime`/`formatWorkingTokenSuffix`）+ `formatTokenCount` 从 footer 私有函数共享化（footer 行为不变）
 

@@ -118,18 +118,11 @@ describe("FooterComponent.getPathDisplay", () => {
 		initTheme(undefined, false);
 	});
 
-	it("includes cwd, branch, and session name (plain style)", () => {
+	it("includes cwd and branch (plain style)", () => {
 		const session = createSession({ sessionName: "my-session" });
 		const footer = new FooterComponent(session, createFooterData(1));
 
-		expect(stripAnsi(footer.getPathDisplay())).toBe("Π /tmp/project main my-session");
-	});
-
-	it("includes cwd and branch without session name (plain style)", () => {
-		const session = createSession({ sessionName: "" });
-		const footer = new FooterComponent(session, createFooterData(1));
-
-		expect(stripAnsi(footer.getPathDisplay())).toBe("Π /tmp/project main");
+		expect(stripAnsi(footer.getPathDisplay())).toBe("Π ⟩ /tmp/project On main");
 	});
 
 	it("includes emoji icons in emoji style", () => {
@@ -137,15 +130,7 @@ describe("FooterComponent.getPathDisplay", () => {
 		const footer = new FooterComponent(session, createFooterData(1));
 		footer.setBorderTitleStyle("emoji");
 
-		expect(stripAnsi(footer.getPathDisplay())).toBe("Π 📁 /tmp/project 🔀 main ✦ my-session");
-	});
-
-	it("uses emoji style without session name", () => {
-		const session = createSession({ sessionName: "" });
-		const footer = new FooterComponent(session, createFooterData(1));
-		footer.setBorderTitleStyle("emoji");
-
-		expect(stripAnsi(footer.getPathDisplay())).toBe("Π 📁 /tmp/project 🔀 main");
+		expect(stripAnsi(footer.getPathDisplay())).toBe("Π ⟩ 📁/tmp/project On main");
 	});
 });
 
@@ -154,11 +139,17 @@ describe("FooterComponent width handling", () => {
 		initTheme(undefined, false);
 	});
 
-	it("keeps all lines within width for wide session names", () => {
+	it("keeps render lines within width (session name lives in the border title)", () => {
 		const width = 93;
-		const session = createSession({ sessionName: "한글".repeat(30) });
-		const footer = new FooterComponent(session, createFooterData(1));
+		const session = createSession({
+			sessionName: "한글".repeat(30),
+			reasoning: true,
+			thinkingLevel: "high",
+		});
+		const footer = new FooterComponent(session, createFooterData(2));
 
+		// The session name renders on the right side (model display) and is
+		// truncated by the editor border — footer lines must stay within width.
 		const lines = footer.render(width);
 		for (const line of lines) {
 			expect(visibleWidth(line)).toBeLessThanOrEqual(width);
