@@ -28,6 +28,7 @@
   - `↓{n}`：当前提问累计输出，缩写规则同 footer `formatTokens`（<1000 原数，否则 1.2k/12k/1.2M）。
   - `· {mm:ss}`：本次提问已耗时（<1h 显示 `m:ss`，如 `0:12`、`1:34`；≥1h 显示 `h:mm:ss`，如 `1:02:33`）。
   - 数字为 0（尚未有输出）时只显示时间：`⠋ Working... · 0:00`。
+  - 每次 `agent_start` 清零（含错误自动重试场景，用户已确认）。
 - **刷新频率**：每秒更新一次（输出数值 + 时间）。不需要逐 chunk 高频刷新。
 - 扩展 `setWorkingMessage` / `setWorkingVisible` 行为不变：suffix 追加在 message 之后，loader 隐藏时一并隐藏。
 
@@ -115,6 +116,17 @@ export function formatTokenCount(count: number): string { ... }
 - **最小请求后无输出（如只调工具不返回文本）**：`message_end` 仍会累加工具参数波次，数字体现工具调用消耗。
 - **aborted/error**：`message_end` 仍走累加（已发送即计入消费）。
 - 不为「本轮」做 per-burst 归零（用户已选每次提问累计）。
+
+## 5.1 后续影响评估（2026-08-21 确认）
+
+- **清零边界（用户已定）**：每次 `agent_start` 都清零。已知代价：临时错误自动重试会重新 `agent_start` → 同一次提问中途计数归零；用户接受（实现简单）。auto-compaction 不走 `agent_start`（独立 `compact()`，只发 `compaction_start/end`，interactive-mode 会 clear statusContainer），不影响计数。
+- **`session.state.streamingMessage` 可用性（已证实）**：pi-agent-core 的 `Agent` 在流式事件写入、结束时清空；与 interactive-mode 事件同源，无双算窗口（累加只在 `message_end` 后、此时 streamingMessage 已清空）。
+- **Loader 消费方（5+ 处 + CancellableLoader extends Loader）**：`suffixProvider` 为可选、默认 undefined → 零行为变化，其余消费方无感。
+- **已知限制：隐藏 spinner 的扩展 indicator**：`setWorkingIndicator({ frames: [] })` 会停掉 80ms 帧刷新 → suffix 冻结在首帧。默认 Working loader 不受影响；不做独立定时器（YAGNI），代码注释说明。
+- **formatTokens 迁移**：只动 footer（私有 → 共享 util），`cli/list-models.ts` 的独立缩写函数保持不动。无测试锁定 footer 统计串。
+- **Working 行超宽会 wrap**：suffix 最长约 18 字符，仅极窄终端 + 超长自定义 workingMessage 时才折行；接受，不额外 truncate。
+- **性能**：1s 节流后 `estimateTokens` 每秒至多 1 次，80ms 帧刷新只返回缓存串，可忽略。
+- **惯例**：实现 commit 同步 CHANGELOG；变更后自查 `packages/coding-agent/docs/`（预计无需更新，纯展示性行为）。
 
 ## 6. 不做的事（YAGNI）
 
