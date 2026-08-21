@@ -32,7 +32,7 @@ import {
 
 export type PackageCommand = "install" | "remove" | "update" | "list";
 
-type UpdateTarget = { type: "all" } | { type: "extensions"; source?: string };
+type UpdateTarget = { type: "all" } | { type: "self" } | { type: "extensions"; source?: string };
 
 interface PackageCommandOptions {
 	command: PackageCommand;
@@ -64,7 +64,7 @@ function getPackageCommandUsage(command: PackageCommand): string {
 		case "remove":
 			return `${APP_NAME} remove <source> [-l] [--approve|--no-approve]`;
 		case "update":
-			return `${APP_NAME} update [source] [--extensions] [--extension <source>] [--approve|--no-approve] [--force]`;
+			return `${APP_NAME} update [source] [--self] [--extensions] [--extension <source>] [--approve|--no-approve] [--force]`;
 		case "list":
 			return `${APP_NAME} list [--approve|--no-approve]`;
 	}
@@ -118,6 +118,7 @@ Examples:
 Update installed packages.
 
 Options:
+  --self                  Update ${APP_NAME} itself
   --extensions            Update installed packages only
   --extension <source>    Update one package only
   -a, --approve           Trust project-local files for this command
@@ -126,8 +127,7 @@ Options:
 Short forms:
   ${APP_NAME} update                Update all extensions
   ${APP_NAME} update <source>       Update one package
-
-To update ${APP_NAME} itself, use: ${APP_NAME} self-update
+  ${APP_NAME} update --self         Update ${APP_NAME} itself (same as ${APP_NAME} self-update)
 `);
 			return;
 
@@ -167,6 +167,7 @@ function parsePackageCommand(args: string[]): PackageCommandOptions | undefined 
 	let source: string | undefined;
 	let extensionsFlag = false;
 	let extensionFlagSource: string | undefined;
+	let selfFlag = false;
 
 	for (let index = 0; index < rest.length; index++) {
 		const arg = rest[index];
@@ -187,6 +188,15 @@ function parsePackageCommand(args: string[]): PackageCommandOptions | undefined 
 		if (arg === "--extensions") {
 			if (command === "update") {
 				extensionsFlag = true;
+			} else {
+				invalidOption = invalidOption ?? arg;
+			}
+			continue;
+		}
+
+		if (arg === "--self") {
+			if (command === "update") {
+				selfFlag = true;
 			} else {
 				invalidOption = invalidOption ?? arg;
 			}
@@ -240,6 +250,9 @@ function parsePackageCommand(args: string[]): PackageCommandOptions | undefined 
 			if (extensionsFlag) {
 				conflictingOptions = conflictingOptions ?? "--extension cannot be combined with --extensions";
 			}
+			if (selfFlag) {
+				conflictingOptions = conflictingOptions ?? "--extension cannot be combined with --self";
+			}
 			if (source) {
 				conflictingOptions = conflictingOptions ?? "--extension cannot be combined with a positional source";
 			}
@@ -248,9 +261,17 @@ function parsePackageCommand(args: string[]): PackageCommandOptions | undefined 
 			if (extensionsFlag) {
 				conflictingOptions = conflictingOptions ?? "positional update targets cannot be combined with --extensions";
 			}
+			if (selfFlag) {
+				conflictingOptions = conflictingOptions ?? "positional update targets cannot be combined with --self";
+			}
 			updateTarget = { type: "extensions", source };
 		} else if (extensionsFlag) {
+			if (selfFlag) {
+				conflictingOptions = conflictingOptions ?? "--extensions cannot be combined with --self";
+			}
 			updateTarget = { type: "extensions" };
+		} else if (selfFlag) {
+			updateTarget = { type: "self" };
 		} else {
 			updateTarget = { type: "all" };
 		}
@@ -1038,6 +1059,12 @@ export async function handlePackageCommand(
 		return true;
 	}
 
+	// `update --self` 只更新 pi 本身，不涉及项目配置，直接走自更新路径
+	if (options.command === "update" && options.updateTarget?.type === "self") {
+		await runSelfUpdate(false);
+		return true;
+	}
+
 	const cwd = process.cwd();
 	const agentDir = getAgentDir();
 	const writesProjectPackageConfig = (options.command === "install" || options.command === "remove") && options.local;
@@ -1093,7 +1120,8 @@ export async function handlePackageCommand(
 
 				const formatPackage = (pkg: (typeof configuredPackages)[number]) => {
 					const display = pkg.filtered ? `${pkg.source} (filtered)` : pkg.source;
-					console.log(`  ${display}`);
+					const version = pkg.version ? chalk.dim(`  v${pkg.version}`) : "";
+					console.log(`  ${display}${version}`);
 					if (pkg.installedPath) {
 						console.log(chalk.dim(`    ${pkg.installedPath}`));
 					}
@@ -1204,6 +1232,16 @@ export async function handleSelfUpdateCommand(args: string[]): Promise<boolean> 
 		return true;
 	}
 
+	await runSelfUpdate(force);
+	return true;
+}
+
+/**
+ * 执行自更新（`pi self-update` 与 `pi update --self` 共用）。
+ *
+ * 错误时设置 process.exitCode，不抛出异常。
+ */
+async function runSelfUpdate(force: boolean): Promise<void> {
 	const method = detectInstallMethod();
 
 	// Bun 编译二进制安装 → 运行 update.sh
@@ -1213,7 +1251,7 @@ export async function handleSelfUpdateCommand(args: string[]): Promise<boolean> 
 			console.error(chalk.red(`Error: ${unsupportedReason}.`));
 			console.error(chalk.dim(`Download manually from: https://github.com/schovest/pi/releases/latest`));
 			process.exitCode = 1;
-			return true;
+			return;
 		}
 
 		if (!force) {
@@ -1222,7 +1260,7 @@ export async function handleSelfUpdateCommand(args: string[]): Promise<boolean> 
 				const latestRelease = await getLatestPiRelease(VERSION);
 				if (latestRelease && !isNewerPackageVersion(latestRelease.version, VERSION)) {
 					console.log(chalk.green(`${APP_NAME} is already up to date (v${VERSION})`));
-					return true;
+					return;
 				}
 				if (latestRelease) {
 					console.log(chalk.dim(`Updating to v${latestRelease.version}...`));
@@ -1238,7 +1276,7 @@ export async function handleSelfUpdateCommand(args: string[]): Promise<boolean> 
 		if (result.unsupported) {
 			console.error(chalk.red(`Error: ${result.reason}`));
 			process.exitCode = 1;
-			return true;
+			return;
 		}
 		if (result.exitCode === 0) {
 			console.log(chalk.green(`Updated ${APP_NAME}`));
@@ -1249,7 +1287,7 @@ export async function handleSelfUpdateCommand(args: string[]): Promise<boolean> 
 			console.error(chalk.red(`update.sh failed: ${result.reason ?? "unknown error"}`));
 			process.exitCode = 1;
 		}
-		return true;
+		return;
 	}
 
 	// npm/pnpm/yarn/bun 全局安装 → 沿用包管理器 self-update 路径
@@ -1262,14 +1300,14 @@ export async function handleSelfUpdateCommand(args: string[]): Promise<boolean> 
 	try {
 		const plan = await _getSelfUpdatePlan(force);
 		if (!plan.shouldRun) {
-			return true;
+			return;
 		}
 		const npmCommand = settingsManager.getNpmCommand();
 		const command = getSelfUpdateCommand(PACKAGE_NAME, npmCommand, plan.packageName);
 		if (!command) {
 			_printSelfUpdateUnavailable(npmCommand, PACKAGE_NAME);
 			process.exitCode = 1;
-			return true;
+			return;
 		}
 		if (plan.note) {
 			_printSelfUpdateNote(plan.note);
@@ -1277,11 +1315,9 @@ export async function handleSelfUpdateCommand(args: string[]): Promise<boolean> 
 		_prepareWindowsNpmSelfUpdate();
 		await _runSelfUpdate(command);
 		console.log(chalk.green(`Updated ${APP_NAME}`));
-		return true;
 	} catch (error: unknown) {
 		const message = error instanceof Error ? error.message : "Unknown self-update error";
 		console.error(chalk.red(`Error: ${message}`));
 		process.exitCode = 1;
-		return true;
 	}
 }

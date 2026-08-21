@@ -32,6 +32,7 @@ pi remove npm:@foo/bar
 pi list                     # show installed packages from settings
 pi update                   # update packages and reconcile pinned git refs
 pi update --extensions      # update packages and reconcile pinned git refs only
+pi update --self            # upgrade pi itself (same as pi self-update)
 pi self-update              # upgrade pi itself to the latest version
 pi self-update --force      # force update even if already latest
 pi update npm:@foo/bar      # update one package

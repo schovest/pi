@@ -87,6 +87,7 @@ export interface ConfiguredPackage {
 	scope: "user" | "project";
 	filtered: boolean;
 	installedPath?: string;
+	version?: string;
 }
 
 export interface PackageManager {
@@ -959,21 +960,25 @@ export class DefaultPackageManager implements PackageManager {
 
 		for (const pkg of globalSettings.packages ?? []) {
 			const source = typeof pkg === "string" ? pkg : pkg.source;
+			const installedPath = this.getInstalledPath(source, "user");
 			configuredPackages.push({
 				source,
 				scope: "user",
 				filtered: typeof pkg === "object",
-				installedPath: this.getInstalledPath(source, "user"),
+				installedPath,
+				version: installedPath ? this.getInstalledNpmVersion(installedPath) : undefined,
 			});
 		}
 
 		for (const pkg of projectSettings.packages ?? []) {
 			const source = typeof pkg === "string" ? pkg : pkg.source;
+			const installedPath = this.getInstalledPath(source, "project");
 			configuredPackages.push({
 				source,
 				scope: "project",
 				filtered: typeof pkg === "object",
-				installedPath: this.getInstalledPath(source, "project"),
+				installedPath,
+				version: installedPath ? this.getInstalledNpmVersion(installedPath) : undefined,
 			});
 		}
 

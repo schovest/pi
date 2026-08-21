@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- `pi list` 列出已安装包时额外显示已安装版本号（从安装目录 `package.json` 读取，无版本信息的包不显示）
+- 恢复 `pi update --self` 作为自更新入口（与 `pi self-update` 等价，不涉及项目配置；`--self` 与 `--extensions`/`--extension`/位置参数互斥）
+
 ## [0.14.2] - 2026-08-21
 
 ### Added

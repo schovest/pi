@@ -162,6 +162,7 @@ pi remove <source> [-l]      # Remove package
 pi uninstall <source> [-l]   # Alias for remove
 pi update [source]            # Update packages; reconcile pinned git refs
 pi update --extensions        # Update packages only; reconcile pinned git refs
+pi update --self              # Upgrade pi itself (same as pi self-update)
 pi self-update                # Upgrade pi itself to the latest version
 pi update --extension <src>   # Update one package
 pi list                      # List installed packages
