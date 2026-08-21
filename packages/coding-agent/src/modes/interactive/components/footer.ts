@@ -187,7 +187,8 @@ export class FooterComponent implements Component {
 	/**
 	 * Right side of the editor border title: provider/model + thinking level + session.
 	 * Powerlevel10k-style segments: `provider/model` with the provider part dimmed
-	 * (provider prefix only when multiple providers are configured); thinking level
+	 * (provider prefix only when multiple providers are configured) and the model id
+	 * in text color; thinking level
 	 * in parens colored with the same theme color as the editor border line;
 	 * session name as the trailing breadcrumb segment separated by “⟩” in accent.
 	 * Shows "provider/model (thinkingLevel) ⟩ session" when thinking is active and a
@@ -202,8 +203,8 @@ export class FooterComponent implements Component {
 		// Provider prefix when multiple providers configured: dim "provider/"
 		const hasProvider = this.footerData.getAvailableProviderCount() > 1 && state.model;
 		const modelPart = hasProvider
-			? `${theme.fg("dim", `${state.model!.provider}/`)}${theme.fg("accent", modelName)}`
-			: theme.fg("accent", modelName);
+			? `${theme.fg("dim", `${state.model!.provider}/`)}${theme.fg("text", modelName)}`
+			: theme.fg("text", modelName);
 
 		let display = modelPart;
 
@@ -250,15 +251,15 @@ export class FooterComponent implements Component {
 		let agentPart: string;
 		if (this.borderTitleStyle === "emoji") {
 			agentPart = agentRole ? theme.fg("text", `🚀${agentRole}`) : "";
-			pathBlock = theme.fg("dim", `📁${pwd}`);
+			pathBlock = theme.fg("text", `📁${pwd}`);
 			if (branch) {
-				pathBlock += ` ${theme.fg("success", `On ${branch}`)}`;
+				pathBlock += ` ${theme.fg("dim", "On")} ${theme.fg("success", branch)}`;
 			}
 		} else {
 			agentPart = agentRole ? theme.fg("text", agentRole) : "";
-			pathBlock = theme.fg("dim", pwd);
+			pathBlock = theme.fg("text", pwd);
 			if (branch) {
-				pathBlock += ` ${theme.fg("success", `On ${branch}`)}`;
+				pathBlock += ` ${theme.fg("dim", "On")} ${theme.fg("success", branch)}`;
 			}
 		}
 
