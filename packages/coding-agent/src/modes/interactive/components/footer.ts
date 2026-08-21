@@ -185,9 +185,13 @@ export class FooterComponent implements Component {
 	}
 
 	/**
-	 * Model · effort display for the right side of the editor border title.
-	 * Shows "(provider) model-id · thinkingLevel" when reasoning is active
-	 * (level !== "off"), otherwise just "(provider) model-id".
+	 * Right side of the editor border title: provider/model + thinking level + session.
+	 * Powerlevel10k-style segments: `provider/model` with the provider part dimmed
+	 * (provider prefix only when multiple providers are configured); thinking level
+	 * in parens colored with the same theme color as the editor border line;
+	 * session name as the trailing breadcrumb segment separated by “⟩” in accent.
+	 * Shows "provider/model (thinkingLevel) ⟩ session" when thinking is active and a
+	 * session name exists; thinking and session segments are omitted when absent.
 	 * Intentionally omits "thinking off" to keep the border clean; users can
 	 * check thinking status via the /thinking selector or Alt+T cycling.
 	 */
@@ -195,18 +199,29 @@ export class FooterComponent implements Component {
 		const state = this.session.state;
 		const modelName = state.model?.id || "no-model";
 
-		// Provider prefix when multiple providers configured
+		// Provider prefix when multiple providers configured: dim "provider/"
 		const hasProvider = this.footerData.getAvailableProviderCount() > 1 && state.model;
-		const modelPart = hasProvider ? `${theme.fg("dim", `(${state.model!.provider})`)} ${modelName}` : modelName;
+		const modelPart = hasProvider
+			? `${theme.fg("dim", `${state.model!.provider}/`)}${theme.fg("accent", modelName)}`
+			: theme.fg("accent", modelName);
+
+		let display = modelPart;
 
 		if (state.model?.reasoning) {
 			const thinkingLevel = state.thinkingLevel || "off";
 			if (thinkingLevel !== "off") {
-				return `${modelPart} · ${theme.fg("text", thinkingLevel)}`;
+				// Same color as the editor border line for the current thinking level
+				const levelColor = theme.getThinkingBorderColor(thinkingLevel);
+				display += `${theme.fg("dim", " (")}${levelColor(thinkingLevel)}${theme.fg("dim", ")")}`;
 			}
 		}
 
-		return modelPart;
+		const sessionName = this.session.sessionManager.getSessionName();
+		if (sessionName) {
+			display += `${theme.fg("dim", " ⟩ ")}${theme.fg("accent", sessionName)}`;
+		}
+
+		return display;
 	}
 
 	/**
@@ -218,46 +233,41 @@ export class FooterComponent implements Component {
 	}
 
 	/**
-	 * Compute the path + branch + session display string for the editor border title.
-	 * Style depends on borderTitleStyle: "plain" uses color + unicode separators,
-	 * "emoji" uses emoji icons + color.
+	 * Compute the path + branch breadcrumb string for the editor border title.
+	 * Powerlevel10k-inspired breadcrumb layout: Π ⟩ agent ⟩ path On branch,
+	 * with “⟩” separators between segments. The session name lives on the right
+	 * side (model area); see {@link getModelEffortDisplay}. Style depends on
+	 * borderTitleStyle: "plain" uses color + breadcrumb separators, "emoji"
+	 * uses emoji icons + color.
 	 */
 	getPathDisplay(): string {
 		const pwd = formatCwdForFooter(this.session.sessionManager.getCwd(), process.env.HOME || process.env.USERPROFILE);
 		const branch = this.footerData.getGitBranch();
-		const sessionName = this.session.sessionManager.getSessionName();
 		const agentRole = this.session.currentPrimaryAgent;
 
+		// Last segment: path, then the branch (“On …”) glued on with a space
+		let pathBlock: string;
+		let agentPart: string;
 		if (this.borderTitleStyle === "emoji") {
-			const parts: string[] = [];
-			parts.push(theme.fg("accent", "Π"));
-			if (agentRole) {
-				parts.push(theme.fg("text", `🚀 ${agentRole}`));
-			}
-			parts.push(theme.fg("dim", `📁 ${pwd}`));
+			agentPart = agentRole ? theme.fg("text", `🚀${agentRole}`) : "";
+			pathBlock = theme.fg("dim", `📁${pwd}`);
 			if (branch) {
-				parts.push(theme.fg("success", `🔀 ${branch}`));
+				pathBlock += ` ${theme.fg("success", `On ${branch}`)}`;
 			}
-			if (sessionName) {
-				parts.push(theme.fg("muted", `✦ ${sessionName}`));
+		} else {
+			agentPart = agentRole ? theme.fg("text", agentRole) : "";
+			pathBlock = theme.fg("dim", pwd);
+			if (branch) {
+				pathBlock += ` ${theme.fg("success", `On ${branch}`)}`;
 			}
-			return parts.join(" ");
 		}
 
-		// plain style
-		const parts: string[] = [];
-		parts.push(theme.fg("accent", "Π"));
-		if (agentRole) {
-			parts.push(theme.fg("text", agentRole));
+		const crumbs = [theme.fg("accent", "Π")];
+		if (agentPart) {
+			crumbs.push(agentPart);
 		}
-		parts.push(theme.fg("dim", pwd));
-		if (branch) {
-			parts.push(theme.fg("success", branch));
-		}
-		if (sessionName) {
-			parts.push(theme.fg("muted", sessionName));
-		}
-		return parts.join(" ");
+		crumbs.push(pathBlock);
+		return crumbs.join(theme.fg("dim", " ⟩ "));
 	}
 
 	render(width: number): string[] {

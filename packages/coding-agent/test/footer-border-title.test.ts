@@ -2,7 +2,8 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { AgentSession } from "../src/core/agent-session.ts";
 import type { ReadonlyFooterDataProvider } from "../src/core/footer-data-provider.ts";
 import { FooterComponent } from "../src/modes/interactive/components/footer.ts";
-import { initTheme } from "../src/modes/interactive/theme/theme.ts";
+import { initTheme, theme } from "../src/modes/interactive/theme/theme.ts";
+import { stripAnsi } from "../src/utils/ansi.ts";
 
 interface MockEditor {
 	borderTitle?: string;
@@ -12,7 +13,10 @@ interface MockEditor {
 function createSession(
 	currentPrimaryAgent: string,
 	modelId = "test-model",
-	overrides?: Partial<AgentSession>,
+	// Mock overrides: partial object shapes (e.g. sessionManager, state) are
+	// intentionally not checked against the real types — the assembly below
+	// casts the whole mock anyway.
+	overrides?: Record<string, unknown>,
 ): AgentSession {
 	const session = {
 		currentPrimaryAgent,
@@ -121,13 +125,52 @@ describe("FooterComponent border title sync", () => {
 		expect(pathDisplay).toContain("coding");
 
 		const modelDisplay = footer.getModelEffortDisplay();
-		// Provider should appear before model name in getModelEffortDisplay
-		expect(modelDisplay).toContain("(test)");
-		expect(modelDisplay).toContain("deepseek-v4-flash");
+		// Provider slash prefix should appear before model name in getModelEffortDisplay
+		expect(stripAnsi(modelDisplay)).toContain("test/deepseek-v4-flash");
+	});
 
-		// Verify provider is before model name
-		const providerPos = modelDisplay.indexOf("(test)");
-		const modelPos = modelDisplay.indexOf("deepseek-v4-flash");
-		expect(providerPos).toBeLessThan(modelPos);
+	it("renders the session name on the right side (model display), not the path", () => {
+		const session = createSession("agent-a", "test-model", {
+			sessionManager: {
+				getCwd: () => "/tmp/project",
+				getSessionName: () => "Dev Session",
+				getEntries: () => [],
+			},
+		});
+		const footer = new FooterComponent(session, createFooterData(1));
+
+		expect(footer.getPathDisplay()).not.toContain("Dev Session");
+		expect(footer.getModelEffortDisplay()).toContain("Dev Session");
+	});
+
+	it("drops the provider prefix when only a single provider is configured", () => {
+		const session = createSession("agent-a", "deepseek-v4-flash", {
+			state: {
+				model: { id: "deepseek-v4-flash", provider: "deepseek", contextWindow: 200_000, reasoning: false },
+				thinkingLevel: "off",
+			},
+		});
+
+		const multiple = new FooterComponent(session, createFooterData(2));
+		expect(stripAnsi(multiple.getModelEffortDisplay())).toContain("deepseek/deepseek-v4-flash");
+
+		const single = new FooterComponent(session, createFooterData(1));
+		expect(stripAnsi(single.getModelEffortDisplay())).not.toContain("deepseek/");
+	});
+
+	it("renders the thinking level in parens with the editor border color", () => {
+		const session = createSession("agent-a", "test-model", {
+			state: {
+				model: { id: "test-model", provider: "test", contextWindow: 200_000, reasoning: true },
+				thinkingLevel: "max",
+			},
+		});
+		const footer = new FooterComponent(session, createFooterData(1));
+
+		const display = footer.getModelEffortDisplay();
+		expect(stripAnsi(display)).toContain("(max)");
+		// Level text carries the same color as the editor border line for that level
+		expect(display).toContain(theme.getThinkingBorderColor("max")("max"));
+		expect(stripAnsi(display)).not.toContain("·");
 	});
 });
