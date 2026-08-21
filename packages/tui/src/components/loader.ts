@@ -24,6 +24,7 @@ export class Loader extends Text {
 	private spinnerColorFn: (str: string) => string;
 	private messageColorFn: (str: string) => string;
 	private message: string = "Loading...";
+	private suffixProvider: (() => string) | undefined = undefined;
 
 	constructor(
 		ui: TUI,
@@ -61,6 +62,11 @@ export class Loader extends Text {
 		this.updateDisplay();
 	}
 
+	setSuffixProvider(provider?: () => string): void {
+		this.suffixProvider = provider;
+		this.updateDisplay();
+	}
+
 	setIndicator(indicator?: LoaderIndicatorOptions): void {
 		this.renderIndicatorVerbatim = indicator !== undefined;
 		this.frames = indicator?.frames !== undefined ? [...indicator.frames] : [...DEFAULT_FRAMES];
@@ -84,7 +90,8 @@ export class Loader extends Text {
 		const frame = this.frames[this.currentFrame] ?? "";
 		const renderedFrame = this.renderIndicatorVerbatim ? frame : this.spinnerColorFn(frame);
 		const indicator = frame.length > 0 ? `${renderedFrame} ` : "";
-		this.setText(`${indicator}${this.messageColorFn(this.message)}`);
+		const suffix = this.suffixProvider ? this.suffixProvider() : "";
+		this.setText(`${indicator}${this.messageColorFn(this.message)}${suffix}`);
 		if (this.ui) {
 			this.ui.requestRender();
 		}

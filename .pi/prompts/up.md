@@ -12,7 +12,7 @@ argument-hint: "<version> e.g. v0.11.1"
 
 ## 执行步骤
 
-全部在 dev 上完成步骤 1-6，然后 merge 到 main：
+全部在 dev 上完成步骤 1-6，然后以 PR 合入 main：
 
 ### 1. 升级版本号 + 同步包间依赖 + 更新 lockfile
 
@@ -55,36 +55,38 @@ git add package.json package-lock.json packages/*/package.json packages/coding-a
 PI_ALLOW_LOCKFILE_CHANGE=1 git commit -m "chore: bump version to <VER>"
 ```
 
-### 7. 切到 main，merge dev
+### 7. 推送 dev 并创建 PR dev → main
 
 ```bash
-git checkout main
-git merge dev --no-ff -m "release v<VER>: <变更摘要>"
+git push -u origin dev
+gh pr create --base main --head dev --title "release v<VER>: <变更摘要>" --body "版本升级，见 CHANGELOG"
 ```
 
-### 8. 在 main 上打 tag
+- main 为 GitHub 保护分支，只能 PR 合并，**禁止直接 `git push origin main`**
+- 合并方式：**merge commit**（--no-ff 语义），不要 squash/rebase
+- 门禁：至少 1 个 review 通过 + CI 全绿，仅维护人可合并
+- GitHub 上选择「Create a merge commit」，或 `gh pr merge <PR> --merge`
+
+### 8. 合并后在 main 合并 commit 上打 tag 并 push（触发发布）
+
+push tag 是触发 CI/CD 发布的关键动作，两种方式任选：
 
 ```bash
-git tag v<VER>
-```
-
-### 9. push main + tag
-
-push tag 是触发 CI/CD 发布的关键动作：
-
-```bash
-git push origin main
+# 方式一：不切分支，直接标记远端 main 合并 commit
+git fetch origin main
+git tag v<VER> origin/main
 git push origin v<VER>
+
+# 方式二：本地 pull main 后打 tag，再切回 dev
+git checkout main && git pull origin main && git tag v<VER> && git push origin v<VER> && git checkout dev
 ```
 
-### 10. 切回 dev
-
-```bash
-git checkout dev
-```
+在 main 合并 commit 上打 tag，不在 dev 上打 tag；tag 推送不受分支保护（除非另设 tag 保护）。
 
 ## 注意事项
 
 - 禁止使用 `scripts/release.mjs`
+- main 是 GitHub 保护分支：只能 PR 合并（merge commit + review + CI），**禁止直接 `git push origin main`**
 - push tag 后 CI/CD 自动构建二进制、创建 Release、发布 npm，无需手动操作
 - 每一步执行后检查输出是否成功，失败则停止并报告
+- 版本 tag 只打 main 合并 commit（`git tag v<VER> origin/main` 或本地 pull main 后打），不在 dev 上打 tag

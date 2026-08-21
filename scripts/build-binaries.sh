@@ -156,6 +156,7 @@ for platform in "${PLATFORMS[@]}"; do
 	cp -r docs "$OUTPUT_DIR/$platform/"
 	cp -r examples "$OUTPUT_DIR/$platform/"
 	cp -r dist-assets/primary-agents "$OUTPUT_DIR/$platform/"
+	cp -r dist/skills "$OUTPUT_DIR/$platform/"
 	cp dist-assets/install.sh "$OUTPUT_DIR/$platform/"
 
 	case "$platform" in
