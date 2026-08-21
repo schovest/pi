@@ -4,6 +4,7 @@
 
 ### Added
 
+- Working 状态行动态显示本提问累计输出 tokens（估算，`↓` 缩写）与已耗时（`mm:ss`），每秒刷新，每次 `agent_start` 归零
 - Working 行动态 token 计数器纯函数模块 `working-token-stats`（`accumulateBurst`/`formatElapsedTime`/`formatWorkingTokenSuffix`）+ `formatTokenCount` 从 footer 私有函数共享化（footer 行为不变）
 
 ### Fixed

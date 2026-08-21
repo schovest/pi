@@ -117,7 +117,6 @@ import { checkScriptSelfUpdateSupported, runScriptSelfUpdate } from "../../utils
 import { killTrackedDetachedChildren } from "../../utils/shell.ts";
 import { ensureTool } from "../../utils/tools-manager.ts";
 import { getLatestPiRelease, isNewerPackageVersion } from "../../utils/version-check.ts";
-
 import { AgentSelectorComponent } from "./components/agent-selector.ts";
 import { ArminComponent } from "./components/armin.ts";
 import { AssistantMessageComponent } from "./components/assistant-message.ts";
@@ -171,6 +170,7 @@ import {
 	type ThemeColor,
 	theme,
 } from "./theme/theme.ts";
+import { accumulateBurst, formatWorkingTokenSuffix } from "./working-token-stats.ts";
 
 /** Interface for components that can be expanded/collapsed */
 interface Expandable {
@@ -335,6 +335,14 @@ export class InteractiveMode {
 	private onInputCallback?: (text: string) => void;
 	private pendingUserInputs: string[] = [];
 	private loadingAnimation: Loader | undefined = undefined;
+	/** 本提问累计输出 tokens（估算），Working 行动态展示用；agent_start 时清零。 */
+	private runOutputTokens = 0;
+	/** 本提问起始时间戳（performance.now()），agent_start 时起表。 */
+	private runStartTime = 0;
+	/** Working suffix 每秒节流：上次刷新时刻。 */
+	private lastSuffixRefresh = 0;
+	/** Working suffix 缓存文本。 */
+	private lastSuffixText = "";
 	private workingMessage: string | undefined = undefined;
 	private workingVisible = true;
 	private workingIndicatorOptions: LoaderIndicatorOptions | undefined = undefined;
@@ -1839,13 +1847,36 @@ export class InteractiveMode {
 	}
 
 	private createWorkingLoader(): Loader {
-		return new Loader(
+		const loader = new Loader(
 			this.ui,
 			(spinner) => theme.fg("accent", spinner),
 			(text) => theme.fg("muted", text),
 			this.getWorkingLoaderMessage(),
 			this.workingIndicatorOptions,
 		);
+		loader.setSuffixProvider(this.getWorkingSuffix.bind(this));
+		return loader;
+	}
+
+	/** Working 行动态 suffix：每秒刷新一次，显示本提问累计输出 tokens（估算）与已耗时。 */
+	private getWorkingSuffix(): string {
+		const now = performance.now();
+		if (now - this.lastSuffixRefresh < 1000) {
+			return this.lastSuffixText;
+		}
+		this.lastSuffixRefresh = now;
+		const elapsedMs = this.runStartTime > 0 ? now - this.runStartTime : 0;
+		this.lastSuffixText = theme.fg(
+			"muted",
+			formatWorkingTokenSuffix(
+				{
+					runOutputTokens: this.runOutputTokens,
+					partialMessage: this.session.state.streamingMessage,
+				},
+				elapsedMs,
+			),
+		);
+		return this.lastSuffixText;
 	}
 
 	private stopWorkingLoader(): void {
@@ -3368,6 +3399,10 @@ export class InteractiveMode {
 		switch (event.type) {
 			case "agent_start":
 				this.pendingTools.clear();
+				this.runOutputTokens = 0;
+				this.runStartTime = performance.now();
+				this.lastSuffixRefresh = 0;
+				this.lastSuffixText = "";
 				if (this.settingsManager.getShowTerminalProgress()) {
 					this.ui.terminal.setProgress(true);
 				}
@@ -3468,6 +3503,9 @@ export class InteractiveMode {
 
 			case "message_end":
 				if (event.message.role === "user") break;
+				if (event.message.role === "assistant") {
+					this.runOutputTokens = accumulateBurst(this.runOutputTokens, event.message);
+				}
 				if (this.streamingComponent && event.message.role === "assistant") {
 					this.streamingMessage = event.message;
 					let errorMessage: string | undefined;
