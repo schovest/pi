@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.14.2] - 2026-08-21
+
 ### Added
 
 - editor 上边框标题改为 powerlevel10k 风格面包屑布局：`Π ⟩ agent ⟩ 📁path On branch`（“⟩” 分隔符；emoji/plain 两种风格统一；路径与 `On branch` 同段）
