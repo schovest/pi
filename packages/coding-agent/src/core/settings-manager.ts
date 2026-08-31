@@ -766,6 +766,13 @@ export class SettingsManager {
 		return sessionDir ? normalizePath(sessionDir) : sessionDir;
 	}
 
+	setSessionDir(dir: string | undefined): void {
+		const trimmed = dir?.trim();
+		this.globalSettings.sessionDir = trimmed ? trimmed : undefined;
+		this.markModified("sessionDir");
+		this.save();
+	}
+
 	getDefaultProvider(): string | undefined {
 		return this.settings.defaultProvider;
 	}
@@ -840,6 +847,18 @@ export class SettingsManager {
 		this.save();
 	}
 
+	getExternalEditorSetting(): string | undefined {
+		const configuredEditor = this.settings.externalEditor;
+		return typeof configuredEditor === "string" && configuredEditor.trim() !== "" ? configuredEditor : undefined;
+	}
+
+	setExternalEditor(command: string | undefined): void {
+		const trimmed = command?.trim();
+		this.globalSettings.externalEditor = trimmed ? trimmed : undefined;
+		this.markModified("externalEditor");
+		this.save();
+	}
+
 	getExternalEditorCommand(): string | undefined {
 		const configuredEditor = this.settings.externalEditor;
 		if (typeof configuredEditor === "string" && configuredEditor.trim() !== "") {
@@ -866,7 +885,7 @@ export class SettingsManager {
 		return this.settings.defaultThinkingLevel;
 	}
 
-	setDefaultThinkingLevel(level: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"): void {
+	setDefaultThinkingLevel(level: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | undefined): void {
 		this.globalSettings.defaultThinkingLevel = level;
 		this.markModified("defaultThinkingLevel");
 		this.save();
@@ -903,6 +922,30 @@ export class SettingsManager {
 		return this.settings.compaction?.keepRecentTokens ?? 20000;
 	}
 
+	setCompactionReserveTokens(tokens: number): void {
+		if (!Number.isFinite(tokens) || tokens <= 0) {
+			throw new Error(`Invalid compaction.reserveTokens setting: ${String(tokens)}`);
+		}
+		if (!this.globalSettings.compaction) {
+			this.globalSettings.compaction = {};
+		}
+		this.globalSettings.compaction.reserveTokens = Math.floor(tokens);
+		this.markModified("compaction", "reserveTokens");
+		this.save();
+	}
+
+	setCompactionKeepRecentTokens(tokens: number): void {
+		if (!Number.isFinite(tokens) || tokens <= 0) {
+			throw new Error(`Invalid compaction.keepRecentTokens setting: ${String(tokens)}`);
+		}
+		if (!this.globalSettings.compaction) {
+			this.globalSettings.compaction = {};
+		}
+		this.globalSettings.compaction.keepRecentTokens = Math.floor(tokens);
+		this.markModified("compaction", "keepRecentTokens");
+		this.save();
+	}
+
 	getCompactionSettings(): { enabled: boolean; reserveTokens: number; keepRecentTokens: number } {
 		return {
 			enabled: this.getCompactionEnabled(),
@@ -920,6 +963,27 @@ export class SettingsManager {
 
 	getBranchSummarySkipPrompt(): boolean {
 		return this.settings.branchSummary?.skipPrompt ?? false;
+	}
+
+	setBranchSummaryReserveTokens(tokens: number): void {
+		if (!Number.isFinite(tokens) || tokens <= 0) {
+			throw new Error(`Invalid branchSummary.reserveTokens setting: ${String(tokens)}`);
+		}
+		if (!this.globalSettings.branchSummary) {
+			this.globalSettings.branchSummary = {};
+		}
+		this.globalSettings.branchSummary.reserveTokens = Math.floor(tokens);
+		this.markModified("branchSummary", "reserveTokens");
+		this.save();
+	}
+
+	setBranchSummarySkipPrompt(skip: boolean): void {
+		if (!this.globalSettings.branchSummary) {
+			this.globalSettings.branchSummary = {};
+		}
+		this.globalSettings.branchSummary.skipPrompt = skip;
+		this.markModified("branchSummary", "skipPrompt");
+		this.save();
 	}
 
 	getRetryEnabled(): boolean {
@@ -942,6 +1006,42 @@ export class SettingsManager {
 			baseDelayMs: this.settings.retry?.baseDelayMs ?? 2000,
 			maxRetryDelayMs: this.settings.retry?.maxRetryDelayMs ?? 30000,
 		};
+	}
+
+	setRetryMaxRetries(maxRetries: number): void {
+		if (!Number.isFinite(maxRetries) || maxRetries < 0) {
+			throw new Error(`Invalid retry.maxRetries setting: ${String(maxRetries)}`);
+		}
+		if (!this.globalSettings.retry) {
+			this.globalSettings.retry = {};
+		}
+		this.globalSettings.retry.maxRetries = Math.floor(maxRetries);
+		this.markModified("retry", "maxRetries");
+		this.save();
+	}
+
+	setRetryBaseDelayMs(delayMs: number): void {
+		if (!Number.isFinite(delayMs) || delayMs < 0) {
+			throw new Error(`Invalid retry.baseDelayMs setting: ${String(delayMs)}`);
+		}
+		if (!this.globalSettings.retry) {
+			this.globalSettings.retry = {};
+		}
+		this.globalSettings.retry.baseDelayMs = Math.floor(delayMs);
+		this.markModified("retry", "baseDelayMs");
+		this.save();
+	}
+
+	setRetryMaxRetryDelayMs(delayMs: number): void {
+		if (!Number.isFinite(delayMs) || delayMs < 0) {
+			throw new Error(`Invalid retry.maxRetryDelayMs setting: ${String(delayMs)}`);
+		}
+		if (!this.globalSettings.retry) {
+			this.globalSettings.retry = {};
+		}
+		this.globalSettings.retry.maxRetryDelayMs = Math.floor(delayMs);
+		this.markModified("retry", "maxRetryDelayMs");
+		this.save();
 	}
 
 	getHttpIdleTimeoutMs(): number {
@@ -967,6 +1067,24 @@ export class SettingsManager {
 
 	getWebSocketConnectTimeoutMs(): number | undefined {
 		return parseTimeoutSetting(this.settings.websocketConnectTimeoutMs, "websocketConnectTimeoutMs");
+	}
+
+	setWebSocketConnectTimeoutMs(timeoutMs: number | undefined): void {
+		this.globalSettings.websocketConnectTimeoutMs = parseTimeoutSetting(timeoutMs, "websocketConnectTimeoutMs");
+		this.markModified("websocketConnectTimeoutMs");
+		this.save();
+	}
+
+	getHttpProxy(): string | undefined {
+		const proxy = this.settings.httpProxy;
+		return typeof proxy === "string" && proxy.trim() !== "" ? proxy : undefined;
+	}
+
+	setHttpProxy(proxy: string | undefined): void {
+		const trimmed = proxy?.trim();
+		this.globalSettings.httpProxy = trimmed ? trimmed : undefined;
+		this.markModified("httpProxy");
+		this.save();
 	}
 
 	getHideThinkingBlock(): boolean {
@@ -1026,6 +1144,15 @@ export class SettingsManager {
 
 	getBashBackgroundTimeout(): number | undefined {
 		return this.settings.bashBackgroundTimeout;
+	}
+
+	setBashBackgroundTimeout(seconds: number | undefined): void {
+		if (seconds !== undefined && (!Number.isFinite(seconds) || seconds < 0)) {
+			throw new Error(`Invalid bashBackgroundTimeout setting: ${String(seconds)}`);
+		}
+		this.globalSettings.bashBackgroundTimeout = seconds === undefined ? undefined : Math.floor(seconds);
+		this.markModified("bashBackgroundTimeout");
+		this.save();
 	}
 
 	setShellCommandPrefix(prefix: string | undefined): void {
@@ -1252,6 +1379,21 @@ export class SettingsManager {
 		return this.settings.thinkingBudgets;
 	}
 
+	setThinkingBudgets(budgets: ThinkingBudgetsSettings | undefined): void {
+		if (budgets === undefined) {
+			this.globalSettings.thinkingBudgets = undefined;
+		} else {
+			for (const value of Object.values(budgets)) {
+				if (value !== undefined && (!Number.isFinite(value) || value <= 0)) {
+					throw new Error(`Invalid thinkingBudgets setting: ${String(value)}`);
+				}
+			}
+			this.globalSettings.thinkingBudgets = budgets;
+		}
+		this.markModified("thinkingBudgets");
+		this.save();
+	}
+
 	getShowImages(): boolean {
 		return this.settings.terminal?.showImages ?? true;
 	}
@@ -1412,6 +1554,15 @@ export class SettingsManager {
 
 	getCodeBlockIndent(): string {
 		return this.settings.markdown?.codeBlockIndent ?? "  ";
+	}
+
+	setCodeBlockIndent(indent: string | undefined): void {
+		if (!this.globalSettings.markdown) {
+			this.globalSettings.markdown = {};
+		}
+		this.globalSettings.markdown.codeBlockIndent = indent;
+		this.markModified("markdown", "codeBlockIndent");
+		this.save();
 	}
 
 	getWarnings(): WarningSettings {

@@ -4896,6 +4896,8 @@ export class InteractiveMode {
 					httpIdleTimeoutMs: this.settingsManager.getHttpIdleTimeoutMs(),
 					thinkingLevel: this.session.thinkingLevel,
 					availableThinkingLevels: this.session.getAvailableThinkingLevels(),
+					defaultThinkingLevel: this.settingsManager.getDefaultThinkingLevel(),
+					thinkingBudgets: this.settingsManager.getThinkingBudgets() ?? {},
 					currentTheme: this.settingsManager.getTheme() || "dark",
 					availableThemes: getAvailableThemes(),
 					hideThinkingBlock: this.hideThinkingBlock,
@@ -4914,6 +4916,21 @@ export class InteractiveMode {
 					warnings: this.settingsManager.getWarnings(),
 					gitSnapshotMode: this.settingsManager.getGitSnapshotMode(),
 					gitSnapshotMaxCount: this.settingsManager.getGitSnapshotMaxCount(),
+					showCacheMissNotices: this.settingsManager.getShowCacheMissNotices(),
+					outputPad: this.settingsManager.getOutputPad(),
+					codeBlockIndent: this.settingsManager.getCodeBlockIndent(),
+					compaction: this.settingsManager.getCompactionSettings(),
+					branchSummary: this.settingsManager.getBranchSummarySettings(),
+					retry: this.settingsManager.getRetrySettings(),
+					externalEditor: this.settingsManager.getExternalEditorSetting(),
+					sessionDir: this.settingsManager.getSessionDir(),
+					httpProxy: this.settingsManager.getHttpProxy(),
+					websocketConnectTimeoutMs: this.settingsManager.getWebSocketConnectTimeoutMs(),
+					shellPath: this.settingsManager.getShellPath(),
+					shellCommandPrefix: this.settingsManager.getShellCommandPrefix(),
+					npmCommand: this.settingsManager.getNpmCommand(),
+					bashBackgroundTimeout: this.settingsManager.getBashBackgroundTimeout(),
+					enableAnalytics: this.settingsManager.getEnableAnalytics(),
 				},
 				{
 					onAutoCompactChange: (enabled) => {
@@ -4969,6 +4986,12 @@ export class InteractiveMode {
 						this.footer.invalidate();
 						this.updateEditorVisualState();
 					},
+					onDefaultThinkingLevelChange: (level) => {
+						this.settingsManager.setDefaultThinkingLevel(level);
+					},
+					onThinkingBudgetsChange: (budgets) => {
+						this.settingsManager.setThinkingBudgets(budgets);
+					},
 					onThemeChange: (themeName) => {
 						const result = setTheme(themeName, true);
 						this.settingsManager.setTheme(themeName);
@@ -5000,6 +5023,9 @@ export class InteractiveMode {
 					},
 					onEnableInstallTelemetryChange: (enabled) => {
 						this.settingsManager.setEnableInstallTelemetry(enabled);
+					},
+					onEnableAnalyticsChange: (enabled) => {
+						this.settingsManager.setEnableAnalytics(enabled);
 					},
 					onQuietStartupChange: (enabled) => {
 						this.settingsManager.setQuietStartup(enabled);
@@ -5050,6 +5076,66 @@ export class InteractiveMode {
 					},
 					onGitSnapshotMaxCountChange: (count) => {
 						this.settingsManager.setGitSnapshotMaxCount(count);
+					},
+					onShowCacheMissNoticesChange: (show) => {
+						this.settingsManager.setShowCacheMissNotices(show);
+					},
+					onOutputPadChange: (padding) => {
+						this.settingsManager.setOutputPad(padding);
+					},
+					onCodeBlockIndentChange: (indent) => {
+						this.settingsManager.setCodeBlockIndent(indent);
+					},
+					onCompactionEnabledChange: (enabled) => {
+						this.settingsManager.setCompactionEnabled(enabled);
+					},
+					onCompactionReserveTokensChange: (tokens) => {
+						this.settingsManager.setCompactionReserveTokens(tokens);
+					},
+					onCompactionKeepRecentTokensChange: (tokens) => {
+						this.settingsManager.setCompactionKeepRecentTokens(tokens);
+					},
+					onBranchSummaryReserveTokensChange: (tokens) => {
+						this.settingsManager.setBranchSummaryReserveTokens(tokens);
+					},
+					onBranchSummarySkipPromptChange: (skip) => {
+						this.settingsManager.setBranchSummarySkipPrompt(skip);
+					},
+					onRetryEnabledChange: (enabled) => {
+						this.settingsManager.setRetryEnabled(enabled);
+					},
+					onRetryMaxRetriesChange: (maxRetries) => {
+						this.settingsManager.setRetryMaxRetries(maxRetries);
+					},
+					onRetryBaseDelayMsChange: (delayMs) => {
+						this.settingsManager.setRetryBaseDelayMs(delayMs);
+					},
+					onRetryMaxRetryDelayMsChange: (delayMs) => {
+						this.settingsManager.setRetryMaxRetryDelayMs(delayMs);
+					},
+					onExternalEditorChange: (command) => {
+						this.settingsManager.setExternalEditor(command);
+					},
+					onSessionDirChange: (dir) => {
+						this.settingsManager.setSessionDir(dir);
+					},
+					onHttpProxyChange: (proxy) => {
+						this.settingsManager.setHttpProxy(proxy);
+					},
+					onWebSocketConnectTimeoutMsChange: (timeoutMs) => {
+						this.settingsManager.setWebSocketConnectTimeoutMs(timeoutMs);
+					},
+					onShellPathChange: (path) => {
+						this.settingsManager.setShellPath(path);
+					},
+					onShellCommandPrefixChange: (prefix) => {
+						this.settingsManager.setShellCommandPrefix(prefix);
+					},
+					onNpmCommandChange: (command) => {
+						this.settingsManager.setNpmCommand(command);
+					},
+					onBashBackgroundTimeoutChange: (seconds) => {
+						this.settingsManager.setBashBackgroundTimeout(seconds);
 					},
 					onCancel: () => {
 						done();

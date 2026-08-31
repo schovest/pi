@@ -7,7 +7,7 @@ Pi uses JSON settings files with project settings overriding global settings.
 | `~/.pi/agent/settings.json` | Global (all projects) |
 | `.pi/settings.json` | Project (current directory) |
 
-Edit directly or use `/settings` for common options.
+Edit directly or use `/settings` for all behavior settings, organized into categories (General, Chat, Compaction, Retry, Images, Editor, Terminal, Network, Shell, Snapshots, Skills, Warnings). Package/plugin/resource paths remain managed by `/packages`, `/plugins`, and `pi config`.
 
 ## Project Trust
 
