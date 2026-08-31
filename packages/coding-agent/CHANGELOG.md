@@ -1,6 +1,16 @@
 # Changelog
 
-## [Unreleased]
+## [0.14.3] - 2026-08-31
+
+### Changed
+
+- `/settings` 重构为分类分组视图：设置项按 General/Chat/Compaction/Retry/Images/Editor/Terminal/Network/Shell/Snapshots/Skills/Warnings 12 类组织，分类列表 + 类内搜索，Esc 逐级返回；原平铺的全部设置项保留并重新归类
+- `/settings` 补齐此前仅能编辑 settings.json 的 17 项设置：defaultThinkingLevel、thinkingBudgets、showCacheMissNotices、outputPad、markdown.codeBlockIndent、compaction（enabled/reserveTokens/keepRecentTokens）、branchSummary（reserveTokens/skipPrompt）、retry（enabled/maxRetries/baseDelayMs/maxRetryDelayMs）、externalEditor、sessionDir、httpProxy、websocketConnectTimeoutMs、shellPath、shellCommandPrefix、npmCommand、bashBackgroundTimeout、enableAnalytics；自由文本/数字项通过新增文本输入子菜单编辑（数字带校验，空输入恢复默认），需重启生效的项在描述中标注
+
+### Added
+
+- `pi list` 列出已安装包时额外显示已安装版本号（从安装目录 `package.json` 读取，无版本信息的包不显示）
+- 恢复 `pi update --self` 作为自更新入口（与 `pi self-update` 等价，不涉及项目配置；`--self` 与 `--extensions`/`--extension`/位置参数互斥）
 
 ## [0.14.2] - 2026-08-21
 

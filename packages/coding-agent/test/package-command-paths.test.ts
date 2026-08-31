@@ -521,4 +521,81 @@ if(args.includes("install")) process.exit(23);
 			logSpy.mockRestore();
 		}
 	});
+
+	it("shows installed versions in list output", async () => {
+		writeFileSync(join(packageDir, "package.json"), JSON.stringify({ name: "local-package", version: "1.2.3" }));
+		const noVersionDir = join(tempDir, "no-version-package");
+		mkdirSync(noVersionDir, { recursive: true });
+		const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+		try {
+			await main(["install", packageDir]);
+			await main(["install", noVersionDir]);
+			await main(["list"]);
+
+			const stdout = logSpy.mock.calls.map(([message]) => String(message)).join("\n");
+			expect(stdout).toContain("v1.2.3");
+			expect(stdout).not.toMatch(/no-version-package\s+v/);
+			expect(process.exitCode).toBeUndefined();
+		} finally {
+			logSpy.mockRestore();
+		}
+	});
+
+	it("runs self-update via pi update --self", async () => {
+		const globalPrefix = join(tempDir, "global-prefix");
+		const selfPackageDir = join(globalPrefix, "lib", "node_modules", "@schovest", "pi-coding-agent");
+		const fakeNpmPath = join(tempDir, "fake-npm.cjs");
+		const recordPath = join(tempDir, "self-update.json");
+		mkdirSync(selfPackageDir, { recursive: true });
+		writeFileSync(
+			fakeNpmPath,
+			`const fs=require("node:fs"),path=require("node:path"),args=process.argv.slice(2),prefix=args[args.indexOf("--prefix")+1];
+if(args.includes("root")) console.log(path.join(prefix,"lib","node_modules"));
+else fs.writeFileSync(${JSON.stringify(recordPath)},JSON.stringify(args));
+`,
+		);
+		writeFileSync(
+			join(agentDir, "settings.json"),
+			JSON.stringify({ npmCommand: [originalExecPath, fakeNpmPath, "--prefix", globalPrefix] }, null, 2),
+		);
+		process.env.PI_PACKAGE_DIR = selfPackageDir;
+		Object.defineProperty(process, "execPath", {
+			value: join(selfPackageDir, "dist", "cli.js"),
+			configurable: true,
+		});
+		const fetchMock = vi.fn(async () => Response.json({ tag_name: `v${getNewerPatchVersion()}` }));
+		vi.stubGlobal("fetch", fetchMock);
+
+		const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+		try {
+			await expect(main(["update", "--self"])).resolves.toBeUndefined();
+
+			expect(process.exitCode).toBeUndefined();
+			expect(errorSpy).not.toHaveBeenCalled();
+			const recordedArgs = JSON.parse(readFileSync(recordPath, "utf-8")) as string[];
+			expect(recordedArgs).toContain(globalPrefix);
+			expect(recordedArgs).toContain(PACKAGE_NAME);
+			expect(recordedArgs).not.toContain(projectDir);
+		} finally {
+			logSpy.mockRestore();
+			errorSpy.mockRestore();
+		}
+	});
+
+	it("rejects combining update --self with --extensions", async () => {
+		const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+		try {
+			await expect(main(["update", "--self", "--extensions"])).resolves.toBeUndefined();
+
+			const stderr = errorSpy.mock.calls.map(([message]) => String(message)).join("\n");
+			expect(stderr).toContain("--extensions cannot be combined with --self");
+			expect(process.exitCode).toBe(1);
+		} finally {
+			errorSpy.mockRestore();
+		}
+	});
 });
