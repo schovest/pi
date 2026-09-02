@@ -64,20 +64,20 @@ describe("SessionManager pruneOrphanedEntries", () => {
 		expect(labelEntries.some((l) => l.targetId === user2Id)).toBe(false);
 	});
 
-	it("preserves subagent entries regardless of leaf position", () => {
+	it("prunes legacy subagent trees (removed feature) as orphans", () => {
 		const session = SessionManager.inMemory();
 
 		session.appendMessage(userMsg("msg1"));
-		session.appendMessage(assistantMsg("resp1"));
+		const mainLeafId = session.appendMessage(assistantMsg("resp1"));
 
-		// Add a subagent_run entry with a child message - not on the main path
+		// Legacy subagent_run entry with a child message - not on the main path
 		const subagentRunEntry = {
-			type: "subagent_run" as const,
+			type: "subagent_run" as string,
 			id: "sub_run_1",
 			parentId: null,
 			timestamp: new Date().toISOString(),
 			subagentId: "test-agent",
-			status: "completed" as const,
+			status: "completed",
 		};
 		// Manually push to fileEntries since appendMessage only does messages
 		(session as any).fileEntries.push(subagentRunEntry);
@@ -93,17 +93,15 @@ describe("SessionManager pruneOrphanedEntries", () => {
 		(session as any).fileEntries.push(subChild);
 		(session as any).byId.set("sub_msg_1", subChild);
 
-		// Prune to user1 (which keeps only root->user1)
-		// The leaf is now on the main path but subagent is preserved anyway
-		const entries = session.getEntries();
-		const msgEntries = entries.filter((e) => e.type === "message");
-		const lastMainMsg = msgEntries[msgEntries.length - 1];
-		session.pruneOrphanedEntries(lastMainMsg!.id);
+		// Prune to the main-path leaf (the legacy child message is also type
+		// "message", so pick the main chain leaf explicitly)
+		session.pruneOrphanedEntries(mainLeafId);
 
 		const finalEntries = session.getEntries();
 		const ids = new Set(finalEntries.map((e) => e.id));
-		expect(ids.has("sub_run_1")).toBe(true);
-		expect(ids.has("sub_msg_1")).toBe(true);
+		// Removed-feature legacy trees are no longer preserved
+		expect(ids.has("sub_run_1")).toBe(false);
+		expect(ids.has("sub_msg_1")).toBe(false);
 	});
 
 	it("returns empty set when all entries are on path", () => {

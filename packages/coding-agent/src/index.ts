@@ -274,22 +274,6 @@ export {
 	type SkillFrontmatter,
 } from "./core/skills.ts";
 export { createSyntheticSourceInfo } from "./core/source-info.ts";
-export {
-	createSubagentToolDefinition,
-	discoverSubagents,
-	runSubagents,
-	type SubagentDefinition,
-	type SubagentDefinitionScope,
-	type SubagentRunEvent,
-	type SubagentRunMode,
-	type SubagentRunOptions,
-	type SubagentRunRequest,
-	type SubagentRunResult,
-	type SubagentRunStatus,
-	type SubagentScope,
-	type SubagentTask,
-	type SubagentTaskResult,
-} from "./core/subagents/index.ts";
 // Edit diff helpers
 export { type EditDiffResult, generateDiffString, generateUnifiedPatch } from "./core/tools/edit-diff.ts";
 // Tools

@@ -11,14 +11,8 @@ type PluginsCommandContext = {
 	showPluginsManager: () => void;
 };
 
-type SubagentsCommandContext = {
-	editor: { setText: (text: string) => void };
-	showSubagentsPanel: () => void;
-};
-
 type InteractiveModePrototype = {
 	handlePluginsCommand(this: PluginsCommandContext): void;
-	handleSubagentsCommand(this: SubagentsCommandContext): void;
 };
 
 const interactiveModePrototype = InteractiveMode.prototype as unknown as InteractiveModePrototype;
@@ -32,12 +26,9 @@ describe("InteractiveMode /claude-plugin", () => {
 		expect(BUILTIN_SLASH_COMMANDS.some((command) => command.name === "claude-plugin")).toBe(true);
 	});
 
-	it("registers /running-subagents as a built-in slash command", () => {
-		expect(BUILTIN_SLASH_COMMANDS.some((command) => command.name === "running-subagents")).toBe(true);
-	});
-
-	it("registers /subagents as a built-in slash command", () => {
-		expect(BUILTIN_SLASH_COMMANDS.some((command) => command.name === "subagents")).toBe(true);
+	it("no longer registers removed subagent slash commands", () => {
+		expect(BUILTIN_SLASH_COMMANDS.some((command) => command.name === "subagents")).toBe(false);
+		expect(BUILTIN_SLASH_COMMANDS.some((command) => command.name === "running-subagents")).toBe(false);
 	});
 
 	it("opens the plugin manager and clears the editor", () => {
@@ -51,19 +42,6 @@ describe("InteractiveMode /claude-plugin", () => {
 
 		expect(setText).toHaveBeenCalledWith("");
 		expect(showPluginsManager).toHaveBeenCalledTimes(1);
-	});
-
-	it("opens the subagents panel and clears the editor", () => {
-		const setText = vi.fn();
-		const showSubagentsPanel = vi.fn();
-
-		interactiveModePrototype.handleSubagentsCommand.call({
-			editor: { setText },
-			showSubagentsPanel,
-		});
-
-		expect(setText).toHaveBeenCalledWith("");
-		expect(showSubagentsPanel).toHaveBeenCalledTimes(1);
 	});
 });
 

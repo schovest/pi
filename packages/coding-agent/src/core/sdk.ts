@@ -40,10 +40,6 @@ export interface CreateAgentSessionOptions {
 	cwd?: string;
 	/** Global config directory. Default: ~/.pi/agent */
 	agentDir?: string;
-
-	/** Register the built-in subagent tool. Default: true. */
-	enableSubagents?: boolean;
-
 	/** Canonical model/auth runtime. Defaults to a runtime using agentDir/auth.json and models.json. */
 	modelRuntime?: ModelRuntime;
 
@@ -389,7 +385,6 @@ export async function createAgentSession(options: CreateAgentSessionOptions = {}
 		excludedToolNames,
 		extensionRunnerRef,
 		agentDir,
-		enableSubagents: options.enableSubagents,
 		sessionStartEvent: options.sessionStartEvent,
 	});
 	const extensionsResult = resourceLoader.getExtensions();

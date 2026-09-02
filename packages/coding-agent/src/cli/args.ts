@@ -258,7 +258,6 @@ ${chalk.bold("Options:")}
   --no-builtin-tools, -nbt       Disable built-in tools by default but keep extension/custom tools enabled
   --tools, -t <tools>            Comma-separated allowlist of tool names to enable
                                  Applies to built-in, extension, and custom tools
-                                 Include "subagent" to allow in-memory subagent delegation
    --exclude-tools, -xt <tools>   Comma-separated denylist of tool names to disable
                                   Applies to built-in, extension, and custom tools
   --thinking <level>             Set thinking level: off, minimal, low, medium, high, xhigh

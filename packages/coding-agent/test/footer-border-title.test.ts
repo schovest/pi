@@ -35,7 +35,6 @@ function createSession(
 			getEntries: () => [],
 		},
 		getContextUsage: () => ({ contextWindow: 200_000, percent: 0 }),
-		getRunningSubagentCount: () => 0,
 		backgroundProcessManager: { getRunningCount: () => 0 },
 		modelRuntime: { isUsingOAuth: () => false },
 		...overrides,

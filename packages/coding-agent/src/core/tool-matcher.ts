@@ -42,7 +42,6 @@ export function resolveActiveTools(
 /**
  * Resolve the active skill set for a PRIMARY agent from glob patterns.
  *
- * Semantics differ from `resolveActiveSkills` (used by subagents):
  * - `undefined` (not configured) → returns `undefined`, meaning "no restriction,
  *   use all loaded skills". The caller should fall back to the full skill list.
  * - `[]` (explicitly empty) → returns `[]`, meaning "no skills at all".
@@ -53,16 +52,5 @@ export function resolveActiveTools(
  */
 export function resolvePrimaryAgentSkills(allSkills: Skill[], patterns: string[] | undefined): Skill[] | undefined {
 	if (patterns === undefined) return undefined;
-	return allSkills.filter((skill) => matchesAnyToolPattern(skill.name, patterns));
-}
-
-/**
- * Resolve the active skill set from a list of glob patterns matched against all available skills.
- *
- * - If `patterns` is undefined or empty, returns an empty array (no skills for subagent).
- * - Otherwise, returns skills whose name matches at least one pattern (using minimatch).
- */
-export function resolveActiveSkills(allSkills: Skill[], patterns: string[] | undefined): Skill[] {
-	if (!patterns || patterns.length === 0) return [];
 	return allSkills.filter((skill) => matchesAnyToolPattern(skill.name, patterns));
 }

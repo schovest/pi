@@ -204,7 +204,7 @@ Pi automatically takes git snapshots before each user prompt to enable the Rever
 }
 ```
 
-### Subagents
+### Primary Agent
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|

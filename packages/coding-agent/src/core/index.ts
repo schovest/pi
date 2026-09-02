@@ -86,19 +86,3 @@ export {
 	unprotectSnapshot,
 } from "./git-snapshot.ts";
 export { createSyntheticSourceInfo } from "./source-info.ts";
-export {
-	createSubagentToolDefinition,
-	discoverSubagents,
-	runSubagents,
-	type SubagentDefinition,
-	type SubagentDefinitionScope,
-	type SubagentRunEvent,
-	type SubagentRunMode,
-	type SubagentRunOptions,
-	type SubagentRunRequest,
-	type SubagentRunResult,
-	type SubagentRunStatus,
-	type SubagentScope,
-	type SubagentTask,
-	type SubagentTaskResult,
-} from "./subagents/index.ts";

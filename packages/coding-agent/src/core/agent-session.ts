@@ -15,14 +15,14 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
-import {
+import type {
 	Agent,
-	type AgentEvent,
-	type AgentMessage,
-	type AgentState,
-	type AgentTool,
-	type PrepareNextTurnContext,
-	type ThinkingLevel,
+	AgentEvent,
+	AgentMessage,
+	AgentState,
+	AgentTool,
+	PrepareNextTurnContext,
+	ThinkingLevel,
 } from "@earendil-works/pi-agent-core";
 import type { RetryCallbacks } from "@earendil-works/pi-ai";
 import type {
@@ -67,7 +67,6 @@ import { exportSessionToHtml, type ToolHtmlRenderer } from "./export-html/index.
 import { createToolHtmlRenderer } from "./export-html/tool-renderer.ts";
 import {
 	type ContextUsage,
-	createExtensionRuntime,
 	type ExtensionCommandContextActions,
 	type ExtensionErrorListener,
 	type ExtensionMode,
@@ -107,22 +106,13 @@ import {
 	getLatestCompactionEntry,
 	isLazyEntry,
 	type SessionHeader,
-	SessionManager,
+	type SessionManager,
 } from "./session-manager.ts";
 import type { SettingsManager } from "./settings-manager.ts";
 import type { Skill } from "./skills.ts";
 import type { SlashCommandInfo } from "./slash-commands.ts";
 import { appendSnapshot, createSnapshotRefId, trimSnapshotsToMax } from "./snapshot-store.ts";
 import { createSyntheticSourceInfo, type SourceInfo } from "./source-info.ts";
-import type {
-	SubagentDefinition,
-	SubagentRunEvent,
-	SubagentRunOptions,
-	SubagentRunRequest,
-	SubagentRunResult,
-	SubagentScope,
-} from "./subagents/index.ts";
-import { createSubagentToolDefinition, discoverSubagents, runSubagents } from "./subagents/index.ts";
 import { type BuildSystemPromptOptions, buildSystemPrompt } from "./system-prompt.ts";
 import { matchesAnyToolPattern, resolveActiveTools, resolvePrimaryAgentSkills } from "./tool-matcher.ts";
 import { type BashOperations, createLocalBashOperations } from "./tools/bash.ts";
@@ -218,7 +208,7 @@ export interface AgentSessionConfig {
 	sessionManager: SessionManager;
 	settingsManager: SettingsManager;
 	cwd: string;
-	/** Global config directory for subagent discovery. */
+	/** Global agent configuration directory. */
 	agentDir?: string;
 	/** Models to cycle through with Ctrl+P (from --models flag) */
 	scopedModels?: Array<{ model: Model<any>; thinkingLevel?: ThinkingLevel }>;
@@ -226,8 +216,6 @@ export interface AgentSessionConfig {
 	resourceLoader: ResourceLoader;
 	/** SDK custom tools registered outside extensions */
 	customTools?: ToolDefinition[];
-	/** Register the built-in subagent tool. Default: true. */
-	enableSubagents?: boolean;
 	/** Model registry for API key resolution and model discovery */
 	modelRuntime: ModelRuntime;
 	/** Initial active built-in tool names. Default: [read, bash, edit, write] */
@@ -247,12 +235,6 @@ export interface AgentSessionConfig {
 	extensionRunnerRef?: { current?: ExtensionRunner };
 	/** Session start event metadata emitted when extensions bind to this runtime. */
 	sessionStartEvent?: SessionStartEvent;
-	/** Override skills for subagent child sessions. When set, used instead of resourceLoader skills. */
-	skillsOverride?: Skill[];
-	/** Create an isolated ExtensionRuntime instead of sharing resourceLoader's runtime. */
-	isolatedExtensionRuntime?: boolean;
-	/** Skip git snapshot in prompt(). Used by subagent child sessions. */
-	skipGitSnapshot?: boolean;
 }
 
 export interface ExtensionBindings {
@@ -362,7 +344,6 @@ export class AgentSession {
 	// Retry state
 	private _retryAbortController: AbortController | undefined = undefined;
 	private _retryAttempt = 0;
-	private _runningSubagents = new Map<string, SubagentRunEvent>();
 
 	// Primary agent state
 	private _currentPrimaryAgent = "code";
@@ -390,8 +371,6 @@ export class AgentSession {
 	private _allowedToolNames?: string[];
 	private _excludedToolNames?: string[];
 	private _baseToolsOverride?: Record<string, AgentTool>;
-	private _skillsOverride?: Skill[];
-	private _isolatedExtensionRuntime: boolean;
 	private _sessionStartEvent: SessionStartEvent;
 	private _extensionUIContext?: ExtensionUIContext;
 	private _extensionMode: ExtensionMode = "print";
@@ -414,7 +393,6 @@ export class AgentSession {
 	private _baseSystemPrompt = "";
 	private _baseSystemPromptOptions!: BuildSystemPromptOptions;
 	private _systemPromptOverride?: string;
-	private _skipGitSnapshot: boolean;
 
 	constructor(config: AgentSessionConfig) {
 		this.agent = config.agent;
@@ -424,19 +402,13 @@ export class AgentSession {
 		this._resourceLoader = config.resourceLoader;
 		this._cwd = config.cwd;
 		this._agentDir = config.agentDir ?? dirname(config.cwd);
-		this._customTools =
-			config.enableSubagents === false
-				? (config.customTools ?? [])
-				: [createSubagentToolDefinition(this), ...(config.customTools ?? [])];
+		this._customTools = config.customTools ?? [];
 		this._modelRuntime = config.modelRuntime;
 		this._extensionRunnerRef = config.extensionRunnerRef;
 		this._initialActiveToolNames = config.initialActiveToolNames;
 		this._allowedToolNames = config.allowedToolNames;
 		this._excludedToolNames = config.excludedToolNames;
 		this._baseToolsOverride = config.baseToolsOverride;
-		this._skillsOverride = config.skillsOverride;
-		this._isolatedExtensionRuntime = config.isolatedExtensionRuntime ?? false;
-		this._skipGitSnapshot = config.skipGitSnapshot ?? false;
 		this._sessionStartEvent = config.sessionStartEvent ?? { type: "session_start", reason: "startup" };
 
 		// Always subscribe to agent events for internal handling
@@ -915,7 +887,7 @@ export class AgentSession {
 		return this._cwd;
 	}
 
-	/** Global agent configuration directory used for user subagent discovery. */
+	/** Global agent configuration directory. */
 	get agentDir(): string {
 		return this._agentDir;
 	}
@@ -1112,77 +1084,6 @@ export class AgentSession {
 		return this._resourceLoader.getPrompts().prompts;
 	}
 
-	/** List configured subagents. Defaults to built-in plus user agents. */
-	async listSubagents(scope: SubagentScope = "user"): Promise<SubagentDefinition[]> {
-		return discoverSubagents({ cwd: this._cwd, agentDir: this._agentDir, scope });
-	}
-
-	/** Run one or more in-memory subagents without spawning child processes. */
-	async runSubagents(request: SubagentRunRequest, options?: SubagentRunOptions): Promise<SubagentRunResult> {
-		return runSubagents(this, request, options);
-	}
-
-	recordSubagentRunEvent(event: SubagentRunEvent): void {
-		const key = `${event.runId}:${event.index}`;
-		if (event.status === "running" || event.status === "pending") {
-			this._runningSubagents.set(key, event);
-		} else {
-			this._runningSubagents.delete(key);
-		}
-	}
-
-	getRunningSubagentCount(): number {
-		return this._runningSubagents.size;
-	}
-
-	/** @internal Create an isolated child session for a subagent task. */
-	createSubagentChildSession(options: {
-		model: Model<any>;
-		thinkingLevel: ThinkingLevel;
-		tools: string[];
-		skills?: Skill[];
-	}): AgentSession {
-		const agent = new Agent({
-			initialState: {
-				systemPrompt: "",
-				model: options.model,
-				thinkingLevel: options.thinkingLevel,
-				tools: [],
-			},
-			convertToLlm: this.agent.convertToLlm,
-			streamFn: this.agent.streamFunction,
-			onPayload: this.agent.onPayload,
-			onResponse: this.agent.onResponse,
-			transformContext: this.agent.transformContext,
-			steeringMode: this.agent.steeringMode,
-			followUpMode: this.agent.followUpMode,
-			transport: this.agent.transport,
-			thinkingBudgets: this.agent.thinkingBudgets,
-			maxRetryDelayMs: this.agent.maxRetryDelayMs,
-			toolExecution: this.agent.toolExecution,
-			sessionId: this.sessionManager.getSessionId(),
-		});
-
-		return new AgentSession({
-			agent,
-			sessionManager: SessionManager.inMemory(),
-			settingsManager: this.settingsManager,
-			cwd: this._cwd,
-			agentDir: this._agentDir,
-			scopedModels: this._scopedModels,
-			resourceLoader: this._resourceLoader,
-			skillsOverride: options.skills,
-			customTools: this._customTools.filter((tool) => tool.name !== "subagent"),
-			modelRuntime: this._modelRuntime,
-			initialActiveToolNames: options.tools,
-			allowedToolNames: options.tools,
-			baseToolsOverride: this._baseToolsOverride,
-			enableSubagents: false,
-			isolatedExtensionRuntime: true,
-			skipGitSnapshot: true,
-		});
-	}
-
 	private _normalizePromptSnippet(text: string | undefined): string | undefined {
 		if (!text) return undefined;
 		const oneLine = text
@@ -1227,7 +1128,7 @@ export class AgentSession {
 		const loaderAppendSystemPrompt = this._resourceLoader.getAppendSystemPrompt();
 		const appendSystemPrompt =
 			loaderAppendSystemPrompt.length > 0 ? loaderAppendSystemPrompt.join("\n\n") : undefined;
-		const loadedSkills = this._skillsOverride ?? this._primaryAgentSkills ?? this._resourceLoader.getSkills().skills;
+		const loadedSkills = this._primaryAgentSkills ?? this._resourceLoader.getSkills().skills;
 		const loadedContextFiles = this._resourceLoader.getAgentsFiles().agentsFiles;
 
 		this._baseSystemPromptOptions = {
@@ -1456,8 +1357,8 @@ export class AgentSession {
 		// Snapshots are stored in a cwd-scoped global index (shared across sessions),
 		// so maxCount limits the total across all sessions in this cwd, not per-session.
 		const maxCount = this.settingsManager.getGitSnapshotMaxCount();
-		// Skip snapshots entirely when maxCount is 0 or session opted out (subagent child sessions)
-		if (!this._skipGitSnapshot && maxCount > 0) {
+		// Skip snapshots entirely when maxCount is 0
+		if (maxCount > 0) {
 			try {
 				const cwd = this.sessionManager.getCwd();
 				const snapshot = await takeSnapshot(cwd, this.settingsManager.getGitSnapshotMode());
@@ -2867,20 +2768,7 @@ export class AgentSession {
 
 		const extensionsResult = this._resourceLoader.getExtensions();
 
-		// Subagent child sessions share the resourceLoader (and thus the extensions list),
-		// but must NOT share the mutable ExtensionRuntime. A shared runtime means
-		// child.dispose() → invalidate() poisons the parent's assertActive, and
-		// child.bindCore() overwrites the parent's action methods.
-		// Creating a fresh runtime isolates assertActive/invalidate/bindCore state.
-		const runtime = this._isolatedExtensionRuntime
-			? (() => {
-					const child = createExtensionRuntime();
-					for (const [name, value] of extensionsResult.runtime.flagValues) {
-						child.flagValues.set(name, value);
-					}
-					return child;
-				})()
-			: extensionsResult.runtime;
+		const runtime = extensionsResult.runtime;
 
 		if (options.flagValues) {
 			for (const [name, value] of options.flagValues) {
