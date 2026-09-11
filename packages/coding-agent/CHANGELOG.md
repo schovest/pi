@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-09-11
+
 ### Removed
 
 - 完全移除内置 subagent 工具及全部接线：`subagent` 工具、`/subagents` 与 `/running-subagents` 命令、subagents-panel/overlay/details 三个 TUI 组件、footer `subagents:N` 统计、`AgentSessionConfig.enableSubagents` 及 SDK 选项、`session.runSubagents()`/`session.listSubagents()` 公共 API、`core/subagents/` 模块与全部类型导出；会话格式不再写入 `subagent_run` 条目。旧会话兼容：遗留 `subagent_run` 条目仍可安全读取（不会成为会话 leaf，resume 不受影响），分支压缩时作为孤儿清理。任务委托能力改由扩展提供（`examples/extensions/subagent/` 进程隔离示例、社区 pi-subagents）；`plan` primary agent 的 `subagent` 排除项保留以兼容扩展提供的同名工具
