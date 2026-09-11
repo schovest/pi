@@ -103,7 +103,6 @@ import {
 	removeSnapshots,
 } from "../../core/snapshot-store.ts";
 import type { SourceInfo } from "../../core/source-info.ts";
-import { discoverSubagentsSync } from "../../core/subagents/index.ts";
 import { isInstallTelemetryEnabled } from "../../core/telemetry.ts";
 import type { TruncationResult } from "../../core/tools/truncate.ts";
 import { hasProjectConfigDir, hasProjectTrustInputs, ProjectTrustStore } from "../../core/trust-manager.ts";
@@ -145,9 +144,6 @@ import { ScopedModelsSelectorComponent } from "./components/scoped-models-select
 import { SessionSelectorComponent } from "./components/session-selector.ts";
 import { SettingsSelectorComponent } from "./components/settings-selector.ts";
 import { SkillInvocationMessageComponent } from "./components/skill-invocation-message.ts";
-import type { SubagentDetailsData } from "./components/subagent-details.ts";
-import { SubagentOverlayComponent } from "./components/subagent-overlay.ts";
-import { SubagentsPanelComponent } from "./components/subagents-panel.ts";
 import { ThinkingSelectorComponent } from "./components/thinking-selector.ts";
 import { ToolExecutionComponent } from "./components/tool-execution.ts";
 import { TreeSelectorComponent } from "./components/tree-selector.ts";
@@ -179,21 +175,6 @@ interface Expandable {
 
 function isExpandable(obj: unknown): obj is Expandable {
 	return typeof obj === "object" && obj !== null && "setExpanded" in obj && typeof obj.setExpanded === "function";
-}
-
-function isSubagentDetailsData(value: unknown): value is SubagentDetailsData {
-	if (!value || typeof value !== "object") {
-		return false;
-	}
-	const candidate = value as { events?: unknown; result?: unknown; children?: unknown };
-	return (
-		Array.isArray(candidate.events) &&
-		(candidate.result === undefined ||
-			(typeof candidate.result === "object" &&
-				candidate.result !== null &&
-				Array.isArray((candidate.result as { results?: unknown }).results))) &&
-		(candidate.children === undefined || candidate.children instanceof Map)
-	);
 }
 
 class ExpandableText extends Text implements Expandable {
@@ -372,10 +353,6 @@ export class InteractiveMode {
 
 	// entryId -> rendered Component mapping for tree-peek navigation
 	private entryIdToComponent: Map<string, Component> = new Map();
-	private latestSubagentDetails: SubagentDetailsData | undefined;
-	private subagentsPanelComponent: SubagentsPanelComponent | undefined;
-	private subagentOverlayComponent: SubagentOverlayComponent | undefined;
-	private subagentOverlayHandle: OverlayHandle | undefined;
 
 	// Tool output expansion state
 	private toolOutputExpanded = false;
@@ -2956,14 +2933,6 @@ export class InteractiveMode {
 		});
 
 		registry.register({
-			id: "slash.subagents",
-			label: "/subagents",
-			description: "查看子 agent",
-			category: "slash",
-			handler: () => this.handleSubagentsCommand(),
-		});
-
-		registry.register({
 			id: "slash.agent",
 			label: "/agent",
 			description: "切换主 agent 角色",
@@ -2971,14 +2940,6 @@ export class InteractiveMode {
 			handler: () => {
 				void this.handleAgentCommand(undefined);
 			},
-		});
-
-		registry.register({
-			id: "slash.running-subagents",
-			label: "/running-subagents",
-			description: "检查运行中的子 agent",
-			category: "slash",
-			handler: () => this.showSubagentDetails(),
 		});
 
 		registry.register({
@@ -3218,19 +3179,10 @@ export class InteractiveMode {
 				this.editor.setText("");
 				return;
 			}
-			if (text === "/subagents") {
-				this.handleSubagentsCommand();
-				return;
-			}
 			if (text === "/agent" || text.startsWith("/agent ")) {
 				const agentName = text.startsWith("/agent ") ? text.slice(7).trim() : undefined;
 				this.editor.setText("");
 				await this.handleAgentCommand(agentName || undefined);
-				return;
-			}
-			if (text === "/running-subagents") {
-				this.showSubagentDetails();
-				this.editor.setText("");
 				return;
 			}
 			if (text === "/changelog") {
@@ -3564,7 +3516,6 @@ export class InteractiveMode {
 				const component = this.pendingTools.get(event.toolCallId);
 				if (component) {
 					component.updateResult({ ...event.partialResult, isError: false }, true);
-					this.updateSubagentDetails(event.toolName, event.partialResult.details);
 					this.ui.requestRender();
 				}
 				break;
@@ -3574,7 +3525,6 @@ export class InteractiveMode {
 				const component = this.pendingTools.get(event.toolCallId);
 				if (component) {
 					component.updateResult({ ...event.result, isError: event.isError });
-					this.updateSubagentDetails(event.toolName, event.result.details);
 					this.pendingTools.delete(event.toolCallId);
 					this.ui.requestRender();
 				}
@@ -3769,86 +3719,6 @@ export class InteractiveMode {
 		this.ui.requestRender();
 	}
 
-	private updateSubagentDetails(toolName: string, details: unknown): void {
-		if (toolName !== "subagent" || !isSubagentDetailsData(details)) {
-			return;
-		}
-		this.latestSubagentDetails = details;
-		this.subagentsPanelComponent?.updateSubagentDetails(details);
-		// Lazy: only load historical entries and refresh the overlay when it is
-		// actually open. Without this, every subagent result (including each one
-		// replayed during `pi --resume`) would rebuild the historical list.
-		if (this.subagentOverlayComponent) {
-			const historicalEntries = this.sessionManager.loadSubagentRunEntries();
-			this.subagentOverlayComponent.update({ ...details, historicalEntries });
-		}
-	}
-
-	private renderSubagentMessages(messages: AgentMessage[], container: Container, expanded: boolean): void {
-		const renderedPendingTools = new Map<string, ToolExecutionComponent>();
-		for (const message of messages) {
-			if (message.role === "assistant") {
-				const assistantComponent = new AssistantMessageComponent(
-					message,
-					this.hideThinkingBlock,
-					this.getMarkdownThemeWithSettings(),
-					this.hiddenThinkingLabel,
-				);
-				container.addChild(assistantComponent);
-				for (const content of message.content) {
-					if (content.type === "toolCall") {
-						const component = new ToolExecutionComponent(
-							content.name,
-							content.id,
-							content.arguments,
-							{
-								showImages: this.settingsManager.getShowImages(),
-								imageWidthCells: this.settingsManager.getImageWidthCells(),
-							},
-							this.getRegisteredToolDefinition(content.name),
-							this.ui,
-							this.sessionManager.getCwd(),
-						);
-						component.setExpanded(expanded);
-						container.addChild(component);
-						if (message.stopReason === "aborted" || message.stopReason === "error") {
-							const errorMessage =
-								message.stopReason === "aborted" ? "Operation aborted" : message.errorMessage || "Error";
-							component.updateResult({ content: [{ type: "text", text: errorMessage }], isError: true });
-						} else {
-							renderedPendingTools.set(content.id, component);
-						}
-					}
-				}
-			} else if (message.role === "toolResult") {
-				const component = renderedPendingTools.get(message.toolCallId);
-				if (component) {
-					component.updateResult(message);
-					renderedPendingTools.delete(message.toolCallId);
-				}
-			} else if (message.role === "user") {
-				const textContent = this.getUserMessageText(message);
-				if (textContent) {
-					const userComponent = new UserMessageComponent(textContent, this.getMarkdownThemeWithSettings());
-					container.addChild(userComponent);
-				}
-			} else if (message.role === "bashExecution") {
-				const component = new BashExecutionComponent(message.command, this.ui, message.excludeFromContext);
-				if (message.output) {
-					component.appendOutput(message.output);
-				}
-				component.setComplete(
-					message.exitCode,
-					message.cancelled,
-					message.truncated ? ({ truncated: true } as TruncationResult) : undefined,
-					message.fullOutputPath,
-				);
-				component.setExpanded(expanded);
-				container.addChild(component);
-			}
-		}
-	}
-
 	private addMessageToChat(message: AgentMessage, options?: { populateHistory?: boolean }): void {
 		switch (message.role) {
 			case "bashExecution": {
@@ -4015,7 +3885,6 @@ export class InteractiveMode {
 				const component = renderedPendingTools.get(message.toolCallId);
 				if (component) {
 					component.updateResult(message);
-					this.updateSubagentDetails(message.toolName, message.details);
 					renderedPendingTools.delete(message.toolCallId);
 					// Register the tool-result entry so it can be peeked directly.
 					// It reuses the same ToolExecutionComponent as its tool call.
@@ -4436,71 +4305,6 @@ export class InteractiveMode {
 			}
 		}
 		this.ui.requestRender();
-	}
-
-	// ==================== Subagent Alternate Screen ====================
-
-	private showSubagentDetails(): void {
-		// Load historical subagent entries from session persistence
-		const historicalEntries = this.sessionManager.loadSubagentRunEntries();
-
-		if (!this.latestSubagentDetails && historicalEntries.length === 0) {
-			this.showStatus("No subagent details available");
-			return;
-		}
-
-		const data: SubagentDetailsData = this.latestSubagentDetails
-			? { ...this.latestSubagentDetails, historicalEntries }
-			: { events: [], historicalEntries };
-
-		if (this.subagentOverlayHandle) {
-			this.subagentOverlayComponent?.update(data);
-			this.subagentOverlayHandle.focus();
-			return;
-		}
-
-		const overlay = new SubagentOverlayComponent({
-			data,
-			onClose: () => {
-				this.subagentOverlayComponent?.destroy();
-				this.subagentOverlayHandle?.hide();
-				this.subagentOverlayHandle = undefined;
-				this.subagentOverlayComponent = undefined;
-			},
-			renderMessages: (messages, container, expanded) => {
-				this.renderSubagentMessages(messages, container, expanded);
-			},
-			getChildSession: (index) => {
-				return this.latestSubagentDetails?.children?.get(index);
-			},
-			requestRender: () => {
-				this.ui.requestRender();
-			},
-			getTerminalHeight: () => {
-				return this.ui.terminal.rows;
-			},
-			getSubagentMessages: (subagentEntryId: string) => {
-				return this.sessionManager.getSubagentMessages(subagentEntryId);
-			},
-			clearSelection: () => {
-				this.ui.clearSelection();
-			},
-		});
-		this.subagentOverlayComponent = overlay;
-		this.subagentOverlayHandle = this.ui.showOverlay(overlay, {
-			row: 0,
-			col: 0,
-			width: "100%",
-			maxHeight: "100%",
-			margin: 0,
-			background: theme.getBgAnsi("toolPendingBg"),
-			selectionClip: (_screenRow: number) => {
-				const termWidth = this.ui.terminal.columns;
-				const listWidth = SubagentOverlayComponent.getListWidth(termWidth);
-				// Right panel starts after listWidth + separator (│), skip the separator column
-				return { col: listWidth + 1, width: termWidth - listWidth - 1 };
-			},
-		});
 	}
 
 	private toggleThinkingBlockVisibility(): void {
@@ -5184,27 +4988,6 @@ export class InteractiveMode {
 				tui: this.ui,
 			});
 			return { component: manager, focus: manager };
-		});
-	}
-
-	private showSubagentsPanel(): void {
-		this.showSelector((done) => {
-			const agents = discoverSubagentsSync({
-				cwd: this.session.cwd,
-				agentDir: this.session.agentDir,
-				scope: "both",
-			});
-			const panel = new SubagentsPanelComponent({
-				subagents: agents,
-				subagentDetails: this.latestSubagentDetails,
-				onClose: () => {
-					this.subagentsPanelComponent = undefined;
-					done();
-					this.ui.requestRender();
-				},
-			});
-			this.subagentsPanelComponent = panel;
-			return { component: panel, focus: panel };
 		});
 	}
 
@@ -6544,11 +6327,6 @@ export class InteractiveMode {
 	private handleCodexPluginsCommand(): void {
 		this.editor.setText("");
 		this.showCodexPluginsManager();
-	}
-
-	private handleSubagentsCommand(): void {
-		this.editor.setText("");
-		this.showSubagentsPanel();
 	}
 
 	private async handleReloadCommand(): Promise<void> {

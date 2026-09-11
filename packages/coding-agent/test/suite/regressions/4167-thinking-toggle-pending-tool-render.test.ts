@@ -45,7 +45,6 @@ type RenderSessionContextThis = {
 	updateEditorBorderColor(): void;
 	getRegisteredToolDefinition(toolName: string): undefined;
 	addMessageToChat(message: AgentMessage, options?: { populateHistory?: boolean }): void;
-	updateSubagentDetails(toolName: string, details: unknown): void;
 };
 
 type RenderSessionContext = (
@@ -78,7 +77,6 @@ function createFakeInteractiveModeThis(): RenderSessionContextThis {
 		addMessageToChat(message: AgentMessage) {
 			chatContainer.addChild(new Text(message.role, 0, 0));
 		},
-		updateSubagentDetails: vi.fn(),
 	};
 }
 

@@ -81,11 +81,9 @@ describe("regression #3592: no-builtin-tools keeps extension tools enabled", () 
 		expect(allTools).toContain("bash");
 		expect(allTools).toContain("read");
 		expect(allTools).toContain("edit");
-		expect(allTools).toContain("subagent");
 		expect(session.getActiveToolNames().sort()).not.toContain("read");
 		expect(session.getActiveToolNames().sort()).not.toContain("bash");
 		expect(session.getActiveToolNames().sort()).toContain("dynamic_tool");
-		expect(session.getActiveToolNames().sort()).toContain("subagent");
 		expect(session.systemPrompt).toContain("- dynamic_tool: Run dynamic test behavior");
 		expect(session.systemPrompt).not.toContain("- read:");
 		expect(session.systemPrompt).not.toContain("- bash:");
@@ -118,11 +116,12 @@ describe("regression #3592: no-builtin-tools keeps extension tools enabled", () 
 		});
 
 		const activeToolNames = session.getActiveToolNames();
-		expect(activeToolNames).toContain("subagent");
 		expect(activeToolNames).not.toContain("read");
 		expect(activeToolNames).not.toContain("bash");
-		expect(session.systemPrompt).not.toContain("Available tools:\n(none)");
-		expect(session.systemPrompt).toContain("- subagent:");
+		// 内置 subagent 工具已移除：无扩展工具时 builtin 全禁即空集，
+		// noTools 经 service 路径传播生效（与上一用例的空集行为一致）。
+		expect(activeToolNames).toEqual([]);
+		expect(session.systemPrompt).toContain("Available tools:\n(none)");
 		session.dispose();
 	});
 });

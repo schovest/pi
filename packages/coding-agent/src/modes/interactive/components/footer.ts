@@ -292,7 +292,6 @@ export class FooterComponent implements Component {
 		const contextWindow = contextUsage?.contextWindow ?? state.model?.contextWindow ?? 0;
 		const contextPercentValue = contextUsage?.percent ?? 0;
 		const contextPercent = contextUsage?.percent !== null ? contextPercentValue.toFixed(1) : "?";
-		const runningSubagents = this.session.getRunningSubagentCount();
 
 		// Build stats line
 		const statsParts = [];
@@ -310,10 +309,6 @@ export class FooterComponent implements Component {
 			const costStr = `$${totalCost.toFixed(3)}${usingSubscription ? " (sub)" : ""}`;
 			statsParts.push(costStr);
 		}
-		if (runningSubagents > 0) {
-			statsParts.push(theme.fg("warning", `subagents:${runningSubagents}`));
-		}
-
 		// Show background process count with keybinding hint
 		const bgCount = this.session.backgroundProcessManager.getRunningCount();
 		if (bgCount > 0) {

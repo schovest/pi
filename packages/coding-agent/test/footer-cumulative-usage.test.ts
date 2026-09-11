@@ -208,7 +208,6 @@ function createSession(entries: FooterUsageSourceEntry[]): AgentSession {
 			getCwd: () => "/tmp/project",
 		},
 		getContextUsage: () => ({ contextWindow: 200_000, percent: 12.3 }),
-		getRunningSubagentCount: () => 0,
 		backgroundProcessManager: { getRunningCount: () => 0 },
 		modelRuntime: { isUsingOAuth: () => false },
 	};

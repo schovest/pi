@@ -78,7 +78,6 @@ function createSession(options: {
 			getCwd: () => "/tmp/project",
 		},
 		getContextUsage: () => ({ contextWindow: 200_000, percent: 12.3 }),
-		getRunningSubagentCount: () => 0,
 		backgroundProcessManager: { getRunningCount: () => 0 },
 		modelRuntime: {
 			isUsingOAuth: (provider: string) => provider === "kimi-coding",

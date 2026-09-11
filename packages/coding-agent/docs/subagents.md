@@ -1,327 +1,201 @@
 # Subagents
 
-Subagent 是一种任务委托机制，允许主 agent 将任务分配给专门的子 agent 执行。内置 subagent tool 在当前进程内运行，不创建子进程，子会话不持久化。
+> **内置 subagent 工具已移除**（破坏性变更）。任务委托能力由社区扩展 [pi-subagents](https://github.com/nicobailon/pi-subagents) 提供，本文档以该扩展为主线，说明安装、agent 定义、发现路径与配置。
 
-## 内置 Agent
-
-| Agent | 描述 | 默认工具 | thinking |
-| ------- | ------ | ---------- | ---------- |
-| `explorer` | 快速并行搜索，返回定位和摘要 | 全工具（prompt 约束只读） | low |
-| `worker` | 单元化任务执行，拥有全部权限 | 全工具 | —（继承主 agent） |
-| `reviewer` | 代码审查（质量、安全、可维护性），输出分级问题报告 | 全工具（prompt 约束只读） | —（继承主 agent） |
-
-## 自定义 Agent
-
-创建 Markdown 文件定义自定义 agent：
-
-**用户级**：`~/.pi/agent/subagents/*.md`
-**项目级**：`.pi/subagents/*.md`（需要 `subagentScope: "project"` 或 `"both"`）
-
-```markdown
----
-description: 审查补丁的专注审计员
-model: anthropic/claude-sonnet-4-5
-thinking: high
-includedTools: [read, grep, find, ls]
----
-```
-
-**Frontmatter 字段**：
-
-| 字段 | 类型 | 说明 |
-| ------ | ------ | ------ |
-| `description` | string | Agent 描述，用于工具提示 |
-| `model` | string | 模型 ID，如 `anthropic/claude-sonnet-4-5` |
-| `thinking` | string | 思考级别：`off`、`minimal`、`low`、`medium`、`high`、`xhigh` |
-| `includedTools` | string[] | 允许的工具列表，支持 glob 模式（详见下文） |
-| `excludedTools` | string[] | 排除的工具列表，支持 glob 模式（详见下文） |
-| `skills` | string[] | 允许主 agent 已加载的 skills 列表，支持 glob 模式（详见下文） |
-
-#### 工具匹配（glob 模式）
-
-`includedTools` / `excludedTools` 使用 [minimatch](https://github.com/isaacs/minimatch) glob 模式匹配工具名（大小写不敏感）：
-
-- `"read"` — 精确匹配 `read` 工具
-- `"read*"` — 匹配 `read`、`readFile` 等所有以 read 开头的工具
-- `"!*"` — 匹配所有工具的否定模式
-- 未设置 `includedTools` 且未设置 `excludedTools` — 使用默认工具集 `read, bash, edit, write`
-- `includedTools: []`（空数组）— 无工具
-- 若同时设置 `includedTools` 和 `excludedTools`，`includedTools` 生效，`excludedTools` 被忽略（included 优先）
-
-内置工具名：`read`、`bash`、`edit`、`write`、`grep`、`find`、`ls`。此外 `subagent` 工具由 coding-agent 扩展注册，扩展也可注册自定义工具名。
-
-#### Skills 匹配（glob 模式）
-
-`skills` 字段允许 subagent 继承主 agent 已加载的 skills。同样使用 minimatch 匹配 skill 名称（大小写不敏感）：
-
-- 未设置或空数组 `[]` — subagent **不继承**任何 skill（默认行为）
-- `"test-*"` — 匹配名称以 `test-` 开头的 skills
-- `"*"` — 匹配所有 skills
-
-匹配的 skills 会注入到 subagent 的系统提示词中，效果与主 agent 加载 skill 一致。skill 内容仍按需加载（progressive disclosure）。
-
-#### 兼容性
-
-旧字段名 `tools` 仍然可读，但会自动映射到 `includedTools`，优先使用 `includedTools`。
-
-Frontmatter 中的 `model` 和 `thinking` 可被任务参数覆盖。
-
-## 运行模式
-
-### 单任务
-
-```json
-{
-  "agent": "worker",
-  "task": "审查当前变更集",
-  "thinking": "high"
-}
-```
-
-### 并行任务
-
-最多 8 个任务，并发度 4。结果顺序与输入顺序一致。
-
-```json
-{
-  "tasks": [
-    { "agent": "explorer", "task": "查找 settings 相关文件", "includedTools": ["read", "grep", "find"] },
-    { "agent": "worker", "task": "审查测试覆盖", "includedTools": ["read", "grep"] }
-  ]
-}
-```
-
-### 链式任务
-
-顺序执行，`{previous}` 被替换为前一步输出。
-
-```json
-{
-  "chain": [
-    { "agent": "explorer", "task": "总结认证流程" },
-    { "agent": "worker", "task": "基于此上下文规划安全重构：{previous}" }
-  ]
-}
-```
-
-## Agent Scope
-
-| Scope | 加载的 Agent |
-| ------- | ------------- |
-| `user`（默认） | 内置 + `~/.pi/agent/subagents/` |
-| `project` | 内置 + `.pi/subagents/` |
-| `both` | 内置 + 用户级 + 项目级 |
-
-项目级 agent 覆盖同名的用户级 agent。
-
-在任务中通过 `subagentScope` 参数控制 agent 搜索范围：
-
-```json
-{
-  "agent": "project-reviewer",
-  "task": "审查代码",
-  "subagentScope": "project"
-}
-```
-
-## 运行时监控
-
-- 状态栏显示 `subagents:N` 表示运行中的 subagent 数量
-- `/running-subagents` 查看每个 subagent 的事件、工具、输出、错误、模型、思考级别和用量
-
-## 创建自定义 Agent
-
-### 1. 确定 Agent 目标
-
-明确 agent 的职责边界：
-
-- 输入：agent 接收什么任务描述
-- 输出：agent 应返回什么格式
-- 工具：agent 需要哪些工具
-- 模型：任务需要什么能力的模型
-
-### 2. 编写 Agent 定义
-
-```markdown
----
-description: 分析依赖关系并生成依赖图
-model: anthropic/claude-sonnet-4-5
-thinking: medium
-includedTools: [read, grep, find, ls, bash]
----
-
-你是依赖分析专家。分析项目的依赖关系并生成结构化报告。
-
-策略：
-1. 查找 package.json、Cargo.toml、go.mod 等依赖文件
-2. 分析直接依赖和传递依赖
-3. 识别循环依赖和版本冲突
-
-输出格式：
-
-## 依赖文件
-列出发现的依赖文件。
-
-## 直接依赖
-按类型分组的主要依赖。
-
-## 传递依赖
-关键传递依赖及其来源。
-
-## 问题
-循环依赖、版本冲突、安全警告。
-
-## 建议
-优化建议。
-```
-
-### 3. 选择工具集
-
-| 工具 | 用途 |
-| ------ | ------ |
-| `read` | 读取文件内容 |
-| `bash` | 执行命令（git、构建工具等） |
-| `edit` | 编辑文件 |
-| `write` | 创建/覆盖文件 |
-| `grep` | 搜索文件内容（支持 glob 过滤文件） |
-| `find` | 按 glob 模式查找文件（respects .gitignore） |
-| `ls` | 列出目录 |
-
-此外，`subagent` 工具由 coding-agent 扩展注册，扩展也可注册自定义工具名。
-
-**只读 agent**：`read, grep, find, ls`
-**分析 + 执行 agent**：`read, bash, grep, find, ls`
-**完整能力 agent**：`read, bash, edit, write, grep, find, ls`
-
-如果 subagent 需要使用主 agent 已加载的 skills，在 frontmatter 中设置 `skills` 字段（glob 模式匹配 skill 名称，如 `skills: ["test-*"]` 或 `skills: ["*"]` 继承全部）。
-
-### 4. 设计输出格式
-
-结构化输出便于：
-
-- 主 agent 理解结果
-- 链式模式传递给下一步
-- 用户审查
-
-```markdown
-## 摘要
-一句话总结。
-
-## 发现
-- 发现1
-- 发现2
-
-## 文件
-- `path/to/file.ts` - 说明
-
-## 下一步
-建议的后续行动。
-```
-
-### 5. 放置 Agent 文件
+## 安装
 
 ```bash
-# 用户级（所有项目可用）
-mkdir -p ~/.pi/agent/subagents
-cat > ~/.pi/agent/subagents/dep-analyzer.md << 'EOF'
----
-description: 分析依赖关系
-model: anthropic/claude-sonnet-4-5
-includedTools: [read, grep, find, ls, bash]
----
-...
-EOF
-
-# 项目级（仅当前项目）
-mkdir -p .pi/subagents
-cat > .pi/subagents/project-reviewer.md << 'EOF'
----
-description: 项目特定审查规则
-includedTools: [read, grep, find, ls]
----
-...
-EOF
+pi install npm:pi-subagents
 ```
 
-### 6. 测试 Agent
+安装后无需额外配置：扩展注册 `subagent` 工具，Pi 会基于任务自行决定是否调用、选择 agent 并编排。直接用自然语言即可：
 
-```bash
-# 交互式测试
-pi
-> 使用 dep-analyzer 分析当前项目的依赖
-
-# 指定 scope 测试项目级 agent
-> 用 subagentScope=both 运行 project-reviewer 审查 src/
+```text
+Use reviewer to review this diff.
+Ask oracle for a second opinion on my current plan.
+Run parallel reviewers: one for correctness, one for tests, one for unnecessary complexity.
 ```
 
-## 最佳实践
+## 工作原理
 
-### Agent 设计
+Pi 是父会话（parent）。subagent 是带独立任务的子 Pi 会话（child）。前台运行会流式显示进度；后台运行可随时查看。安装扩展不会自动启动后台评审——它是给 Pi 一个委托工具；如需"每次实现后自动评审"，在 prompt 或项目指令里说明即可。
 
-1. **单一职责**：每个 agent 专注一个领域
-2. **明确输出格式**：结构化输出便于解析和传递
-3. **工具最小化**：只授予必要的工具
-4. **模型匹配**：简单任务用 Haiku，复杂任务用 Sonnet/Opus
+## 内置 agents
 
-### 并行 vs 链式
+扩展自带 6 个内置 agent（`scout`/`researcher`/`worker`/`reviewer`/`oracle`/`delegate`），另提供外部 CLI 适配器（`codex-exec`、`codex-exec-writer`、`claude-code`、`claude-code-writer`、`cursor-agent`、`cursor-agent-writer`），要求本机已安装并认证对应 CLI。
 
-| 场景 | 模式 |
-| ------ | ------ |
-| 独立任务（无依赖） | parallel |
-| 需要前一步结果 | chain |
-| 混合 | 分组并行 + 链式 |
+推荐用法：`scout` 先侦察代码，`researcher` 先核实外部事实，`worker` 执行实现，`reviewer` 检查，`oracle` 在决策有风险时挑战假设。
 
-### 上下文传递
+## 自定义 agent 定义
 
-链式模式使用 `{previous}` 占位符：
+一个 agent 就是一个 Markdown 文件：YAML frontmatter 定义角色，正文是系统提示词：
+
+```yaml
+---
+name: scout
+description: Fast codebase recon
+tools: read, grep, find, ls
+---
+
+Your system prompt goes here.
+```
+
+### 定义存放路径（低 → 高优先级）
+
+| 范围 | 路径 |
+| --- | --- |
+| 内置 | 扩展安装目录 `agents/` |
+| 包级 | `package.json` 的 `pi-subagents.agents` 或 `pi.subagents.agents` 条目 |
+| 用户级 | `~/.pi/agent/agents/**/*.md`（旧）、`~/.agents/**/*.md`（新） |
+| 项目级 | `<项目配置目录>/agents/**/*.md`（如 `.pi/agents/`），兼容 legacy `.agents/**/*.md` |
+
+发现规则：
+
+- 递归扫描子目录；`.chain.md` 不构成 agent
+- 同名冲突优先级：内置 < 包级 < 用户级 < 项目级
+- legacy `.agents/skills/` 下的文件被排除（防止 skill 被注册为 agent）
+- **项目配置目录 `.agents/skills` 之外的 skill 目录（如 `~/.agents/all-skills/`）不在排除名单**，其中的 `SKILL.md` 拥有 `name`+`description` frontmatter，会被误注册为用户级 agent。若出现大量可疑的 user agents，检查 `~/.agents/` 下是否有非 `skills` 命名的 skill 仓库
+- 设置 `subagents.agentScanDirs`（支持 `~` 与单层 `*` 通配）可追加递归扫描根；固定用户/项目目录在同名冲突时仍优先
+- 环境变量 `PI_SUBAGENT_EXTRA_AGENT_DIRS`（PATH 风格分隔）追加只读扫描目录
+
+### 常用 frontmatter 字段
+
+| 字段 | 说明 |
+| --- | --- |
+| `name` / `description` | 必填。名称与用途描述 |
+| `tools` | 子代理严格工具白名单；`mcp:` 前缀选择直接 MCP 工具（需安装 pi-mcp-adapter）；省略则继承 Pi 常规工具 |
+| `excludeTools` | 在正常工具解析后应用的黑名单 |
+| `model` / `fallbackModels` / `thinking` | 模型与回退（`thinking` 以 `:level` 后缀附加） |
+| `systemPromptMode` | `replace`（默认）或 `append`（保留 Pi 基础提示词） |
+| `inheritProjectContext` / `inheritGlobalContext` / `inheritSkills` | 是否继承仓库指令、全局上下文、skills 目录 |
+| `defaultContext` | `fresh`（默认）或 `fork`（继承父会话上下文） |
+| `skills` / `skillPath` | 子代理可用的技能及私有技能路径 |
+| `async` / `timeoutMs` / `toolTimeoutMs` | 后台默认、运行期限、单工具硬超时 |
+| `output` / `defaultReads` | 输出文件与前置读取 |
+| `allowNestedSubagents` / `maxSubagentDepth` | 嵌套委托授权与深度限制 |
+| `acceptance` / `acceptanceRole` | 验收级别与角色推断 |
+| `memory` | 角色专属持久化记忆作用域（`project`/`user`） |
+| `package` / `aliases` | 包标识（注册为 `<pkg>.<name>`）与别名 |
+
+### 覆盖内置 / 项目覆盖
+
+`subagents.agentOverrides.<name>`（settings）可按需覆盖单个字段，项目级覆盖优先于用户级。管理动作：
+
+| 动作 | 说明 |
+| --- | --- |
+| `subagent({ action: "list" })` | 列出可执行 agents |
+| `subagent({ action: "eject", agent })` | 将内置/包级 agent 复制为可编辑自定义文件 |
+| `subagent({ action: "disable" / "enable" })` | 写/删 settings 覆盖 |
+| `subagent({ action: "reset" / "delete" })` | 恢复内置默认 / 删除纯自定义 agent |
+| `subagent({ action: "refine", agent })` | 项目内为单个 agent 生成约束性改进叠加层 |
+
+## 配置
+
+### 1. Settings 文件（`subagents.*` 键）
+
+用户级 `~/.pi/agent/settings.json`、项目级 `.pi/settings.json`：
 
 ```json
 {
-  "chain": [
-    { "agent": "explorer", "task": "查找认证相关代码" },
-    { "agent": "worker", "task": "基于以下上下文规划重构：\n{previous}" },
-    { "agent": "worker", "task": "执行以下计划：\n{previous}" }
-  ]
+  "subagents": {
+    "defaultModel": "deepseek/deepseek-r1",
+    "defaultProvider": "deepseek",
+    "defaultThinking": "high",
+    "maxThinking": "max",
+    "defaultExtensions": ["pi-todo"],
+    "disableBuiltins": false,
+    "disableThinking": false,
+    "agentScanDirs": ["~/.pi/flows/*/agents"],
+    "agentOverrides": {
+      "reviewer": { "description": "Independent review tier", "inheritProjectContext": false }
+    },
+    "modelScope": {
+      "allow": ["inherit", "deepseek/deepseek-r1"]
+    },
+    "projectRootResolution": "git-root"
+  }
 }
 ```
 
-### 错误处理
+| 键 | 说明 |
+| --- | --- |
+| `defaultModel` / `defaultProvider` / `defaultThinking` / `maxThinking` | 子代理默认模型、提供商、思考级别与上限 |
+| `defaultExtensions` | 子代理默认加载的扩展名列表 |
+| `agentScanDirs` | 追加递归 agent 扫描目录；支持 `~` 与单层 `*` |
+| `agentOverrides` | 按 agent 名覆盖字段（`description`、`model`、`tools`、`disabled` 等） |
+| `modelScope` | 模型作用域策略对象（`allow` 列表，`inherit` 表示允许继承父模型；可含 `agents.<name>` 按 agent 收紧） |
+| `disableBuiltins` / `disableThinking` | 批量禁用内置 agent / 思考 |
+| `projectRootResolution` | `nearest`（默认）或 `git-root`——monorepo/worktree 下防止嵌套 `.pi` 遮蔽仓库级配置 |
 
-- 链式模式在第一个失败步骤停止
-- 并行模式继续执行其他任务，汇总成功/失败数
-- 检查 `status` 字段判断成功与否
+### 2. 扩展 config.json（`~/.pi/agent/extensions/subagent/config.json`）
 
-### 性能考虑
+常用键（完整参考见扩展自带 `docs/configuration.md`）：
 
-- 并行任务上限 8 个，并发度 4
-- 大输出会被截断，完整结果保留在 tool details
-
-## SDK 用法
-
-```typescript
-const { session } = await createAgentSession();
-
-// 运行 subagent
-const result = await session.runSubagents({
-  agent: "worker",
-  task: "规划 subagent 发现的最小实现",
-  thinking: "medium",
-});
+```json
+{
+  "asyncByDefault": true,
+  "defaultSubagentContext": "fresh",
+  "fleetView": true,
+  "fleetViewPlacement": "belowEditor",
+  "asyncWidget": true,
+  "waitTool": { "enabled": true, "defaultTimeoutMs": 120000 },
+  "timeoutMs": 3600000,
+  "toolTimeoutMs": 600000,
+  "parallel": { "maxTasks": 8, "concurrency": 4 },
+  "globalConcurrencyLimit": 20,
+  "maxSubagentSpawnsPerRun": 64,
+  "maxSubagentSpawnsPerSession": 100,
+  "maxActiveAsyncRunsPerSession": 4,
+  "artifactDir": "session",
+  "worktreeBaseDir": "~/.pi/worktrees",
+  "worktreeProvider": "auto",
+  "intercomBridge": { "mode": "always" },
+  "authorityPolicy": { "discardWorktree": "confirm", "destructiveCleanup": "confirm" }
+}
 ```
 
-## 示例：独立进程 Subagent
+### 3. 环境变量
 
-`examples/extensions/subagent/` 提供了一个独立进程 subagent 的示例实现，每个 subagent 在隔离的 `pi` 子进程中运行。这是一个示例扩展，需要手动安装：
+| 变量 | 说明 |
+| --- | --- |
+| `PI_SUBAGENT_EXTRA_AGENT_DIRS` | 追加只读 agent 扫描目录（PATH 风格） |
+| `PI_SUBAGENT_PI_BINARY` | 覆盖子进程启动的 pi 二进制/包装器 |
+| `PI_SUBAGENT_TASK_DELIVERY` | `auto`/`file`——超长任务经临时文件传递（EDR 场景） |
+| `PI_SUBAGENT_MAX_DEPTH` | 嵌套委托深度上限 |
+| `PI_SUBAGENT_MAX_SPAWNS_PER_RUN` / `PI_SUBAGENT_MAX_SPAWNS_PER_SESSION` | 单运行树 / 会话累计 spawn 上限 |
+| `PI_SUBAGENT_TOOL_TIMEOUT_MS` | 单工具硬超时 |
+| `PI_SUBAGENTS_WORKTREE_DIR` | managed worktree 基目录 |
 
-```bash
-mkdir -p ~/.pi/agent/extensions/subagent
-ln -sf "$(pwd)/packages/coding-agent/examples/extensions/subagent/index.ts" ~/.pi/agent/extensions/subagent/index.ts
-```
+## 常用操作
 
-详见 `examples/extensions/subagent/README.md`。
+可通过自然语言或斜杠命令：
+
+| 操作 | 方式 |
+| --- | --- |
+| 列出 agents | "Show me the available subagents." / `subagent({ action: "list" })` |
+| 查看运行中任务 | "Show active async runs." / `/subagents-fleet` |
+| 健康检查 | `/subagents-doctor` |
+| 某主题帮助 | `/subagents-guide [topic]` |
+| 决策顾问团 | `/council`（包内 `council-mode` skill） |
+| 后台运行 | "Run this in the background." |
+
+参考文档：`subagent({ action: "guide", topic: "..." })`，topics 含 `overview`、`workflows`、`agents`、`missions`、`observability`、`tool-reference`、`configuration`、`models`、`watchdog`、`extension-api`。
+
+## 与 Primary Agent 的关系
+
+`plan` primary agent 的 `excludedTools: ["bash", "subagent"]` 保留 `subagent` 排除项：安装了提供 `subagent` 工具的扩展后，规划 agent 依然不会获得该工具。参见 [Primary Agents](primary-agents.md)。
+
+## 旧会话兼容
+
+- 旧会话文件中的 `subagent_run` 条目仍可被安全读取：它们不会成为会话 leaf，`pi --resume` 行为不受影响
+- 旧记录无 UI 查看入口；执行分支压缩（compaction）时，孤立的 `subagent_run` 子树会随孤儿清理一并移除
+
+## 替代方案
+
+`examples/extensions/subagent/` 提供进程隔离版 min 扩展（每个子任务独立 `pi` 子进程运行），集成度低、体积小，适合不需要完整编排的场景。功能完整仍推荐 pi-subagents。
 
 ## 相关文档
 
 - [Extensions](extensions.md) - 编写扩展注册自定义工具
-- [Skills](skills.md) - 技能系统
-- [Prompt Templates](prompt-templates.md) - 提示模板
+- [Primary Agents](primary-agents.md) - 主 agent 角色切换
+- pi-subagents 自带文档：`agents.md`（frontmatter 全参考）、`models.md`（模型分层）、`workflows.md`（编排模式）、`configuration.md`（全部配置键）、`watchdog.md`、`missions.md`

@@ -22,12 +22,12 @@ Primary agent 通过以下方式影响 agent 行为：
 
 | Agent | 描述 | 工具 | 角色 Prompt |
 |-------|------|------|-------------|
-| `code` | 默认 agent，拥有全部工具，用于实现和执行 | 全部内置工具（read, bash, edit, write, grep, find, ls）+ `subagent` + 扩展注册的工具 | 无（使用默认系统提示词） |
-| `plan` | 规划 agent，只读工具，用于分析和设计 | 排除 `bash` 和 `subagent`；剩余工具（read, edit, write, grep, find, ls）均在列表中，但 prompt 约束为只读行为 | "You are a planning agent..." |
+| `code` | 默认 agent，拥有全部工具，用于实现和执行 | 全部内置工具（read, bash, edit, write, grep, find, ls）+ 扩展注册的工具 | 无（使用默认系统提示词） |
+| `plan` | 规划 agent，只读工具，用于分析和设计 | 排除 `bash` 和 `subagent`（面向扩展提供的同名工具）；剩余工具（read, edit, write, grep, find, ls）均在列表中，但 prompt 约束为只读行为 | "You are a planning agent..." |
 
 `code` 是初始默认值，每次启动时如果未恢复其他 agent 则使用 `code`。`code` 的 `systemPrompt` 为空，意味着使用 Pi 的默认系统提示词（无额外角色 prompt）。
 
-`plan` 的实现是 `excludedTools: ["bash", "subagent"]`，未设置 `includedTools`，因此除 bash 和 subagent 外的所有工具都在可用列表中。plan 的 systemPrompt 要求不修改文件、不执行命令，实际效果为只读。
+`plan` 的实现是 `excludedTools: ["bash", "subagent"]`，未设置 `includedTools`，因此除 bash 和 subagent 外的所有工具都在可用列表中（`subagent` 排除项面向扩展提供的同名工具，未安装相关扩展时无效果）。plan 的 systemPrompt 要求不修改文件、不执行命令，实际效果为只读。
 
 ## 加载和优先级
 
@@ -101,7 +101,7 @@ excludedTools: [subagent]
 - `includedTools: []`（空数组）— 无工具
 - 若同时设置 `includedTools` 和 `excludedTools`，`includedTools` 生效，`excludedTools` 被忽略（included 优先）
 
-内置工具名：`read`、`bash`、`edit`、`write`、`grep`、`find`、`ls`。此外 `subagent` 工具由 coding-agent 扩展注册，扩展也可注册自定义工具名。
+内置工具名：`read`、`bash`、`edit`、`write`、`grep`、`find`、`ls`。扩展可注册自定义工具名（如社区 `subagent` 委托工具）。
 
 #### Skills 过滤（glob 模式）
 
@@ -111,8 +111,6 @@ excludedTools: [subagent]
 - `skills: []`（空数组）— 无 skills
 - `skills: ["review-*"]` — 只启用名称匹配 `review-*` 的 skills
 - `skills: ["*"]` — 启用全部 skills（等效于不设置）
-
-> **注意**：Primary agent 的 skills 过滤仅影响主会话的系统提示词，不影响 subagent。Subagent 始终从全局已加载的全部 skills 中按自身 `skills` 字段过滤。
 
 兼容性：`tools`（旧字段名）仍然可读，自动映射到 `includedTools`，优先使用 `includedTools`。
 
@@ -232,18 +230,6 @@ const currentAgent = session.currentPrimaryAgent;  // "code" | "plan" | ...
 
 键盘控制：`↑/↓` 或 `j/k` 导航，`Enter` 选择，`Escape` 关闭。
 
-## 与 Subagent 的区别
-
-| 维度 | Primary Agent | Subagent |
-| ------ | --------------- | ---------- |
-| 作用范围 | 整个会话 | 单次任务委托 |
-| 系统提示词 | 修改主 agent 的系统提示词 | 有自己的独立系统提示词 |
-| 工具控制 | `includedTools` / `excludedTools` | `includedTools` / `excludedTools` |
-| Skills 控制 | `skills`（不配置则全部） | `skills`（不配置则不继承） |
-| 持久化 | 自动保存到全局 settings | 不持久化 |
-| 数量 | 一个会话同时只有一个 | 可并行运行多个 |
-| 定义位置 | `primary-agents/*.md` | `subagents/*.md` |
-
 ## 示例：创建代码审查 Agent
 
 ```bash
@@ -254,7 +240,7 @@ description: 代码审查专家，只读模式，分析代码质量和安全性
 model: anthropic/claude-sonnet-4-5
 thinking: high
 includedTools: [read, grep, find, ls]
-excludedTools: [bash, edit, write, subagent]
+excludedTools: [bash, edit, write]
 ---
 
 你是代码审查专家。对代码变更进行严格审查：
@@ -282,7 +268,7 @@ EOF
 
 ## 相关文档
 
-- [Subagents](subagents.md) - 子 agent 任务委托
+- [Subagents](subagents.md) - 基于 pi-subagents 扩展的子代理文档（agent 定义、发现路径、配置）
 - [Settings](settings.md) - `defaultPrimaryAgent` 设置
 - [Extensions](extensions.md) - 扩展 API 与系统提示词交互
 - [Usage](usage.md) - 系统提示词文件（SYSTEM.md / APPEND_SYSTEM.md）

@@ -153,7 +153,7 @@ describe("loadEntriesFromFile compaction-boundary lazy (v3, no size threshold)",
 	});
 });
 
-it("compaction 前非 message 类型（label/subagent_run）full parse，索引不失效", () => {
+it("compaction 前非 message 类型（label/legacy subagent_run）full parse，索引不失效", () => {
 	const dir = mkdtempSync(join(tmpdir(), "pi-lazy-"));
 	const file = join(dir, "s.jsonl");
 	writeFileSync(
@@ -164,17 +164,26 @@ it("compaction 前非 message 类型（label/subagent_run）full parse，索引�
 	sm.setSessionFile(file);
 	// label 索引正常（_buildIndex 的 labelsById 生效）
 	expect(sm.getLabel("m1")).toBe("checkpoint");
-	// subagent_run 加载正常（loadSubagentRunEntries 按 type 过滤）
-	const runs = sm.loadSubagentRunEntries();
-	expect(runs).toHaveLength(1);
-	expect(runs[0].agent).toBe("researcher");
 	// 类型未被错误改写为 message/lazy
 	const l1 = sm.getEntry("l1") as { type: string; label?: string };
 	expect(l1.type).toBe("label");
 	expect(l1.label).toBe("checkpoint");
 	const sa1 = sm.getEntry("sa1") as { type: string; agent?: string };
 	expect(sa1.type).toBe("subagent_run");
-	expect(sa1.agent).toBe("researcher");
+	expect((sa1 as { agent?: unknown }).agent).toBe("researcher");
+});
+
+it("legacy subagent_run 行（旧会话最后一条）不会成为 leaf，resume 不丢对话", () => {
+	const dir = mkdtempSync(join(tmpdir(), "pi-lazy-"));
+	const file = join(dir, "s.jsonl");
+	writeFileSync(
+		file,
+		`${makeHeader()}\n${makeMsg("m1", null, SMALL)}\n${makeSubagentRun("sa1", "m1", "researcher")}\n`,
+	);
+	const sm = SessionManager.create("/tmp", dir);
+	sm.setSessionFile(file);
+	// leaf 必须停在 m1，而不是 detached 的 legacy subagent_run
+	expect(sm.getLeafId()).toBe("m1");
 });
 
 describe("SessionManager.materialize", () => {

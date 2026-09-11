@@ -27,8 +27,6 @@ import {
 	createCompactionSummaryMessage,
 	createCustomMessage,
 } from "./messages.ts";
-import type { SubagentRunEntry } from "./types/subagent-entry.ts";
-
 export const CURRENT_SESSION_VERSION = 3;
 
 export interface SessionHeader {
@@ -200,8 +198,7 @@ export type SessionEntry =
 	| CustomEntry
 	| CustomMessageEntry
 	| LabelEntry
-	| SessionInfoEntry
-	| SubagentRunEntry;
+	| SessionInfoEntry;
 
 /** Raw file entry (includes header) */
 export type FileEntry = SessionHeader | SessionEntry;
@@ -451,7 +448,7 @@ export function getLatestCompactionEntry(entries: SessionEntry[]): CompactionEnt
 /**
  * Convert a single session entry to its context messages.
  * Returns an array that may be empty for entries that don't contribute
- * to LLM context directly (e.g., thinking_level_change, subagent_run).
+ * to LLM context directly (e.g., thinking_level_change, label).
  */
 export function sessionEntryToContextMessages(entry: SessionEntry): AgentMessage[] {
 	// LazyEntry（compaction 前行占位）无 .message，不贡献上下文
@@ -745,9 +742,9 @@ export function readRawLine(filePath: string, offset: number, length: number): s
  * 读取会话文件。两阶段（v3：lazy 纯按 compaction 边界，无大小阈值）：
  * 1. 流式读：每行 peek type——仅 type=message 的行 peek 元数据存 PendingEntry
  *    （不 parse body、不保留 raw，省内存）；其余行（session header / compaction /
- *    label / subagent_run / custom / thinking_level_change / model_change /
+ *    label / custom / thinking_level_change / model_change /
  *    branch_summary / session_info 等）full parse——它们小，且索引（labelsById）/
- *    查询（loadSubagentRunEntries / getLabel）需要完整字段。记录最后一个 compaction 行 offset。
+ *    查询（getLabel）需要完整字段。记录最后一个 compaction 行 offset。
  * 2. 据最后 compaction offset 决策：compaction 前 message 行 → LazyEntry（占位，
  *    materialize 时读回）；否则（compaction 后 / 无 compaction）→ readRawLine
  *    full parse（活跃或零回归）。
@@ -773,9 +770,9 @@ export function loadEntriesFromFile(filePath: string): FileEntry[] {
 			if (byteLen === 0) return; // 空行：推进字节游标（保持 offset 与磁盘一致）但不解析
 			// v3：每行 peek type（无大小阈值）。仅 type=message 的行 peek 元数据存
 			// PendingEntry（阶段 2 据 compaction 边界决策 lazy/full）；其他类型
-			// （label/subagent_run/custom/thinking_level_change/model_change/
+			// （label/custom/thinking_level_change/model_change/
 			// branch_summary/session_info 等）full parse——它们小，且索引（labelsById）/
-			// 查询（loadSubagentRunEntries/getLabel）需要完整字段，不能 lazy。
+			// 查询（getLabel）需要完整字段，不能 lazy。
 			// header(type=session)/compaction 亦 full parse（记录 compaction offset）。
 			const f = peekEntryFields(line);
 			if (f.type === "message") {
@@ -1273,9 +1270,10 @@ export class SessionManager {
 			this.entryIndex.set(entry.id, i);
 			if (entry.type === "session") continue;
 			this.byId.set(entry.id, entry);
-			// subagent_run entries are detached records — they must not
-			// become the session leaf, or resume will lose the conversation.
-			if (entry.type !== "subagent_run") {
+			// Legacy subagent_run entries (removed feature) are detached records —
+			// they must not become the session leaf, or resume will lose the conversation.
+			// The string cast keeps old session files readable.
+			if ((entry.type as string) !== "subagent_run") {
 				this.leafId = entry.id;
 			}
 			if (entry.type === "label") {
@@ -1368,11 +1366,6 @@ export class SessionManager {
 		return this.sessionFile;
 	}
 
-	/** Load all subagent_run entries from the current session. */
-	loadSubagentRunEntries(): SubagentRunEntry[] {
-		return this.fileEntries.filter((e): e is SubagentRunEntry => e.type === "subagent_run") as SubagentRunEntry[];
-	}
-
 	/**
 	 * 将 lazy 占位条目恢复为完整 message 条目（从 sessionFile 的 offset 读回 raw）。
 	 * 非 lazy 条目原样返回；未知 id 返回 undefined。
@@ -1399,48 +1392,6 @@ export class SessionManager {
 		if (idx !== undefined && this.fileEntries[idx] && isLazyEntry(this.fileEntries[idx])) {
 			this.fileEntries[idx] = full;
 		}
-	}
-
-	/** Append subagent messages as children of a SubagentRunEntry.
-	 *  Each message entry's parentId points to the SubagentRunEntry,
-	 *  forming an independent subtree that getBranch(leafId) won't traverse.
-	 *  Does NOT update leafId. */
-	appendSubagentMessages(subagentEntryId: string, messages: AgentMessage[]): void {
-		for (const message of messages) {
-			const entry: SessionMessageEntry = {
-				type: "message",
-				id: generateId(this.byId),
-				parentId: subagentEntryId,
-				timestamp: new Date().toISOString(),
-				message: message as Message,
-			};
-			this.fileEntries.push(entry);
-			this.entryIndex.set(entry.id, this.fileEntries.length - 1);
-			this.byId.set(entry.id, entry);
-			// 不更新 leafId — 子树消息不影响主链
-			this._persist(entry);
-		}
-	}
-
-	/** Get all messages for a subagent run by its SubagentRunEntry id.
-	 *  Scans fileEntries for message entries whose parentId equals subagentEntryId,
-	 *  sorts by timestamp, and returns the extracted AgentMessages. */
-	getSubagentMessages(subagentEntryId: string): AgentMessage[] {
-		const messages: { ts: number; msg: AgentMessage }[] = [];
-		for (const entry of this.fileEntries) {
-			if (
-				entry.type === "message" &&
-				entry.parentId === subagentEntryId &&
-				!isLazyEntry(entry) // lazy 占位无 .message，跳过
-			) {
-				messages.push({
-					ts: new Date(entry.timestamp).getTime(),
-					msg: (entry as SessionMessageEntry).message,
-				});
-			}
-		}
-		messages.sort((a, b) => a.ts - b.ts);
-		return messages.map((m) => m.msg);
 	}
 
 	/**
@@ -1652,38 +1603,6 @@ export class SessionManager {
 		};
 		this._appendEntry(entry);
 		return entry.id;
-	}
-
-	/** Append a subagent_run reference entry. Returns entry id.
-	 *  Does NOT advance leafId — subagent_run is a detached record
-	 *  that should not affect the main conversation chain. */
-	appendSubagentRunEntry(entry: {
-		runId: string;
-		index: number;
-		agent: string;
-		task: string;
-		title?: string;
-		status: "success" | "failed" | "aborted";
-		model?: string;
-		thinking?: string;
-		totalTokens?: number;
-		toolCount: number;
-		outputSummary?: string;
-		error?: string;
-	}): string {
-		const previousLeafId = this.leafId;
-		const subagentEntry: SubagentRunEntry = {
-			type: "subagent_run",
-			id: generateId(this.byId),
-			parentId: this.leafId,
-			timestamp: new Date().toISOString(),
-			...entry,
-		};
-		// Use _appendEntry but then restore leafId — subagent_run must not
-		// become the session leaf, or resume will lose the conversation.
-		this._appendEntry(subagentEntry);
-		this.leafId = previousLeafId;
-		return subagentEntry.id;
 	}
 
 	/** Get the current session name from the latest session_info entry, if any. */
@@ -2024,9 +1943,6 @@ export class SessionManager {
 	 * Also removes orphaned labels whose targetId is no longer in the session.
 	 * This is a destructive operation: orphaned entries are permanently deleted.
 	 *
-	 * Subagent trees (subagent_run entries and their children) are preserved
-	 * regardless of their position in the main conversation tree.
-	 *
 	 * Returns the set of removed entry IDs (useful for cleaning up associated git refs).
 	 */
 	pruneOrphanedEntries(keepLeafId: string | null): Set<string> {
@@ -2037,45 +1953,6 @@ export class SessionManager {
 			const path = this.getBranch(keepLeafId);
 			for (const entry of path) {
 				keepIds.add(entry.id);
-			}
-		}
-
-		// Also preserve subagent_run entries
-		const subagentRunIds = new Set<string>();
-		for (const entry of this.fileEntries) {
-			if (entry.type === "session") continue;
-			if (entry.type === "subagent_run") {
-				keepIds.add(entry.id);
-				subagentRunIds.add(entry.id);
-			}
-		}
-
-		// Transitive closure: add entries whose parent chain traces back to a subagent_run.
-		// Only traverse into the subagent subtrees, not the main conversation tree.
-		let changed = true;
-		while (changed) {
-			changed = false;
-			for (const entry of this.fileEntries) {
-				if (entry.type === "session") continue;
-				if (!keepIds.has(entry.id) && entry.parentId && keepIds.has(entry.parentId)) {
-					// Check if parent chain reaches a subagent_run
-					let isUnderSubagent = subagentRunIds.has(entry.parentId);
-					if (!isUnderSubagent) {
-						let currentId: string | null | undefined = entry.parentId;
-						while (currentId && keepIds.has(currentId)) {
-							if (subagentRunIds.has(currentId)) {
-								isUnderSubagent = true;
-								break;
-							}
-							const parent = this.byId.get(currentId);
-							currentId = parent?.parentId;
-						}
-					}
-					if (isUnderSubagent) {
-						keepIds.add(entry.id);
-						changed = true;
-					}
-				}
 			}
 		}
 

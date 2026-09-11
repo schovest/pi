@@ -113,9 +113,8 @@ AssistantMessageEventStream              ← ai/utils/event-stream.ts
 | 项目级 prompt | `.pi/prompts/*.md` | YAML frontmatter | pr.md, is.md |
 | 项目级扩展 | `.pi/extensions/*.ts` | ExtensionAPI 注册 | tps.ts, redraws.ts |
 | 内置工具 | `coding-agent/core/tools/` | `createXxxTool()` 工厂 | bash, read, edit, write, find, grep, ls |
-| 工具匹配 | `coding-agent/core/tool-matcher.ts` | glob 模式（minimatch），支持 `includedTools`/`excludedTools` | subagent 工具过滤、`--tools`/`--exclude-tools` CLI |
+| 工具匹配 | `coding-agent/core/tool-matcher.ts` | glob 模式（minimatch），支持 `includedTools`/`excludedTools` | primary agent 工具过滤、`--tools`/`--exclude-tools` CLI |
 | Primary Agent | `~/.pi/agent/primary-agents/*.md` 或 `.pi/primary-agents/*.md` | `defaultPrimaryAgent` settings | code, plan |
-| Subagent | `~/.pi/agent/subagents/*.md` 或 `.pi/subagents/*.md` | `includedTools`/`excludedTools` + `skills` glob 模式 frontmatter | explorer, worker |
 | MCP 工具 | Claude-compatible 插件（写入 `mcp.json`） | `claudePlugins` / `claudePluginMarketplaces` settings | 外部 MCP server |
 | Claude 兼容插件 | npm 包安装 | `claudePlugins` / `claudePluginMarketplaces` settings | 社区插件 |
 | Codex 插件兼容 | `core/codex-plugin-manager.ts` + `core/codex-hooks-bridge.ts` | `codexPlugins` / `codexPluginMarketplaces` settings + `pi codex-plugin` CLI | `marketplace.json` / `.codex-plugin/plugin.json` / `hooks.json` |
@@ -130,7 +129,7 @@ AssistantMessageEventStream              ← ai/utils/event-stream.ts
 - 扩展通过 `pi install` 安装或 `.pi/extensions/` 发现；核心扩展列表见 `packages/coding-agent/dist-assets/install.sh`
 - MCP 能力通过 Claude-compatible 插件系统间接支持，插件安装时将 MCP 服务器配置写入 `mcp.json`；默认 proxy 模式控制上下文占用
 - Claude 兼容插件使用独立 `claudePlugins` settings，不污染 Pi 原生 `packages` 配置
-- Subagent 工具通过 `includedTools`/`excludedTools` glob 模式控制工具权限；旧 `tools` 字段自动映射
+- 内置 subagent 工具已移除；任务委托能力由社区扩展 pi-subagents 提供（`pi install npm:pi-subagents`，详见 `packages/coding-agent/docs/subagents.md`），`examples/extensions/subagent/` 为进程隔离简版替代；旧会话中的 `subagent_run` 条目有读侧护栏（不成为 leaf），压缩时作为孤儿清理
 - Primary agent 的 system prompt 始终 prepend 在 SYSTEM.md 之前
 - 内置工具默认启用 `read, bash, edit, write`；`grep, find, ls` 按需启用
 - 发行版资产目录 `packages/coding-agent/dist-assets/` 包含随二进制分发的内置扩展（tps.ts、sudo-helper.ts）、内置 primary agents（coding.md、plan.md）和 `install.sh` 安装脚本；内置 skills（pi-config、pi-docs-reference）位于 `packages/coding-agent/skills/`，随构建拷贝至 `dist/skills/` 并由 resource-loader 兜底加载
@@ -151,7 +150,6 @@ AssistantMessageEventStream              ← ai/utils/event-stream.ts
 | **系统提示词** | `coding-agent/core/system-prompt.ts:buildSystemPrompt()` | Primary Agent → SYSTEM.md → 默认 → Append → 上下文文件 → Skills |
 | **Primary Agent** | `coding-agent/core/primary-agents/discovery.ts` | → `switchPrimaryAgent()` → 工具重解析 → `defaultPrimaryAgent` 持久化 |
 | **压缩** | `coding-agent/core/compaction/compaction.ts:compact()` | → `findCutPoint()` → `generateSummary()` → 会话条目重写 |
-| **子 agent** | `coding-agent/core/subagents/runner.ts:runSubagents()` | → `SubagentDefinition` → `resolveActiveTools()` → 独立 AgentSession |
 | **MCP 连接** | Claude Plugin 系统（写入 `mcp.json`） | → 外部 MCP 客户端进程读取配置 → tool 注册 |
 | **TUI 渲染** | `tui/src/tui.ts:TUI.render()` | → 差分计算 → `Terminal.write()` |
 | **交互模式** | `coding-agent/modes/interactive/interactive-mode.ts` | → 键盘事件循环 → 消息渲染 → 斜杠命令处理 |
