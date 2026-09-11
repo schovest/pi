@@ -244,6 +244,26 @@ When multiple sources specify a session directory, precedence is `--session-dir`
 |---------|------|---------|-------------|
 | `markdown.codeBlockIndent` | string | `"  "` | Indentation for code blocks |
 
+### Subagents
+
+当安装 [pi-subagents](subagents.md) 扩展后，`subagents` 顶层键盘点即生效，用户级与项目级均可配置：
+
+```json
+{
+  "subagents": {
+    "defaultModel": "deepseek/deepseek-r1",
+    "defaultProvider": "deepseek",
+    "defaultThinking": "high",
+    "agentScanDirs": ["~/.pi/flows/*/agents"],
+    "agentOverrides": {
+      "reviewer": { "description": "Independent review tier" }
+    }
+  }
+}
+```
+
+通用键：`defaultModel`、`defaultProvider`、`defaultThinking`、`maxThinking`、`defaultExtensions`、`agentScanDirs`、`agentOverrides`、`modelScope`、`disableBuiltins`、`disableThinking`、`projectRootResolution`。完整说明见 [Subagents](subagents.md)。未安装扩展时该键被忽略。
+
 ### Resources
 
 These settings define where to load extensions, skills, prompts, and themes from.

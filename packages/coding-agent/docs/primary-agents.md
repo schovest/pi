@@ -268,7 +268,7 @@ EOF
 
 ## 相关文档
 
-- [Subagents](subagents.md) - 内置 subagent 工具移除说明与迁移路径
+- [Subagents](subagents.md) - 基于 pi-subagents 扩展的子代理文档（agent 定义、发现路径、配置）
 - [Settings](settings.md) - `defaultPrimaryAgent` 设置
 - [Extensions](extensions.md) - 扩展 API 与系统提示词交互
 - [Usage](usage.md) - 系统提示词文件（SYSTEM.md / APPEND_SYSTEM.md）

@@ -47,7 +47,7 @@ For the full first-run flow, see [Quickstart](quickstart.md).
 - [Keybindings](keybindings.md) - default shortcuts and custom keybindings.
 - [Sessions](sessions.md) - session management, branching, and tree navigation.
 - [Compaction](compaction.md) - context compaction and branch summarization.
-- [Subagents](subagents.md) - builtin subagent tool removal: migration paths (example extension / pi-subagents) and legacy session compatibility.
+- [Subagents](subagents.md) - subagent delegation via the pi-subagents extension: agents, discovery paths, and configuration.
 - [Primary Agents](primary-agents.md) - session-level agent roles that control system prompt, tool sets, model, and thinking level.
 
 ## Customization
@@ -67,7 +67,7 @@ For the full first-run flow, see [Quickstart](quickstart.md).
 - [RPC mode](rpc.md) - integrate over stdin/stdout JSONL.
 - [JSON event stream mode](json.md) - print mode with structured events.
 - [TUI components](tui.md) - build custom terminal UI for extensions.
-- [Subagents](subagents.md) - builtin subagent tool removed; see migration paths.
+- [Subagents](subagents.md) - subagent delegation via the pi-subagents extension.
 
 ## Reference
 
